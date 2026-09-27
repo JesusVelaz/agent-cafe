@@ -32,11 +32,12 @@ export interface RunTotals {
   steps: number;
 }
 
-export type RunOutcome = { totals: RunTotals } & (
+export type RunResult =
   | { status: 'completed'; output: string }
   | { status: 'failed'; failureKind: FailureKind; error: string }
-  | { status: 'cancelled' }
-);
+  | { status: 'cancelled' };
+
+export type RunOutcome = RunResult & { totals: RunTotals };
 
 /** Ceiling for a single model response; keeps non-streaming SDK calls well under timeouts. */
 const MAX_OUTPUT_PER_TURN = 8192;
@@ -54,7 +55,7 @@ export async function runTask(ctx: RunContext): Promise<RunOutcome> {
 
   const totals: RunTotals = { inputTokens: 0, outputTokens: 0, costUsd: price ? 0 : null, steps: 0 };
   const messages: NeutralMessage[] = [{ role: 'user', content: task.prompt }];
-  const done = (o: Omit<RunOutcome, 'totals'>): RunOutcome => ({ ...o, totals }) as RunOutcome;
+  const done = (r: RunResult): RunOutcome => ({ ...r, totals });
 
   if (!price) {
     emit({
