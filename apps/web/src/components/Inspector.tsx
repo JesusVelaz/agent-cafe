@@ -26,7 +26,7 @@ export function Inspector() {
   return (
     <aside
       aria-label="Inspector"
-      className="chalkboard scroll-chalk flex min-h-0 flex-col overflow-y-auto lg:w-[380px] lg:border-l-[3px] lg:border-walnut-dark"
+      className="chalkboard scroll-chalk flex h-full min-h-0 flex-col overflow-y-auto lg:w-[380px] lg:border-l-[3px] lg:border-walnut-dark"
     >
       {selectedAgentId ? <AgentDetail agentId={selectedAgentId} /> : <RecentBoard />}
     </aside>

@@ -25,7 +25,7 @@ export function CrewRoster() {
   const agents = Object.values(state.agents).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 
   return (
-    <nav aria-label="Crew" className="chalkboard scroll-chalk flex min-h-0 flex-col gap-4 overflow-y-auto p-3 lg:border-r-[3px] lg:border-walnut-dark">
+    <nav aria-label="Crew" className="chalkboard scroll-chalk flex h-full min-h-0 flex-col gap-4 overflow-y-auto p-3 lg:border-r-[3px] lg:border-walnut-dark">
       {[...FLOOR_ORDER].reverse().map((floor) => {
         const crew = agents.filter((a) => a.providerId === floor);
         const mode = state.providers[floor]?.mode;
