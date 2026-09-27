@@ -1,0 +1,85 @@
+// Agent Café persistence. SQLite via Prisma 7 driver adapter (better-sqlite3).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+/// Per-provider settings. The API key (if entered via UI) is AES-256-GCM encrypted.
+model ProviderConfig {
+  id           String   @id // 'openai' | 'anthropic'
+  mode         String   @default("mock") // live | mock | off
+  encryptedKey String?
+  keyHint      String?
+  dailyCapUsd  Float    @default(5)
+  updatedAt    DateTime @updatedAt
+}
+
+model Agent {
+  id           String    @id @default(cuid())
+  name         String
+  providerId   String
+  model        String
+  systemPrompt String
+  spriteSeed   Int
+  createdAt    DateTime  @default(now())
+  archivedAt   DateTime?
+  tasks        Task[]
+}
+
+model Task {
+  id           String      @id @default(cuid())
+  agent        Agent       @relation(fields: [agentId], references: [id])
+  agentId      String
+  providerId   String
+  model        String
+  prompt       String
+  status       String      @default("queued")
+  isMock       Boolean     @default(false)
+  maxCostUsd   Float
+  inputTokens  Int         @default(0)
+  outputTokens Int         @default(0)
+  costUsd      Float?
+  steps        Int         @default(0)
+  output       String?
+  error        String?
+  failureKind  String?
+  retryOf      String?
+  createdAt    DateTime    @default(now())
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  events       TaskEvent[]
+
+  @@index([agentId, status])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model TaskEvent {
+  id      Int      @id @default(autoincrement())
+  task    Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  taskId  String
+  seq     Int
+  kind    String
+  payload String // JSON of TaskEventData
+  at      DateTime @default(now())
+
+  @@unique([taskId, seq])
+}
+
+/// Backs the notes_read / notes_write tools: a tiny shared memory for agents.
+model Note {
+  key       String   @id
+  content   String
+  updatedAt DateTime @updatedAt
+}
+
+/// App-wide key/value settings (e.g. ambient mode).
+model Setting {
+  key   String @id
+  value String
+}
