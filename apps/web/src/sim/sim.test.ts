@@ -1,7 +1,7 @@
 import type { TaskDTO, TaskEventDTO } from '@agent-cafe/shared';
 import { describe, expect, it } from 'vitest';
 import { deriveActivity } from './activity';
-import { FLOORS, FLOOR_D, FLOOR_W, isBlocked } from './layout';
+import { FLOORS, cellOf, isBlockedCell } from './layout';
 import { findPath } from './pathfinding';
 
 const task = (over: Partial<TaskDTO> = {}): TaskDTO => ({
@@ -13,28 +13,29 @@ const task = (over: Partial<TaskDTO> = {}): TaskDTO => ({
 const T0 = Date.parse('2026-09-27T10:00:00Z');
 
 describe('layout', () => {
-  it.each(Object.values(FLOORS))('every station, seat and cup slot on $id is sane', (floor) => {
-    const spots = [...Object.values(floor.stations).flat(), ...floor.homeSeats];
-    for (const spot of spots) {
-      expect(isBlocked(floor, spot.x, spot.y), `${floor.id} ${spot.x},${spot.y}`).toBe(false);
+  it.each(Object.values(FLOORS))('every station and seat on $id is reachable from every seat', (floor) => {
+    const spots = [...Object.values(floor.stations).flat(), ...floor.seats, floor.entrance];
+    for (const from of floor.seats) {
+      for (const to of spots) expect(findPath(floor, from, to), JSON.stringify([floor.id, from, to])).not.toBeNull();
     }
-    // Every spot is reachable from every home seat.
-    for (const spot of spots) expect(findPath(floor, floor.homeSeats[0]!, spot)).not.toBeNull();
-    for (const c of floor.cupSlots) expect(c.x < FLOOR_W && c.y < FLOOR_D).toBe(true);
+  });
+  it.each(Object.values(FLOORS))('stations on $id stand on free cells', (floor) => {
+    for (const spot of Object.values(floor.stations).flat()) {
+      const c = cellOf(spot);
+      expect(isBlockedCell(floor, c.i, c.j), JSON.stringify([floor.id, spot])).toBe(false);
+    }
   });
 });
 
 describe('findPath', () => {
   const floor = FLOORS.openai;
-  it('walks around the counter', () => {
-    const path = findPath(floor, { x: 3, y: 3 }, { x: 11, y: 3 })!;
-    expect(path.at(-1)).toEqual({ x: 11, y: 3 });
-    expect(path.every((t) => !isBlocked(floor, t.x, t.y))).toBe(true);
-    expect(path).toHaveLength(8);
+  it('walks around the counter and ends exactly on the target', () => {
+    const path = findPath(floor, { x: 9.0, y: 4.0 }, { x: 13.0, y: 3.6 })!;
+    expect(path.at(-1)).toEqual({ x: 13.0, y: 3.6 });
+    for (const p of path.slice(0, -1)) { const c = cellOf(p); expect(isBlockedCell(floor, c.i, c.j)).toBe(false); }
   });
-  it('returns [] when already there and null for blocked goals', () => {
+  it('returns [] when already there', () => {
     expect(findPath(floor, { x: 3, y: 3 }, { x: 3, y: 3 })).toEqual([]);
-    expect(findPath(floor, { x: 3, y: 3 }, { x: 6, y: 2 })).toBeNull();
   });
 });
 
@@ -83,7 +84,7 @@ describe('World', () => {
     data = reduce(data, { type: 'task.event', taskId: 't', agentId: 'a', event: { kind: 'tool.start', step: 1, callId: 'c', tool: 'read_file', input: {}, seq: 1, at: '2026-09-27T10:00:01Z' } }, now);
     for (let i = 0; i < 120; i++) world.update(0.05, data, now + i * 50);
     const at = world.agents[0]!;
-    expect([`${at.x},${at.y}`]).toContain('1,6'); // bookcase spot
+    expect([at.x, at.y]).toEqual([1.0, 6.9]); // bookcase spot
     expect(at.pose).toBe('work');
 
     data = reduce(data, { type: 'task.event', taskId: 't', agentId: 'a', event: { kind: 'tool.end', step: 1, callId: 'c', tool: 'read_file', ok: true, output: '', seq: 2, at: '2026-09-27T10:00:02Z' } }, now);

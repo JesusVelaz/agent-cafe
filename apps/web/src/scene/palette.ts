@@ -1,84 +1,93 @@
-/**
- * The café's colours. Warm cream/walnut interior against teal walls, a navy
- * checker floor downstairs and floorboards in the loft. UI chrome tokens in
- * globals.css are derived from the same values.
- */
-export const C = {
-  bg: '#1c2729',
-  bgGrid: '#223033',
+/** The café's colours and small colour helpers. UI tokens in globals.css share these values. */
 
-  cream: '#efe4c8',
+export const K = {
+  ink: '#2b1d17',
+  cream: '#f3e6cc',
   creamShade: '#d9cba8',
-  navy: '#34405a',
-  navyShade: '#2b3549',
-
-  wall: '#cdb391',
-  wallShade: '#b99d7a',
-  wainscot: '#4f9aa5',
-  wainscotShade: '#3f7f89',
-  trim: '#2c5f67',
-  loftWall: '#8fb3ad',
-  loftWainscot: '#5c7f7a',
-  wallCap: '#6d5a47',
-
-  plank: '#b07a4a',
-  plankLight: '#c08a57',
-  plankDark: '#946238',
-
-  walnut: '#7a4a2a',
-  walnutLight: '#9a6438',
-  walnutDark: '#55321c',
-  countertop: '#c9a06a',
-  marble: '#e9e2d4',
-
-  metal: '#b8c0c8',
-  metalDark: '#6c7680',
-  ink: '#2a2320',
-  screen: '#9ee7e3',
-  screenDim: '#4b8f96',
-
-  glass: '#a9dce0',
-  glassDark: '#79b7c0',
-  chalkboard: '#27352f',
-  chalk: '#e9e4d6',
-  cork: '#c08b58',
-
-  leaf: '#5b9a4a',
-  leafDark: '#3f7a3a',
-  pot: '#b0643a',
-
-  brass: '#d9a441',
-  mint: '#7fd4a0',
-  amber: '#e9c46a',
+  plaster: '#ecdcbf',
+  plasterShade: '#dcc8a6',
+  sage: '#b3c29e',
+  sageShade: '#9eae88',
+  wains: '#7c4a32',
+  wainsDark: '#5e3522',
+  trim: '#4f2c1c',
+  cap: '#f5ecdb',
+  capSide: '#d8c7a8',
+  cocoa: '#7b5443',
+  creamTile: '#eadbb9',
+  plank: '#c9975f',
+  plankL: '#d6a66d',
+  plankD: '#b9864f',
+  wood: '#8a5534',
+  woodL: '#a86b40',
+  woodD: '#5f3822',
+  counterTop: '#d9b07a',
+  metal: '#b9c1c8',
+  metalD: '#737d86',
+  glass: '#bfe3ea',
+  brass: '#e0a84a',
+  bulb: '#fff1c2',
+  leaf: '#6aa35a',
+  leafD: '#477f3d',
+  leafL: '#8fc26f',
+  pot: '#b86a42',
+  potD: '#8e4c2c',
+  berry: '#b5536a',
+  teal: '#4f9aa5',
+  rug: '#b0563f',
+  rugL: '#d98a5f',
+  rugD: '#7e3a2b',
+  slab: '#5a3a2a',
+  slabTop: '#6b4632',
+  screen: '#9fe3dc',
+  white: '#fffaf0',
   coral: '#e76f51',
-  white: '#fbf7ee',
-  red: '#d9544d',
-  shadow: '#00000040',
+  amber: '#f2c14e',
 } as const;
 
-function clamp(n: number) {
-  return Math.max(0, Math.min(255, Math.round(n)));
+export type RGB = [number, number, number];
+
+const cache = new Map<string, RGB>();
+export function rgb(hex: string): RGB {
+  let v = cache.get(hex);
+  if (!v) {
+    const h = hex.replace('#', '');
+    v = [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+    cache.set(hex, v);
+  }
+  return v;
 }
 
-export function hexToRgb(hex: string): [number, number, number] {
-  const h = hex.replace('#', '');
-  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+function hx(r: number, g: number, b: number): string {
+  return `#${[r, g, b].map((c) => Math.max(0, Math.min(255, Math.round(c))).toString(16).padStart(2, '0')).join('')}`;
 }
 
-export function rgbToHex(r: number, g: number, b: number): string {
-  return `#${[r, g, b].map((v) => clamp(v).toString(16).padStart(2, '0')).join('')}`;
+/** k > 0 lightens toward white, k < 0 darkens toward black. */
+export function shade(hex: string, k: number): string {
+  const c = rgb(hex);
+  const t = k < 0 ? 0 : 255;
+  const a = Math.abs(k);
+  return hx(c[0] + (t - c[0]) * a, c[1] + (t - c[1]) * a, c[2] + (t - c[2]) * a);
 }
 
-/** amount > 0 lightens toward white, < 0 darkens toward black. */
-export function shade(hex: string, amount: number): string {
-  const [r, g, b] = hexToRgb(hex);
-  const t = amount < 0 ? 0 : 255;
-  const a = Math.abs(amount);
-  return rgbToHex(r + (t - r) * a, g + (t - g) * a, b + (t - b) * a);
+export function mix(a: string, b: string, t: number): string {
+  const x = rgb(a);
+  const y = rgb(b);
+  return hx(x[0] + (y[0] - x[0]) * t, x[1] + (y[1] - x[1]) * t, x[2] + (y[2] - x[2]) * t);
 }
 
-/** Agent look options; picked deterministically from spriteSeed. */
+/** Deterministic 0..1 hash for per-tile variation (plank shades, book colours). */
+export function hash(n: number): number {
+  n = (n ^ 61) ^ (n >>> 16);
+  n = n + (n << 3);
+  n = n ^ (n >>> 4);
+  n = Math.imul(n, 0x27d4eb2d);
+  n = n ^ (n >>> 15);
+  return (n >>> 0) / 4294967296;
+}
+
+/** Agent look options, picked deterministically from spriteSeed. */
 export const HAIR = ['#3b2a20', '#6b3f22', '#d9b36a', '#2b2b2b', '#a8452c', '#e8e0d0', '#5a3b6b'];
 export const SKIN = ['#f2cfa7', '#e3b48a', '#c98e63', '#9c6644', '#6e4730'];
-export const SHIRT = ['#e76f51', '#4f9aa5', '#7fd4a0', '#d9a441', '#8a6fb8', '#e8b4b8', '#5d7fb8', '#c7d36f'];
+export const SHIRT = ['#e76f51', '#4f9aa5', '#7fb069', '#d9a441', '#8a6fb8', '#e8b4b8', '#5d7fb8', '#c7d36f'];
 export const PANTS = ['#34405a', '#4a3a57', '#3d4a3a', '#55321c'];

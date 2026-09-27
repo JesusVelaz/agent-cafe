@@ -1,3 +1,4 @@
+import type { Activity } from '@/sim/activity';
 import type { ReactNode } from 'react';
 
 /** Small-caps pixel label used for section headings across the chalkboards. */
@@ -16,3 +17,13 @@ export function StatusDot({ color, pulse = false }: { color: string; pulse?: boo
     />
   );
 }
+
+/** Colour per activity, shared by the board, callouts and the agent panel. */
+export const ACTIVITY_TONE: Record<Activity['kind'], string> = {
+  idle: 'var(--color-chalk-faint)',
+  thinking: 'var(--color-mint)',
+  tool: 'var(--color-amber)',
+  stuck: 'var(--color-coral)',
+  done: 'var(--color-mint)',
+  failed: 'var(--color-coral)',
+};

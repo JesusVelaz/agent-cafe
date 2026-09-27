@@ -1,119 +1,72 @@
 /**
- * Isometric projection and shape helpers. 2:1 dimetric tiles (24×12 px), drawn
- * into Pixi Graphics with antialiasing off so edges step like hand-placed pixels.
+ * Isometric projection and shape helpers. 2:1 dimetric tiles (24×12 px).
+ * Light comes from the upper left: tops are lightest, the +y face (screen
+ * lower-left) is the base colour, the +x face is darkest.
  */
-import type { Graphics } from 'pixi.js';
 import { shade } from './palette';
+import type { Pt2, Raster } from './raster';
 
-export const TILE_W = 24;
-export const TILE_H = 12;
-export const HALF_W = TILE_W / 2;
-export const HALF_H = TILE_H / 2;
-export const WALL_H = 56;
+export const HW = 12;
+export const HH = 6;
 
-export interface Pt {
-  x: number;
-  y: number;
+/** World (tile x, tile y, height px) → screen px. */
+export type Proj = (x: number, y: number, z?: number) => Pt2;
+
+export function iso(ox: number, oy: number): Proj {
+  return (x, y, z = 0) => [Math.round(ox + (x - y) * HW), Math.round(oy + (x + y) * HH - z)];
 }
 
-/** A floor's screen origin: where tile corner (0,0) at z=0 lands. */
-export interface Origin {
-  ox: number;
-  oy: number;
-}
-
-/** World (tile x, tile y, height px) → screen px, rounded to whole pixels. */
-export function proj(o: Origin, x: number, y: number, z = 0): Pt {
-  return { x: Math.round(o.ox + (x - y) * HALF_W), y: Math.round(o.oy + (x + y) * HALF_H - z) };
-}
-
-const flat = (pts: Pt[]) => pts.flatMap((p) => [p.x, p.y]);
-
-export function poly(g: Graphics, pts: Pt[], color: string, alpha = 1) {
-  g.poly(flat(pts)).fill({ color, alpha });
-}
-
-/** A flat diamond covering a tile rectangle on the floor plane. */
-export function floorQuad(g: Graphics, o: Origin, x: number, y: number, w: number, d: number, color: string, z = 0) {
-  poly(g, [proj(o, x, y, z), proj(o, x + w, y, z), proj(o, x + w, y + d, z), proj(o, x, y + d, z)], color);
-}
-
-export interface BoxStyle {
-  /** Base colour; used for the left (lit) face. */
-  color: string;
+export interface BoxOpts {
   top?: string;
   right?: string;
-  /** Draw a 1px darker line along the top edges for definition. */
-  edge?: boolean;
+  a?: number;
+  em?: boolean;
+  /** Pixel-art outline: true = derived from the colour, or an explicit colour. */
+  line?: boolean | string;
 }
 
-/**
- * An axis-aligned box. Light comes from the upper left: top is lightest, the
- * +y face (screen lower-left) is the base colour, the +x face is darkest.
- */
-export function box(
-  g: Graphics,
-  o: Origin,
-  x: number,
-  y: number,
-  z: number,
-  w: number,
-  d: number,
-  h: number,
-  style: BoxStyle | string,
-) {
-  const st = typeof style === 'string' ? { color: style } : style;
-  const top = st.top ?? shade(st.color, 0.16);
-  const right = st.right ?? shade(st.color, -0.22);
+export function box(R: Raster, P: Proj, x: number, y: number, z: number, w: number, d: number, h: number, col: string, o: BoxOpts = {}): void {
+  const top = o.top ?? shade(col, 0.14);
+  const right = o.right ?? shade(col, -0.2);
   const zt = z + h;
-  const A = proj(o, x, y, zt);
-  const B = proj(o, x + w, y, zt);
-  const Cc = proj(o, x + w, y + d, zt);
-  const D = proj(o, x, y + d, zt);
-  const Cb = proj(o, x + w, y + d, z);
-  const Db = proj(o, x, y + d, z);
-  const Bb = proj(o, x + w, y, z);
+  const a = o.a ?? 1;
+  const A = P(x, y, zt), B = P(x + w, y, zt), C = P(x + w, y + d, zt), D = P(x, y + d, zt);
+  const Cb = P(x + w, y + d, z), Db = P(x, y + d, z), Bb = P(x + w, y, z);
   if (h > 0) {
-    poly(g, [D, Cc, Cb, Db], st.color); // +y face
-    poly(g, [Cc, B, Bb, Cb], right); // +x face
+    R.poly([D, C, Cb, Db], col, a, o.em);
+    R.poly([C, B, Bb, Cb], right, a, o.em);
   }
-  poly(g, [A, B, Cc, D], top);
-  if (st.edge) {
-    const e = shade(st.color, -0.35);
-    g.moveTo(D.x, D.y).lineTo(Cc.x, Cc.y).lineTo(B.x, B.y).stroke({ width: 1, color: e, alpha: 0.6 });
+  R.poly([A, B, C, D], top, a, o.em);
+  if (o.line) {
+    const ln = typeof o.line === 'string' ? o.line : shade(col, -0.45);
+    R.line(A[0], A[1], B[0], B[1], ln); R.line(A[0], A[1], D[0], D[1], ln);
+    R.line(D[0], D[1], Db[0], Db[1], ln); R.line(Db[0], Db[1], Cb[0], Cb[1], ln);
+    R.line(Cb[0], Cb[1], Bb[0], Bb[1], ln); R.line(Bb[0], Bb[1], B[0], B[1], ln);
+    if (h > 0) R.line(C[0], C[1], Cb[0], Cb[1], shade(col, -0.3));
+    R.line(D[0], D[1], C[0], C[1], shade(top, 0.12)); R.line(C[0], C[1], B[0], B[1], shade(top, 0.12));
   }
 }
 
-/** A world-space circle on a horizontal plane at height z, as a polygon. */
-export function isoEllipse(g: Graphics, o: Origin, cx: number, cy: number, r: number, z: number, color: string) {
-  const pts: Pt[] = [];
-  for (let i = 0; i < 16; i++) {
-    const a = (i / 16) * Math.PI * 2;
-    pts.push(proj(o, cx + Math.cos(a) * r, cy + Math.sin(a) * r, z));
+/** A vertical plane: `{x}` spans y, `{y}` spans x. `a` along it in tiles, `v` height in px. */
+export type Plane = { x: number; y?: undefined } | { y: number; x?: undefined };
+
+export function planePt(P: Proj, pl: Plane, u: number, v: number): Pt2 {
+  return pl.x !== undefined ? P(pl.x, u, v) : P(u, pl.y!, v);
+}
+
+export function plane(R: Raster, P: Proj, pl: Plane, a0: number, a1: number, v0: number, v1: number, col: string, a = 1, em = false): void {
+  R.poly([planePt(P, pl, a0, v1), planePt(P, pl, a1, v1), planePt(P, pl, a1, v0), planePt(P, pl, a0, v0)], col, a, em);
+}
+
+export function quad(R: Raster, P: Proj, x: number, y: number, w: number, d: number, z: number, col: string, a = 1, em = false): void {
+  R.poly([P(x, y, z), P(x + w, y, z), P(x + w, y + d, z), P(x, y + d, z)], col, a, em);
+}
+
+export function disc(R: Raster, P: Proj, cx: number, cy: number, r: number, z: number, col: string, a = 1): void {
+  const pts: Pt2[] = [];
+  for (let i = 0; i < 20; i++) {
+    const t = (i / 20) * Math.PI * 2;
+    pts.push(P(cx + Math.cos(t) * r, cy + Math.sin(t) * r, z));
   }
-  poly(g, pts, color);
-}
-
-/**
- * A rectangle on a wall plane. `u` runs along the wall in tiles, `v` is height px.
- * Left wall is the x=0 plane (u = y), right wall the y=0 plane (u = x).
- */
-export function wallRect(
-  g: Graphics,
-  o: Origin,
-  wall: 'left' | 'right',
-  u0: number,
-  u1: number,
-  v0: number,
-  v1: number,
-  color: string,
-  alpha = 1,
-) {
-  const at = (u: number, v: number) => (wall === 'left' ? proj(o, 0, u, v) : proj(o, u, 0, v));
-  poly(g, [at(u0, v1), at(u1, v1), at(u1, v0), at(u0, v0)], color, alpha);
-}
-
-/** Screen point on a wall plane (for placing sprites and text). */
-export function wallPoint(o: Origin, wall: 'left' | 'right', u: number, v: number): Pt {
-  return wall === 'left' ? proj(o, 0, u, v) : proj(o, u, 0, v);
+  R.poly(pts, col, a);
 }

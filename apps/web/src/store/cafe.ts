@@ -12,6 +12,12 @@ interface CafeStore extends CafeData {
   selectedAgentId: string | null;
   /** When set, the inspector shows this task instead of the agent's latest. */
   selectedTaskId: string | null;
+  /** Focus mode: the café fills the screen and the board collapses. */
+  focus: boolean;
+  /** Failures the user has acknowledged, hidden from "Needs you". */
+  dismissed: ReadonlySet<string>;
+  setFocus(on: boolean): void;
+  dismiss(taskId: string): void;
   apply(e: CafeEvent): void;
   setConnection(c: ConnectionState): void;
   selectAgent(id: string | null, taskId?: string | null): void;
@@ -25,6 +31,10 @@ export const useCafe = create<CafeStore>((set) => ({
   catalog: MODEL_CATALOG,
   selectedAgentId: null,
   selectedTaskId: null,
+  focus: false,
+  dismissed: new Set<string>(),
+  setFocus: (focus) => set({ focus }),
+  dismiss: (taskId) => set((s) => ({ dismissed: new Set([...s.dismissed, taskId]) })),
   apply: (e) => set((s) => reduce(s, e)),
   setConnection: (connection) => set({ connection }),
   selectAgent: (selectedAgentId, selectedTaskId = null) => set({ selectedAgentId, selectedTaskId }),

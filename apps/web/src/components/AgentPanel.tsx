@@ -4,13 +4,12 @@ import { isActive, isTerminal, type FailureKind, type TaskDTO, type TaskEventDTO
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { activityLabel, deriveActivity } from '@/sim/activity';
 import { api } from '@/lib/api';
-import { ago, duration, FLOOR_NAME, PROVIDER_NAME, STATUS_LABEL, STATUS_TONE, taskDuration, tokens, usd } from '@/lib/format';
+import { duration, FLOOR_NAME, PROVIDER_NAME, STATUS_LABEL, STATUS_TONE, taskDuration, tokens, usd } from '@/lib/format';
 import { useNow } from '@/lib/useNow';
 import { useCafe } from '@/store/cafe';
-import { activeTaskFor, latestTaskFor, recentFinished, tasksFor } from '@/store/reduce';
+import { activeTaskFor, latestTaskFor, tasksFor } from '@/store/reduce';
 import { Avatar } from './Avatar';
-import { ACTIVITY_TONE } from './CrewRoster';
-import { Label, StatusDot } from './Panel';
+import { ACTIVITY_TONE, Label, StatusDot } from './Panel';
 
 const FAILURE_COPY: Record<FailureKind, string> = {
   provider_error: 'The provider returned an error.',
@@ -20,62 +19,9 @@ const FAILURE_COPY: Record<FailureKind, string> = {
   refusal: 'The model declined this request.',
 };
 
-/** Right rail: the chalkboard. Agent details when one is selected, recent orders otherwise. */
-export function Inspector() {
-  const selectedAgentId = useCafe((s) => s.selectedAgentId);
-  return (
-    <aside
-      aria-label="Inspector"
-      className="chalkboard scroll-chalk flex h-full min-h-0 flex-col overflow-y-auto lg:w-[380px] lg:border-l-[3px] lg:border-walnut-dark"
-    >
-      {selectedAgentId ? <AgentDetail agentId={selectedAgentId} /> : <RecentBoard />}
-    </aside>
-  );
-}
-
-// ── Nothing selected: what finished recently ─────────────────────────────────
-
-function RecentBoard() {
-  const state = useCafe();
-  const now = useNow(5000);
-  const recent = recentFinished(state, 12);
-  return (
-    <div className="flex flex-col gap-3 p-4">
-      <div>
-        <h2 className="font-display text-3xl leading-none">Order board</h2>
-        <p className="mt-1 text-xs text-chalk-dim">Click an agent or a cup on the counter to see its work.</p>
-      </div>
-      <Label>Recently finished</Label>
-      {recent.length === 0 ? (
-        <p className="text-xs text-chalk-faint">No finished orders yet. Send one from the order pad below.</p>
-      ) : (
-        <ul className="flex flex-col divide-y divide-slate-line">
-          {recent.map((t) => (
-            <li key={t.id}>
-              <button
-                onClick={() => state.selectAgent(t.agentId, t.id)}
-                className="flex w-full items-start gap-2 py-2 text-left hover:bg-slate-2"
-              >
-                <StatusDot color={STATUS_TONE[t.status]} />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-xs text-chalk">{t.prompt}</span>
-                  <span className="text-[11px] text-chalk-faint">
-                    {state.agents[t.agentId]?.name ?? '—'} · {duration(taskDuration(t, now) ?? 0)} · {usd(t.costUsd)}
-                    {t.isMock && ' demo'} · {ago(t.finishedAt!, now)}
-                  </span>
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
 // ── Agent selected ───────────────────────────────────────────────────────────
 
-function AgentDetail({ agentId }: { agentId: string }) {
+export function AgentDetail({ agentId, onClose }: { agentId: string; onClose: () => void }) {
   const state = useCafe();
   const now = useNow(500);
   const agent = state.agents[agentId];
@@ -123,8 +69,8 @@ function AgentDetail({ agentId }: { agentId: string }) {
           </p>
         </div>
         <button
-          onClick={() => state.selectAgent(null)}
-          aria-label="Close inspector"
+          onClick={onClose}
+          aria-label="Back to the board"
           className="grid size-7 place-items-center border-2 border-walnut-dark font-display text-xl text-chalk-dim hover:text-chalk"
         >
           ×

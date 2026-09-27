@@ -1,22 +1,40 @@
 /**
- * Café floor plans in tile coordinates. Each floor is a W×D grid; x runs toward
- * the screen's lower-right, y toward the lower-left. Back walls sit along x=0
- * (left wall) and y=0 (right wall); the two front edges are open (diorama cutaway).
+ * The café building as pure data. The simulation paths over it and the renderer
+ * draws it, so they can never disagree about where anything is.
  *
- * The layout is pure data: the simulation paths over it and the renderer draws it.
- * Adding a provider = adding a floor here (and to FLOOR_ORDER).
+ * Coordinates are continuous tile units. x runs toward the screen's lower-right,
+ * y toward the lower-left. Back walls sit along x = 0 (left wall) and y = 0
+ * (right wall); the front edges are open (diorama cutaway). Heights (z, v) are
+ * in scene pixels.
+ *
+ * The building is "stacked, set back": the upper floor sits directly on top of
+ * the ground floor, one step smaller, so the café shows around it. Anything
+ * under the upper floor is only visible through the gap between floors, so only
+ * low furniture goes there (visible if height < 56 − (6 − y)·6).
+ *
+ * Adding a provider = adding another set-back story here.
  */
 import type { ProviderId } from '@agent-cafe/shared';
 
-export const FLOOR_W = 14;
-export const FLOOR_D = 10;
+export const BUILDING = {
+  /** Ground floor footprint. */
+  W: 14,
+  D: 11,
+  /** Ground story height (px); the upper floor's surface sits at this z. */
+  H1: 62,
+  /** Upper floor footprint (from the back corner). */
+  UW: 9,
+  UD: 6,
+  /** Upper story wall height (px). */
+  H2: 48,
+} as const;
 
 export type Dir = 'x+' | 'x-' | 'y+' | 'y-';
-export interface Tile {
+export interface Pt {
   x: number;
   y: number;
 }
-export interface Spot extends Tile {
+export interface Spot extends Pt {
   /** Direction the agent faces while here. */
   face: Dir;
 }
@@ -25,204 +43,234 @@ export interface Spot extends Tile {
 export type StationId = 'register' | 'clock' | 'bookcase' | 'archive' | 'pickup';
 
 export type PropKind =
-  | 'counter'
   | 'backbar'
-  | 'espresso'
-  | 'register'
-  | 'pickup'
-  | 'table'
-  | 'chair'
-  | 'desk'
-  | 'bookcase'
-  | 'cabinet'
+  | 'cafeCounter'
+  | 'bookshelf'
   | 'archive'
-  | 'ledger'
+  | 'cabinet'
+  | 'windowBar'
+  | 'stool'
+  | 'coatRack'
+  | 'umbrellas'
+  | 'doormat'
+  | 'aframe'
+  | 'roundTable'
+  | 'chair'
   | 'plant'
-  | 'rack'
-  | 'outbox'
-  | 'stairs'
-  | 'rug';
+  | 'bigPlant'
+  | 'fan'
+  | 'rug'
+  | 'sofa'
+  | 'sideLamp'
+  | 'armchair'
+  | 'pendant'
+  | 'hangingPlant'
+  | 'desk'
+  | 'coffeeStation'
+  | 'floorLamp'
+  | 'stairwell';
 
-export interface Prop extends Tile {
+export interface Prop {
   kind: PropKind;
-  /** Blocks walking. Chairs and rugs don't. */
+  /** Footprint origin and size in tiles. */
+  x: number;
+  y: number;
+  w: number;
+  d: number;
+  /** Blocks walking. */
   solid: boolean;
-  /** Optional variant/orientation hint for the renderer. */
-  variant?: string;
+  /** Orientation hint (chairs: the way the sitter faces; shelves: the way they open). */
+  face?: Dir;
+  /** Draw-time options (lamp on a desk, height of a shelf…). */
+  opts?: { lamp?: boolean; h?: number; plantOnTop?: boolean };
 }
 
-export type WallDecorKind = 'window' | 'door' | 'menu' | 'clock' | 'ticketRail' | 'poster' | 'corkboard' | 'sign';
+export type DecorKind =
+  | 'window'
+  | 'door'
+  | 'menu'
+  | 'mugShelf'
+  | 'sconce'
+  | 'clock'
+  | 'framed'
+  | 'kanban'
+  | 'curtains'
+  | 'bunting'
+  | 'wallPlant';
 
-export interface WallDecor {
-  kind: WallDecorKind;
-  /** 'left' = wall along x=0 (spans y), 'right' = wall along y=0 (spans x). */
-  wall: 'left' | 'right';
-  /** Start tile along the wall and length in tiles. */
-  at: number;
-  span: number;
-  label?: string;
+/** Something mounted on a wall: `a` runs along the wall in tiles, `v` is height in px. */
+export interface Decor {
+  kind: DecorKind;
+  wall: 'L' | 'R';
+  a0: number;
+  a1: number;
+  v0: number;
+  v1: number;
+  color?: string;
 }
 
 export interface FloorLayout {
   id: ProviderId;
   title: string;
+  /** Surface height of this floor in px. */
+  z: number;
+  w: number;
+  d: number;
+  floor: 'checker' | 'planks';
   props: Prop[];
-  decor: WallDecor[];
+  decor: Decor[];
   stations: Record<StationId, Spot[]>;
-  /** Where agents sit when idle or thinking; assigned in agent order. */
-  homeSeats: Spot[];
-  /** Tile where cups for finished tasks appear, in display order. */
-  cupSlots: Tile[];
-  /** Where queued-task tickets hang. */
-  ticketWall: WallDecor;
-  floorColors: [string, string];
+  /** Home seats, assigned in agent order. */
+  seats: Spot[];
+  /** Where newly hired agents appear. */
+  entrance: Spot;
 }
 
-const p = (kind: PropKind, x: number, y: number, solid = true, variant?: string): Prop => ({
-  kind,
-  x,
-  y,
-  solid,
-  ...(variant ? { variant } : {}),
+const P = (kind: PropKind, x: number, y: number, w: number, d: number, solid: boolean, extra: Partial<Prop> = {}): Prop => ({
+  kind, x, y, w, d, solid, ...extra,
 });
-const s = (x: number, y: number, face: Dir): Spot => ({ x, y, face });
+const S = (x: number, y: number, face: Dir): Spot => ({ x, y, face });
+const chair = (x: number, y: number, face: Dir) => P('chair', x - 0.22, y - 0.22, 0.44, 0.44, false, { face });
+const table = (x: number, y: number) => P('roundTable', x - 0.5, y - 0.5, 1, 1, true);
 
-const groundTicketRail: WallDecor = { kind: 'ticketRail', wall: 'right', at: 4, span: 5 };
+const { H1, UW, UD } = BUILDING;
 
-/** Ground floor (OpenAI): the café proper. Counter, tables, pickup window. */
+/** Ground floor (OpenAI): the café. A cosy nook under the upper floor, the counter in the open. */
 export const GROUND: FloorLayout = {
   id: 'openai',
   title: 'GROUND FLOOR · OPENAI',
-  floorColors: ['#e8dfc8', '#2f3b52'],
+  z: 0,
+  w: BUILDING.W,
+  d: BUILDING.D,
+  floor: 'checker',
   props: [
-    // Back bar behind the counter (barista side).
-    ...[4, 5, 6, 7, 8, 9, 10].map((x) => p('backbar', x, 0)),
-    ...[4, 5, 6, 7, 8, 9, 10].map((x) => p('backbar', x, 1, true, 'floor')),
-    // Counter run: espresso, plain, register, then the pickup end.
-    p('espresso', 4, 2),
-    p('counter', 5, 2),
-    p('counter', 6, 2),
-    p('counter', 7, 2),
-    p('register', 8, 2),
-    p('pickup', 9, 2),
-    p('pickup', 10, 2),
-    // Seating: three round tables, two chairs each (home seats).
-    p('table', 5, 5),
-    p('chair', 4, 5, false, 'x+'),
-    p('chair', 6, 5, false, 'x-'),
-    p('table', 9, 5),
-    p('chair', 8, 5, false, 'x+'),
-    p('chair', 10, 5, false, 'x-'),
-    p('table', 7, 8),
-    p('chair', 6, 8, false, 'x+'),
-    p('chair', 8, 8, false, 'x-'),
-    // Left wall furniture.
-    p('bookcase', 0, 5),
-    p('bookcase', 0, 6),
-    p('cabinet', 0, 8),
-    p('plant', 0, 0),
-    p('plant', 13, 0),
-    p('plant', 0, 9),
-    // Stairs up, front-right corner.
-    p('stairs', 12, 8),
-    p('stairs', 13, 8),
-    p('stairs', 12, 9),
-    p('stairs', 13, 9),
-    p('rug', 1, 1, false),
+    // Café counter in the open-air part.
+    P('backbar', 9.4, 0, 4.6, 0.6, true),
+    P('cafeCounter', 9.6, 2.2, 4.2, 0.8, true),
+    // Left wall, front part.
+    P('bookshelf', 0, 6.2, 0.45, 1.3, true, { face: 'x+', opts: { h: 44, plantOnTop: true } }),
+    P('windowBar', 0, 7.8, 0.55, 1.4, true),
+    P('stool', 0.85, 7.85, 0.3, 0.3, false),
+    P('stool', 0.85, 8.85, 0.3, 0.3, false),
+    P('coatRack', 0.3, 9.3, 0.3, 0.3, true),
+    P('umbrellas', 0.36, 10.46, 0.28, 0.28, true),
+    P('doormat', 0.05, 9.75, 0.9, 1.0, false),
+    P('aframe', 2.9, 10.0, 0.1, 0.7, true),
+    // Seating out front.
+    table(4.1, 9.0), chair(3.2, 9.0, 'x+'), chair(5.0, 9.0, 'x-'),
+    table(8.0, 7.6), chair(7.1, 7.6, 'x+'), chair(8.9, 7.6, 'x-'),
+    table(11.6, 8.2), chair(10.7, 8.2, 'x+'), chair(12.5, 8.2, 'x-'),
+    P('bigPlant', 13.2, 10.2, 0.4, 0.4, true),
+    P('bigPlant', 13.3, 6.1, 0.4, 0.4, true),
+    P('fan', 13.15, 9.15, 0.3, 0.3, true),
+    // The nook under the upper floor: low things only.
+    P('rug', 1.0, 1.2, 5.6, 3.8, false),
+    P('sofa', 0, 1.4, 0.6, 3.6, false), // seats are on it; against the wall it never blocks a route
+    P('sideLamp', 0.15, 5.25, 0.4, 0.4, true),
+    table(1.6, 2.4),
+    table(1.6, 4.2),
+    P('armchair', 3.9, 2.8, 0.8, 0.8, true),
+    P('cabinet', 7.8, 4.9, 0.8, 0.7, true),
+    P('pendant', 2.4, 3.2, 0, 0, false),
+    P('pendant', 5.4, 3.2, 0, 0, false),
+    P('hangingPlant', 1.2, UD - 0.1, 0, 0, false),
+    P('hangingPlant', 4.0, UD - 0.1, 0, 0, false),
+    P('hangingPlant', 6.8, UD - 0.1, 0, 0, false),
   ],
   decor: [
-    { kind: 'door', wall: 'left', at: 1, span: 1 },
-    { kind: 'window', wall: 'left', at: 3, span: 2, label: 'COFFEE' },
-    { kind: 'clock', wall: 'left', at: 5, span: 1 },
-    groundTicketRail,
-    { kind: 'menu', wall: 'right', at: 11, span: 3, label: 'MENU' },
-    { kind: 'poster', wall: 'right', at: 1, span: 1 },
-    { kind: 'poster', wall: 'left', at: 8, span: 1 },
+    { kind: 'menu', wall: 'R', a0: 9.6, a1: 12.2, v0: 26, v1: 50 },
+    { kind: 'mugShelf', wall: 'R', a0: 12.4, a1: 13.9, v0: 40, v1: 40 },
+    { kind: 'mugShelf', wall: 'R', a0: 12.4, a1: 13.9, v0: 30, v1: 30 },
+    { kind: 'sconce', wall: 'R', a0: 13.2, a1: 13.2, v0: 52, v1: 52 },
+    { kind: 'window', wall: 'R', a0: 1.2, a1: 4.6, v0: 24, v1: 50 },
+    { kind: 'window', wall: 'L', a0: 7.7, a1: 9.3, v0: 18, v1: 46 },
+    { kind: 'door', wall: 'L', a0: 9.7, a1: 10.8, v0: 0, v1: 38 },
+    { kind: 'framed', wall: 'L', a0: 7.9, a1: 8.5, v0: 50, v1: 58, color: '#4f9aa5' },
+    { kind: 'framed', wall: 'L', a0: 8.7, a1: 9.2, v0: 51, v1: 57, color: '#f2c14e' },
+    { kind: 'sconce', wall: 'L', a0: 9.5, a1: 9.5, v0: 44, v1: 44 },
+    { kind: 'clock', wall: 'L', a0: 6.9, a1: 6.9, v0: 54, v1: 54 },
+    { kind: 'framed', wall: 'L', a0: 2.0, a1: 2.8, v0: 20, v1: 32, color: '#e76f51' },
+    { kind: 'framed', wall: 'L', a0: 3.1, a1: 3.7, v0: 22, v1: 30, color: '#4f9aa5' },
   ],
   stations: {
-    register: [s(8, 3, 'y-')],
-    pickup: [s(9, 3, 'y-'), s(10, 3, 'y-')],
-    clock: [s(1, 5, 'x-'), s(2, 4, 'x-')],
-    bookcase: [s(1, 6, 'x-'), s(1, 5, 'x-')],
-    archive: [s(1, 8, 'x-'), s(1, 7, 'x-')],
+    register: [S(13.0, 3.6, 'y-'), S(12.4, 3.6, 'y-')],
+    pickup: [S(10.2, 3.6, 'y-'), S(10.8, 3.6, 'y-')],
+    clock: [S(1.1, 6.35, 'x-'), S(1.6, 6.6, 'x-')],
+    bookcase: [S(1.0, 6.9, 'x-'), S(1.1, 7.4, 'x-')],
+    archive: [S(8.2, 6.2, 'y-'), S(7.6, 6.2, 'y-')],
   },
-  homeSeats: [s(4, 5, 'x+'), s(8, 5, 'x+'), s(6, 8, 'x+'), s(6, 5, 'x-'), s(10, 5, 'x-'), s(8, 8, 'x-')],
-  cupSlots: [
-    { x: 9, y: 2 },
-    { x: 10, y: 2 },
+  seats: [
+    S(3.2, 9.0, 'x+'), S(7.1, 7.6, 'x+'), S(10.7, 8.2, 'x+'),
+    S(5.0, 9.0, 'x-'), S(8.9, 7.6, 'x-'), S(12.5, 8.2, 'x-'),
+    S(0.35, 2.1, 'x+'), S(0.35, 4.3, 'x+'),
   ],
-  ticketWall: groundTicketRail,
+  entrance: S(1.2, 10.2, 'x+'),
 };
 
-const upstairsCork: WallDecor = { kind: 'corkboard', wall: 'left', at: 7, span: 2 };
-
-/** Upstairs (Anthropic): the quieter loft office. Desks, archive, ledger. */
+/** Upper floor (Anthropic): the loft office. Stairwell opening at the back-left. */
 export const UPSTAIRS: FloorLayout = {
   id: 'anthropic',
   title: 'UPSTAIRS · ANTHROPIC',
-  floorColors: ['#e8dfc8', '#4a3a57'],
+  z: H1,
+  w: UW,
+  d: UD,
+  floor: 'planks',
   props: [
-    p('rack', 0, 0),
-    p('rack', 1, 0),
-    // Archive shelves and bookcase on the right wall.
-    p('archive', 3, 0),
-    p('archive', 4, 0),
-    p('archive', 5, 0),
-    p('bookcase', 8, 0),
-    p('bookcase', 9, 0),
-    p('plant', 11, 0),
-    // Ledger desk (calculator) on the left wall.
-    p('ledger', 0, 5),
-    // Two rows of desks; agents sit behind them, facing the viewer.
-    p('desk', 3, 4),
-    p('desk', 6, 4),
-    p('desk', 9, 4),
-    p('desk', 3, 7),
-    p('desk', 6, 7),
-    p('desk', 9, 7),
-    p('chair', 3, 3, false, 'y+'),
-    p('chair', 6, 3, false, 'y+'),
-    p('chair', 9, 3, false, 'y+'),
-    p('chair', 3, 6, false, 'y+'),
-    p('chair', 6, 6, false, 'y+'),
-    p('chair', 9, 6, false, 'y+'),
-    // Outbox hatch by the stairs: finished work goes down to the counter.
-    p('outbox', 13, 5),
-    p('outbox', 13, 6),
-    p('stairs', 12, 8),
-    p('stairs', 13, 8),
-    p('stairs', 12, 9),
-    p('stairs', 13, 9),
-    p('plant', 0, 9),
-    p('rug', 6, 1, false),
+    P('rug', 2.0, 1.9, 6.4, 3.0, false),
+    P('stairwell', 0.25, 0.25, 1.6, 1.6, true),
+    P('desk', 1.3, 3.2, 1.8, 0.7, true, { opts: { lamp: true } }),
+    P('desk', 4.0, 3.2, 1.8, 0.7, true),
+    P('desk', 6.7, 3.2, 1.8, 0.7, true, { opts: { lamp: true } }),
+    chair(2.2, 2.4, 'y+'), chair(4.9, 2.4, 'y+'), chair(7.6, 2.4, 'y+'),
+    P('bookshelf', 2.2, 0, 2.2, 0.45, true, { face: 'y+', opts: { h: 44 } }),
+    P('archive', 0, 4.4, 0.45, 1.5, true, { face: 'x+', opts: { h: 32 } }),
+    table(5.0, 5.2), chair(4.2, 5.2, 'x+'), chair(5.8, 5.2, 'x-'),
+    P('coffeeStation', 8.2, 4.95, 0.65, 0.5, true),
+    P('bigPlant', 8.35, 4.15, 0.4, 0.4, true),
+    P('floorLamp', 3.0, 5.3, 0.2, 0.2, true),
   ],
   decor: [
-    { kind: 'window', wall: 'left', at: 2, span: 2 },
-    { kind: 'clock', wall: 'left', at: 4, span: 1 },
-    upstairsCork,
-    { kind: 'poster', wall: 'right', at: 6, span: 1 },
-    { kind: 'sign', wall: 'right', at: 11, span: 2, label: 'LOFT' },
+    { kind: 'kanban', wall: 'L', a0: 2.2, a1: 4.2, v0: H1 + 10, v1: H1 + 38 },
+    { kind: 'clock', wall: 'L', a0: 5.1, a1: 5.1, v0: H1 + 39, v1: H1 + 39 },
+    { kind: 'bunting', wall: 'L', a0: 0.3, a1: 5.8, v0: H1 + 45, v1: H1 + 45 },
+    { kind: 'window', wall: 'R', a0: 4.8, a1: 8.6, v0: H1 + 10, v1: H1 + 40 },
+    { kind: 'curtains', wall: 'R', a0: 4.8, a1: 8.6, v0: H1 + 8, v1: H1 + 42 },
+    { kind: 'wallPlant', wall: 'R', a0: 1.0, a1: 1.0, v0: H1 + 44, v1: H1 + 44 },
   ],
   stations: {
-    register: [s(1, 5, 'x-'), s(1, 6, 'x-')],
-    clock: [s(1, 4, 'x-'), s(2, 4, 'x-')],
-    bookcase: [s(8, 1, 'y-'), s(9, 1, 'y-')],
-    archive: [s(4, 1, 'y-'), s(3, 1, 'y-'), s(5, 1, 'y-')],
-    pickup: [s(12, 5, 'x+'), s(12, 6, 'x+')],
+    register: [S(0.65, 3.2, 'x-'), S(0.65, 3.7, 'x-')],
+    archive: [S(0.85, 5.15, 'x-'), S(0.9, 4.6, 'x-')],
+    clock: [S(0.9, 4.6, 'x-'), S(0.85, 5.15, 'x-')],
+    bookcase: [S(3.3, 0.9, 'y-'), S(2.7, 0.9, 'y-')],
+    pickup: [S(2.3, 1.05, 'x-')],
   },
-  homeSeats: [s(3, 3, 'y+'), s(6, 3, 'y+'), s(9, 3, 'y+'), s(3, 6, 'y+'), s(6, 6, 'y+'), s(9, 6, 'y+')],
-  cupSlots: [
-    { x: 13, y: 5 },
-    { x: 13, y: 6 },
-  ],
-  ticketWall: upstairsCork,
+  seats: [S(2.2, 2.4, 'y+'), S(4.9, 2.4, 'y+'), S(7.6, 2.4, 'y+'), S(4.2, 5.2, 'x+'), S(5.8, 5.2, 'x-')],
+  entrance: S(2.3, 1.05, 'y+'),
 };
 
 export const FLOORS: Record<ProviderId, FloorLayout> = { openai: GROUND, anthropic: UPSTAIRS };
 /** Bottom to top. */
 export const FLOOR_ORDER: ProviderId[] = ['openai', 'anthropic'];
 
-export function isBlocked(floor: FloorLayout, x: number, y: number): boolean {
-  if (x < 0 || y < 0 || x >= FLOOR_W || y >= FLOOR_D) return true;
-  return floor.props.some((pr) => pr.solid && pr.x === x && pr.y === y);
+/** Is a point under the upper floor (only visible through the gap between floors)? */
+export const underUpperFloor = (p: Pt) => p.x < UW && p.y < UD;
+
+// ── Pathing grid ─────────────────────────────────────────────────────────────
+
+/** Pathing cells are half a tile: fine enough to walk between chairs. */
+export const CELL = 0.5;
+
+export function gridSize(floor: FloorLayout) {
+  return { cols: Math.round(floor.w / CELL), rows: Math.round(floor.d / CELL) };
 }
+
+/** Cell (i, j) is blocked if it overlaps any solid footprint (shrunk slightly so neighbours stay walkable). */
+export function isBlockedCell(floor: FloorLayout, i: number, j: number): boolean {
+  const { cols, rows } = gridSize(floor);
+  if (i < 0 || j < 0 || i >= cols || j >= rows) return true;
+  const x0 = i * CELL + 0.06, y0 = j * CELL + 0.06, x1 = (i + 1) * CELL - 0.06, y1 = (j + 1) * CELL - 0.06;
+  return floor.props.some((p) => p.solid && p.x < x1 && p.x + p.w > x0 && p.y < y1 && p.y + p.d > y0);
+}
+
+export const cellOf = (p: Pt) => ({ i: Math.floor(p.x / CELL), j: Math.floor(p.y / CELL) });
+export const cellCenter = (i: number, j: number): Pt => ({ x: (i + 0.5) * CELL, y: (j + 0.5) * CELL });

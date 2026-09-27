@@ -127,3 +127,54 @@ export function recentFinished(s: Pick<CafeData, 'tasks'>, limit: number): TaskD
     .sort((a, b) => b.finishedAt!.localeCompare(a.finishedAt!))
     .slice(0, limit);
 }
+
+// ── Attention ────────────────────────────────────────────────────────────────
+
+export type Attention =
+  | { kind: 'stuck'; agentId: string; task: TaskDTO; quietSec: number }
+  | { kind: 'failed'; agentId: string; task: TaskDTO };
+
+/** How long a failure stays on the board unless retried or dismissed. */
+export const FAILURE_TTL_MS = 60 * 60_000;
+
+/**
+ * What needs the user: running tasks gone quiet past the stuck threshold, and
+ * failures/interruptions that are still the agent's latest finished task (once
+ * the agent finishes something newer, it has recovered), not yet retried or
+ * dismissed, and under an hour old. Stuck first, then newest failures.
+ */
+export function needsAttention(
+  s: Pick<CafeData, 'tasks' | 'lastActivityAt'>,
+  now: number,
+  dismissed: ReadonlySet<string> = new Set(),
+  stuckAfterSec = 60,
+): Attention[] {
+  const tasks = Object.values(s.tasks);
+  const retried = new Set(tasks.map((t) => t.retryOf).filter(Boolean) as string[]);
+  const latestFinished = new Map<string, string>();
+  for (const t of tasks) {
+    if (!t.finishedAt || t.status === 'cancelled') continue;
+    const cur = latestFinished.get(t.agentId);
+    if (!cur || t.finishedAt > cur) latestFinished.set(t.agentId, t.finishedAt);
+  }
+  const stuck: Attention[] = [];
+  const failed: Attention[] = [];
+  for (const t of tasks) {
+    if (t.status === 'running' || t.status === 'tool_wait') {
+      const since = s.lastActivityAt[t.id] ?? (t.startedAt ? Date.parse(t.startedAt) : now);
+      const quietSec = (now - since) / 1000;
+      if (quietSec > stuckAfterSec) stuck.push({ kind: 'stuck', agentId: t.agentId, task: t, quietSec });
+    } else if (
+      (t.status === 'failed' || t.status === 'interrupted') &&
+      t.finishedAt &&
+      now - Date.parse(t.finishedAt) < FAILURE_TTL_MS &&
+      !retried.has(t.id) &&
+      !dismissed.has(t.id) &&
+      latestFinished.get(t.agentId) === t.finishedAt
+    ) {
+      failed.push({ kind: 'failed', agentId: t.agentId, task: t });
+    }
+  }
+  failed.sort((a, b) => b.task.finishedAt!.localeCompare(a.task.finishedAt!));
+  return [...stuck, ...failed];
+}

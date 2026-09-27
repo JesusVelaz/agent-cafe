@@ -11,7 +11,7 @@
 import type { AgentDTO, ProviderId, TaskDTO, ToolName } from '@agent-cafe/shared';
 import { activeTaskFor, latestTaskFor, type CafeData } from '@/store/reduce';
 import { deriveActivity, TOOL_STATION, type Activity } from './activity';
-import { FLOORS, type Dir, type FloorLayout, type Spot, type StationId, type Tile } from './layout';
+import { FLOORS, type Dir, type FloorLayout, type Pt, type Spot, type StationId } from './layout';
 import { findPath } from './pathfinding';
 
 export type Pose = 'stand' | 'walk' | 'sit' | 'type' | 'work' | 'slump' | 'sleep';
@@ -48,14 +48,14 @@ interface Visit {
   dwell: number;
 }
 
-const WALK_SPEED = 3.4; // tiles per second
+const WALK_SPEED = 2.6; // tiles per second
 const MAX_VISITS = 2;
 const TOOL_DWELL = 1.4;
 const DELIVER_DWELL = 1.1;
 
 class AgentSim {
   view: AgentView;
-  private path: Tile[] = [];
+  private path: Pt[] = [];
   private goal: Spot | null = null;
   private visits: Visit[] = [];
   private arrivedFor = 0;
@@ -66,7 +66,7 @@ class AgentSim {
     agent: AgentDTO,
     private readonly floor: FloorLayout,
     public home: Spot,
-    spawn: Tile,
+    spawn: Pt,
   ) {
     this.view = {
       id: agent.id,
@@ -239,9 +239,6 @@ class AgentSim {
   }
 }
 
-/** Where newly hired agents walk in from. */
-const ENTRANCE: Record<ProviderId, Tile> = { openai: { x: 1, y: 2 }, anthropic: { x: 11, y: 8 } };
-
 export class World {
   private sims = new Map<string, AgentSim>();
   private initialised = false;
@@ -261,10 +258,10 @@ export class World {
     for (const agent of live) {
       const floor = FLOORS[agent.providerId];
       const i = (seatIndex[agent.providerId] = (seatIndex[agent.providerId] ?? -1) + 1);
-      const home = floor.homeSeats[i % floor.homeSeats.length]!;
+      const home = floor.seats[i % floor.seats.length]!;
       let sim = this.sims.get(agent.id);
       if (!sim) {
-        sim = new AgentSim(agent, floor, home, this.initialised ? ENTRANCE[agent.providerId] : home);
+        sim = new AgentSim(agent, floor, home, this.initialised ? floor.entrance : home);
         this.sims.set(agent.id, sim);
       }
       sim.home = home;
