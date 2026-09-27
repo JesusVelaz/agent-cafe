@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { estimateCost, findModel, modelsFor } from './catalog.js';
+import { estimateCost, findModel, modelsFor } from './catalog';
 
 describe('model catalog', () => {
   it('prices a million input tokens at the per-MTok rate', () => {

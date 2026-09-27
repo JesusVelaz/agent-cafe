@@ -5,7 +5,7 @@ import type {
   TaskDTO,
   TaskStatus,
   ToolName,
-} from './domain.js';
+} from './domain';
 
 /**
  * Per-task event log entries. The orchestration layer emits these; the simulation

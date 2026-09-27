@@ -1,4 +1,4 @@
-import type { ProviderId } from './domain.js';
+import type { ProviderId } from './domain';
 
 export interface ModelInfo {
   id: string;

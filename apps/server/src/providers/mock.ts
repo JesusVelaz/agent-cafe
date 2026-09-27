@@ -33,7 +33,7 @@ const hash = (s: string) => [...s].reduce((h, c) => (Math.imul(h, 31) + c.charCo
 export interface MockOptions {
   rng?: Rng;
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
-  /** Chance per turn of a simulated provider error. */
+  /** Chance per turn of a simulated provider error (default 3%: failures should be visible, not constant). */
   failRate?: number;
   /** Multiplies all delays (tests use 0 via `sleep`, demos can speed up). */
   speed?: number;
@@ -94,7 +94,7 @@ function finalAnswer(prompt: string, messages: NeutralMessage[]): string {
     `Here's my take on "${topic}".`,
     findings ? `\nWhat I gathered:\n${findings}` : '',
     '\nSummary: task handled end to end. In live mode a real model would write this answer.',
-    '\n_(Demo output from the mock provider.)_',
+    '\n(Demo output from the mock provider.)',
   ].join('');
 }
 
@@ -110,7 +110,7 @@ export class MockAdapter implements ProviderAdapter {
   constructor(opts: MockOptions = {}) {
     this.rng = opts.rng ?? Math.random;
     this.sleep = opts.sleep ?? realSleep;
-    this.failRate = opts.failRate ?? 0.08;
+    this.failRate = opts.failRate ?? 0.03;
     this.speed = opts.speed ?? 1;
   }
 

@@ -1,3 +1,3 @@
-export * from './domain.js';
-export * from './events.js';
-export * from './catalog.js';
+export * from './domain';
+export * from './events';
+export * from './catalog';

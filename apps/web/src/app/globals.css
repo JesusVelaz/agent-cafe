@@ -1,1 +1,108 @@
 @import "tailwindcss";
+
+/*
+ * Agent Café tokens. Same palette as the scene (src/scene/palette.ts):
+ * night backdrop, chalkboard panels in walnut frames, one receipt, brass accent.
+ */
+@theme {
+  --color-night: #1c2729;
+  --color-night-2: #223033;
+  --color-slate: #25322d;
+  --color-slate-2: #2d3c36;
+  --color-slate-line: #3b4d45;
+  --color-chalk: #ebe6d8;
+  --color-chalk-dim: #a6a393;
+  --color-chalk-faint: #6f7a70;
+  --color-walnut: #7a4a2a;
+  --color-walnut-dark: #4a2c18;
+  --color-walnut-light: #9a6438;
+  --color-receipt: #f0e7d0;
+  --color-receipt-line: #d8cbaa;
+  --color-ink: #2a2320;
+  --color-ink-soft: #5b5047;
+  --color-brass: #d9a441;
+  --color-mint: #7fd4a0;
+  --color-amber: #e9c46a;
+  --color-coral: #e76f51;
+  --color-teal: #4f9aa5;
+
+  --font-display: var(--font-jersey), ui-monospace, monospace;
+  --font-label: var(--font-silk), ui-monospace, monospace;
+  --font-mono: var(--font-plex), ui-monospace, monospace;
+}
+
+html,
+body {
+  background: var(--color-night);
+  color: var(--color-chalk);
+  font-family: var(--font-mono);
+}
+
+/* Pixel frame: a 3px border whose corners are notched, like a sprite outline. */
+@utility pixel-frame {
+  --frame: var(--color-walnut-dark);
+  box-shadow:
+    0 -3px 0 0 var(--frame),
+    0 3px 0 0 var(--frame),
+    -3px 0 0 0 var(--frame),
+    3px 0 0 0 var(--frame),
+    inset 0 0 0 2px var(--color-walnut);
+}
+
+/* Chalkboard surface: slate with the faintest chalk haze. */
+@utility chalkboard {
+  background-color: var(--color-slate);
+  background-image:
+    radial-gradient(ellipse at 20% 0%, rgb(235 230 216 / 0.05), transparent 60%),
+    radial-gradient(ellipse at 90% 100%, rgb(235 230 216 / 0.04), transparent 50%);
+}
+
+/* The order pad is a paper receipt with a perforated top edge. */
+@utility receipt {
+  background-color: var(--color-receipt);
+  color: var(--color-ink);
+  position: relative;
+  -webkit-mask:
+    radial-gradient(circle 4px at 8px 0, transparent 3.5px, #000 4px) top left / 16px 8px repeat-x,
+    linear-gradient(#000, #000) 0 8px / 100% calc(100% - 8px) no-repeat;
+  mask:
+    radial-gradient(circle 4px at 8px 0, transparent 3.5px, #000 4px) top left / 16px 8px repeat-x,
+    linear-gradient(#000, #000) 0 8px / 100% calc(100% - 8px) no-repeat;
+}
+
+/* Blueprint dots behind the café: an operations-room hint, kept very faint. */
+@utility scene-backdrop {
+  background-color: var(--color-night);
+  background-image: radial-gradient(rgb(235 230 216 / 0.07) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+@utility pixelated {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-brass);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--color-brass);
+  color: var(--color-ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Thin, quiet scrollbars on the chalkboards. */
+.scroll-chalk {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-slate-line) transparent;
+}
