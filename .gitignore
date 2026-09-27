@@ -10,3 +10,4 @@ workspace/*
 !workspace/README.md
 coverage/
 .DS_Store
+next-env.d.ts
