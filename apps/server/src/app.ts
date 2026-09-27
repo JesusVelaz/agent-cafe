@@ -1,11 +1,42 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
+import { ALLOWED_ORIGINS } from './config.js';
+import { ZodError } from 'zod';
+import { OrchestratorError } from './orchestrator/orchestrator.js';
+import { ConfigError } from './providers/config.js';
+import { agentRoutes } from './routes/agents.js';
+import { providerRoutes } from './routes/providers.js';
+import { streamRoutes } from './routes/stream.js';
+import { taskRoutes } from './routes/tasks.js';
+import type { Services } from './services.js';
 
-export async function buildApp(): Promise<FastifyInstance> {
+
+export async function buildApp(services?: Services): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
-  await app.register(cors, {
-    origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+  await app.register(cors, { origin: ALLOWED_ORIGINS, methods: ['GET', 'POST', 'PATCH'] });
+
+  app.setErrorHandler((err, _req, reply) => {
+    if (err instanceof ZodError) {
+      return reply.code(400).send({ error: err.issues.map((i) => `${i.path.join('.') || 'body'}: ${i.message}`).join('; ') });
+    }
+    if (err instanceof ConfigError) return reply.code(400).send({ error: err.message });
+    if (err instanceof OrchestratorError) {
+      const code = { not_found: 404, conflict: 409, invalid: 400 }[err.code];
+      return reply.code(code).send({ error: err.message });
+    }
+    const status = (err as { statusCode?: number }).statusCode;
+    if (status && status < 500) return reply.code(status).send({ error: (err as Error).message });
+    console.error(err);
+    return reply.code(500).send({ error: 'Internal error' });
   });
+
   app.get('/api/health', async () => ({ ok: true }));
+
+  if (services) {
+    await app.register(agentRoutes(services));
+    await app.register(taskRoutes(services));
+    await app.register(providerRoutes(services));
+    await app.register(streamRoutes(services));
+  }
   return app;
 }

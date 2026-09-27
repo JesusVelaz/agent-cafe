@@ -29,3 +29,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     envKeys,
   };
 }
+
+/** The web UI's origins. The API is only reachable from these (plus direct localhost tools). */
+export const ALLOWED_ORIGINS = ['http://localhost:3000', 'http://127.0.0.1:3000'];
