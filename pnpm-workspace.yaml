@@ -1,0 +1,12 @@
+packages:
+  - apps/*
+  - packages/*
+
+# pnpm blocks dependency lifecycle scripts by default; these are the ones we trust
+# (native SQLite driver, Prisma engines/codegen, esbuild used by tsx, sharp used by Next).
+allowBuilds:
+  better-sqlite3: true
+  prisma: true
+  "@prisma/engines": true
+  esbuild: true
+  sharp: true

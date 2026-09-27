@@ -1,0 +1,20 @@
+{
+  "name": "agent-cafe",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.10.0",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev": "concurrently -k -n server,web -c yellow,cyan \"pnpm --filter @agent-cafe/server dev\" \"pnpm --filter @agent-cafe/web dev\"",
+    "test": "pnpm -r --workspace-concurrency=1 test",
+    "typecheck": "pnpm -r typecheck",
+    "build": "pnpm -r build",
+    "db:push": "pnpm --filter @agent-cafe/server db:push",
+    "db:seed": "pnpm --filter @agent-cafe/server db:seed",
+    "db:reset": "pnpm --filter @agent-cafe/server db:reset"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.5",
+    "typescript": "~6.0.3"
+  }
+}
