@@ -23,7 +23,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   return {
     // Deliberately not configurable: this is a local tool holding API keys.
     host: '127.0.0.1',
-    port: Number(env.PORT || 4318),
+    // Own variable, not PORT: dev tooling sets PORT for the web app.
+    port: Number(env.CAFE_API_PORT || 4318),
     homeDir: env.AGENT_CAFE_HOME?.trim() ? fromRepo(env.AGENT_CAFE_HOME.trim()) : join(homedir(), '.agent-cafe'),
     workspaceDir: fromRepo(env.WORKSPACE_DIR?.trim() || 'workspace'),
     envKeys,

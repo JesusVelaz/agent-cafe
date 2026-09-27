@@ -59,7 +59,7 @@ Copy `.env.example` to `.env` at the repo root. Everything is optional.
 | `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` | none | Keys set here take precedence over keys entered in the UI |
 | `WORKSPACE_DIR` | `./workspace` | The only folder agents can read (read-only) |
 | `AGENT_CAFE_HOME` | `~/.agent-cafe` | Holds the encryption master key |
-| `PORT` | `4318` | API server port (always bound to 127.0.0.1) |
+| `CAFE_API_PORT` | `4318` | API server port (always bound to 127.0.0.1) |
 
 Useful scripts: `pnpm test`, `pnpm typecheck`, `pnpm db:reset` (wipe and reseed).
 
