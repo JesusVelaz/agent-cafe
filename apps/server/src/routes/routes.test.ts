@@ -1,17 +1,20 @@
-import { randomBytes } from 'node:crypto';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
 import type { ServerConfig } from '../config.js';
 import { MockAdapter } from '../providers/mock.js';
 import { createServices } from '../services.js';
+import { fakeHarnesses } from '../test/fakeHarness.js';
 import { testDb } from '../test/testDb.js';
 
-const config: ServerConfig = { host: '127.0.0.1', port: 0, homeDir: '.', workspaceDir: '.', envKeys: {} };
+const config: ServerConfig = { host: '127.0.0.1', port: 0, workspaceDir: '.' };
 
-async function setup() {
+async function setup(harness: Parameters<typeof fakeHarnesses>[0] = 'signed_out') {
   const db = await testDb({ seed: true });
   const mock = new MockAdapter({ sleep: async () => {}, failRate: 0 });
-  const services = createServices(config, db, { masterKey: randomBytes(32), resolveAdapter: async () => mock });
+  const services = createServices(config, db, { harnesses: fakeHarnesses(harness), resolveAdapter: async () => mock });
   const app = await buildApp(services);
   return { app, services, db };
 }
@@ -37,15 +40,38 @@ describe('HTTP API', () => {
     ).toBe(400);
   });
 
-  it('never returns API keys', async () => {
+  it('accepts no API keys', async () => {
     const { app } = await setup();
-    const key = 'sk-proj-super-secret-abcd';
-    const res = await app.inject({ method: 'PATCH', url: '/api/providers/openai', payload: { apiKey: key } });
-    expect(res.statusCode).toBe(200);
-    expect(res.body).not.toContain(key);
-    expect(res.json()).toMatchObject({ hasKey: true, keyHint: 'sk-…abcd' });
-    const all = await app.inject('/api/providers');
-    expect(all.body).not.toContain(key);
+    const res = await app.inject({ method: 'PATCH', url: '/api/providers/openai', payload: { apiKey: 'sk-proj-abcd' } });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('reports harness status and models', async () => {
+    const { app } = await setup('ready');
+    const checked = (await app.inject({ method: 'POST', url: '/api/providers/anthropic/check' })).json();
+    expect(checked).toMatchObject({ harness: 'claude-code', connection: { state: 'ready', account: 'barista@example.com' } });
+    const models = (await app.inject('/api/providers/anthropic/models')).json();
+    expect(models).toEqual({ source: 'harness', models: [{ value: 'sonnet', label: 'Sonnet', description: 'Balanced' }] });
+    const demo = (await app.inject('/api/providers/openai/models')).json();
+    expect(demo.source).toBe('catalog');
+  });
+
+  it('sets an agent folder only when it exists', async () => {
+    const { app, db } = await setup();
+    const earl = await db.agent.findFirstOrThrow({ where: { name: 'Earl' } });
+    const url = `/api/agents/${earl.id}`;
+    expect((await app.inject({ method: 'PATCH', url, payload: { workDir: 'relative/path' } })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'PATCH', url, payload: { workDir: join(tmpdir(), 'no-such-folder-cafe') } })).statusCode).toBe(400);
+    const dir = mkdtempSync(join(tmpdir(), 'cafe-work-'));
+    const ok = await app.inject({ method: 'PATCH', url, payload: { workDir: dir, permission: 'acceptEdits' } });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json()).toMatchObject({ workDir: dir, permission: 'acceptEdits' });
+  });
+
+  it('answers 409 for an approval that is not pending', async () => {
+    const { app } = await setup();
+    const res = await app.inject({ method: 'POST', url: '/api/tasks/t1/approvals/a1', payload: { decision: 'allow' } });
+    expect(res.statusCode).toBe(409);
   });
 
   it('returns 409 when the provider is off', async () => {
@@ -55,11 +81,11 @@ describe('HTTP API', () => {
     expect(res.statusCode).toBe(409);
   });
 
-  it('returns 400 for live mode without a key', async () => {
-    const { app } = await setup();
-    const res = await app.inject({ method: 'PATCH', url: '/api/providers/openai', payload: { mode: 'live' } });
+  it('returns 400 for live mode while Claude Code is signed out', async () => {
+    const { app } = await setup('signed_out');
+    const res = await app.inject({ method: 'PATCH', url: '/api/providers/anthropic', payload: { mode: 'live' } });
     expect(res.statusCode).toBe(400);
-    expect(res.json().error).toMatch(/API key/);
+    expect(res.json().error).toMatch(/claude auth login/);
   });
 
   it('hires and archives agents', async () => {

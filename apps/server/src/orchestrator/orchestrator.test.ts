@@ -1,4 +1,3 @@
-import { randomBytes } from 'node:crypto';
 import type { CafeEvent } from '@agent-cafe/shared';
 import { describe, expect, it } from 'vitest';
 import type { Db } from '../db/client.js';
@@ -8,7 +7,11 @@ import { sleep, type ProviderAdapter } from '../providers/types.js';
 import { SettingsService } from '../settings.js';
 import { testDb } from '../test/testDb.js';
 import type { ToolRegistry } from '../tools/registry.js';
+import type { ClaudeRunContext } from '../providers/claude.js';
+import type { HarnessState } from '@agent-cafe/shared';
+import { fakeHarnesses } from '../test/fakeHarness.js';
 import { Orchestrator } from './orchestrator.js';
+import type { RunOutcome } from './runner.js';
 
 const tools: ToolRegistry = { specs: [], execute: async () => ({ ok: true, output: 'ok' }) };
 
@@ -36,12 +39,14 @@ function gatedAdapter(kind: 'mock' | 'live' = 'mock') {
   };
 }
 
-async function setup(opts: { adapter?: ProviderAdapter; envKeys?: Record<string, string> } = {}) {
+async function setup(
+  opts: { adapter?: ProviderAdapter; harness?: HarnessState; runClaude?: (ctx: ClaudeRunContext) => Promise<RunOutcome> } = {},
+) {
   const db = await testDb({ seed: true });
   const bus = new EventBus();
   const events: CafeEvent[] = [];
   bus.subscribe((e) => events.push(e));
-  const providers = new ProviderConfigService(db, opts.envKeys ?? {}, randomBytes(32));
+  const providers = new ProviderConfigService(db, fakeHarnesses(opts.harness));
   const gated = gatedAdapter();
   const adapter = opts.adapter ?? gated.adapter;
   const orch = new Orchestrator({
@@ -51,6 +56,7 @@ async function setup(opts: { adapter?: ProviderAdapter; envKeys?: Record<string,
     settings: new SettingsService(db),
     tools,
     resolveAdapter: async () => adapter,
+    ...(opts.runClaude ? { runClaude: opts.runClaude } : {}),
   });
   const agent = (name: string) => db.agent.findFirstOrThrow({ where: { name } });
   return { db, bus, events, providers, orch, gated, agent };
@@ -151,15 +157,59 @@ describe('Orchestrator', () => {
     await expect(orch.enqueue({ prompt: 'x', target: { agentId: (await agent('Earl')).id } })).rejects.toThrow(/switched off/);
   });
 
-  it('closes a live floor at its daily cap', async () => {
-    const live = gatedAdapter('live');
-    const { orch, providers, agent, db } = await setup({ adapter: live.adapter, envKeys: { openai: 'sk-test-0123456789' } });
-    await providers.update('openai', { mode: 'live', dailyCapUsd: 0 });
-    const t = await orch.enqueue({ prompt: 'x', target: { agentId: (await agent('Mocha')).id } });
+  it('runs live Anthropic tasks on Claude Code and waits for approvals', async () => {
+    const seen: ClaudeRunContext[] = [];
+    const runClaude = async (ctx: ClaudeRunContext): Promise<RunOutcome> => {
+      seen.push(ctx);
+      ctx.emit({ kind: 'tool.start', step: 1, callId: 'c1', tool: 'Bash', input: { command: 'ls' } });
+      const d = await ctx.approve({ tool: 'Bash', summary: 'ls', reason: null }, ctx.signal);
+      ctx.emit({ kind: 'tool.end', step: 1, callId: 'c1', tool: 'Bash', ok: d === 'allow', output: '' });
+      return { status: 'completed', output: d, totals: { inputTokens: 3, outputTokens: 4, costUsd: null, steps: 1 } };
+    };
+    const { orch, providers, agent, db } = await setup({ runClaude });
+    const earl = await agent('Earl');
+    await db.agent.update({ where: { id: earl.id }, data: { workDir: '/tmp/project', permission: 'acceptEdits' } });
+    await providers.update('anthropic', { mode: 'live' });
+    const t = await orch.enqueue({ prompt: 'list files', target: { agentId: earl.id } });
+    await waitFor(async () => Boolean((await db.task.findUniqueOrThrow({ where: { id: t.id } })).pendingApproval));
+    const pending = JSON.parse((await db.task.findUniqueOrThrow({ where: { id: t.id } })).pendingApproval!);
+    expect(pending).toMatchObject({ tool: 'Bash', summary: 'ls' });
+    await orch.resolveApproval(t.id, pending.id, 'allow');
     await orch.idle();
-    const row = await db.task.findUniqueOrThrow({ where: { id: t.id } });
-    expect(row).toMatchObject({ status: 'failed', failureKind: 'daily_cap', isMock: false });
-    expect(live.prompts).toEqual([]);
+    const done = await db.task.findUniqueOrThrow({ where: { id: t.id } });
+    expect(done).toMatchObject({ status: 'completed', output: 'allow', isMock: false, pendingApproval: null });
+    expect(seen[0]!.agent).toMatchObject({ workDir: '/tmp/project', permission: 'acceptEdits' });
+    await expect(orch.resolveApproval(t.id, pending.id, 'deny')).rejects.toThrow(/already answered/);
+    const kinds = (await db.taskEvent.findMany({ where: { taskId: t.id } })).map((e) => e.kind);
+    expect(kinds).toEqual(expect.arrayContaining(['approval.request', 'approval.resolved']));
+  });
+
+  it('denies a pending approval when the task is cancelled', async () => {
+    const runClaude = async (ctx: ClaudeRunContext): Promise<RunOutcome> => {
+      const d = await ctx.approve({ tool: 'Edit', summary: 'a.ts', reason: null }, ctx.signal);
+      return { status: 'failed', failureKind: 'provider_error', error: d, totals: { inputTokens: 0, outputTokens: 0, costUsd: null, steps: 0 } };
+    };
+    const { orch, providers, agent, db } = await setup({ runClaude });
+    const earl = await agent('Earl');
+    await db.agent.update({ where: { id: earl.id }, data: { workDir: '/tmp/project' } });
+    await providers.update('anthropic', { mode: 'live' });
+    const t = await orch.enqueue({ prompt: 'edit', target: { agentId: earl.id } });
+    await waitFor(async () => Boolean((await db.task.findUniqueOrThrow({ where: { id: t.id } })).pendingApproval));
+    await orch.cancel(t.id);
+    await orch.idle();
+    // The run loop saw a deny; the orchestrator still records the user's cancel.
+    expect(await db.task.findUniqueOrThrow({ where: { id: t.id } })).toMatchObject({ pendingApproval: null });
+  });
+
+  it('refuses live tasks until Claude Code is signed in and the agent has a folder', async () => {
+    const signedOut = await setup({ harness: 'signed_out' });
+    await expect(signedOut.providers.update('anthropic', { mode: 'live' })).rejects.toThrow(/claude auth login/);
+
+    const ready = await setup();
+    await ready.providers.update('anthropic', { mode: 'live' });
+    await expect(ready.orch.enqueue({ prompt: 'x', target: { agentId: (await ready.agent('Earl')).id } })).rejects.toThrow(/folder/);
+    // Codex isn't wired yet: the ground floor can't go live.
+    await expect(ready.providers.update('openai', { mode: 'live' })).rejects.toThrow(/coming next/);
   });
 
   it('persists ordered events, streams deltas without persisting them, and tracks usage', async () => {

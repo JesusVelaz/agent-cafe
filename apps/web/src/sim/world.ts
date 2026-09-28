@@ -8,9 +8,9 @@
  * (stations to walk to) and play them at a readable pace, dropping old ones if
  * they fall behind, so the scene lags reality by at most a couple of seconds.
  */
-import type { AgentDTO, ProviderId, TaskDTO, ToolName } from '@agent-cafe/shared';
+import type { AgentDTO, ProviderId, TaskDTO } from '@agent-cafe/shared';
 import { activeTaskFor, latestTaskFor, type CafeData } from '@/store/reduce';
-import { deriveActivity, TOOL_STATION, type Activity } from './activity';
+import { deriveActivity, stationFor, type Activity } from './activity';
 import { FLOORS, type Dir, type FloorLayout, type Pt, type Spot, type StationId } from './layout';
 import { findPath } from './pathfinding';
 
@@ -18,7 +18,9 @@ export type Pose = 'stand' | 'walk' | 'sit' | 'type' | 'work' | 'slump' | 'sleep
 
 export type Bubble =
   | { kind: 'think' }
-  | { kind: 'tool'; tool: ToolName }
+  | { kind: 'tool'; tool: string }
+  /** Raised hand: waiting for the user to allow or deny something. */
+  | { kind: 'ask' }
   | { kind: 'wait' }
   | { kind: 'done' }
   | { kind: 'fail' }
@@ -43,7 +45,7 @@ export interface AgentView {
 
 interface Visit {
   station: StationId;
-  tool?: ToolName;
+  tool?: string;
   /** Minimum seconds to stay once arrived. */
   dwell: number;
 }
@@ -112,7 +114,8 @@ class AgentSim {
       const seen = this.seenSeq.get(task.id)!;
       for (const e of events) {
         if (e.seq > seen && e.kind === 'tool.start') {
-          this.pushVisit({ station: TOOL_STATION[e.tool], tool: e.tool, dwell: TOOL_DWELL });
+          const station = stationFor(e.tool);
+          if (station) this.pushVisit({ station, tool: e.tool, dwell: TOOL_DWELL });
         }
       }
       this.seenSeq.set(task.id, Math.max(seen, lastSeq));
@@ -218,6 +221,8 @@ class AgentSim {
         return { kind: 'think' };
       case 'tool':
         return { kind: 'tool', tool: this.view.activity.tool };
+      case 'approval':
+        return { kind: 'ask' };
       case 'stuck':
         return { kind: 'zzz' };
       case 'done':

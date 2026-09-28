@@ -6,9 +6,13 @@
  * Every state change goes DB first, then the bus, so a client that reconnects and
  * takes a snapshot never sees an older state than the events it already got.
  */
+import { randomUUID } from 'node:crypto';
 import {
   DEFAULTS,
+  HARNESS,
   isTerminal,
+  type AgentPermission,
+  type ApprovalDTO,
   type CafeEvent,
   type ProviderId,
   type TaskDTO,
@@ -19,6 +23,7 @@ import type { Db } from '../db/client.js';
 import { toAgentDTO, toTaskDTO, toTaskEventDTO } from '../db/mappers.js';
 import type { EventBus } from '../events/bus.js';
 import type { Task } from '../generated/prisma/client.js';
+import { runClaudeTask, type ApprovalAsk, type ClaudeRunContext } from '../providers/claude.js';
 import type { ProviderConfigService } from '../providers/config.js';
 import type { AdapterResolver } from '../providers/registry.js';
 import type { SettingsService } from '../settings.js';
@@ -51,6 +56,13 @@ export interface OrchestratorDeps {
   tools: ToolRegistry;
   resolveAdapter: AdapterResolver;
   maxSteps?: number;
+  /** Runs a live Anthropic task on Claude Code. Injected in tests. */
+  runClaude?: (ctx: ClaudeRunContext) => Promise<RunOutcome>;
+}
+
+interface PendingApproval {
+  taskId: string;
+  resolve: (d: 'allow' | 'deny') => void;
 }
 
 interface Slot {
@@ -64,6 +76,7 @@ export class Orchestrator {
   private readonly slots = new Map<string, Slot>();
   private readonly drains = new Set<Promise<void>>();
   private readonly seq = new Map<string, number>();
+  private readonly approvals = new Map<string, PendingApproval>();
   private stopped = false;
 
   constructor(private readonly deps: OrchestratorDeps) {}
@@ -109,8 +122,9 @@ export class Orchestrator {
     const agent = await this.route(input.target);
     const mode = await providers.mode(agent.providerId as ProviderId);
     if (mode === 'off') {
-      throw new OrchestratorError(`${agent.providerId} is switched off. Enable it in Settings.`, 'conflict');
+      throw new OrchestratorError(`${agent.providerId} is switched off. Switch it to Live or Demo.`, 'conflict');
     }
+    if (mode === 'live') await this.assertLiveReady(agent);
     const row = await db.task.create({
       data: {
         agentId: agent.id,
@@ -143,6 +157,16 @@ export class Orchestrator {
     // Already running: abort it; the run loop finalises it as cancelled.
     const slot = this.slots.get(task.agentId);
     if (slot?.taskId === taskId) slot.ctrl.abort();
+    return toTaskDTO(await this.deps.db.task.findUniqueOrThrow({ where: { id: taskId } }));
+  }
+
+  /** The user's answer to a harness permission prompt. */
+  async resolveApproval(taskId: string, approvalId: string, decision: 'allow' | 'deny'): Promise<TaskDTO> {
+    const pending = this.approvals.get(approvalId);
+    if (!pending || pending.taskId !== taskId) {
+      throw new OrchestratorError('That request was already answered or has expired.', 'conflict');
+    }
+    pending.resolve(decision);
     return toTaskDTO(await this.deps.db.task.findUniqueOrThrow({ where: { id: taskId } }));
   }
 
@@ -185,6 +209,17 @@ export class Orchestrator {
   }
 
   // ── Routing ──────────────────────────────────────────────────────────────
+
+  private async assertLiveReady(agent: { name: string; providerId: string; workDir: string | null }) {
+    const providerId = agent.providerId as ProviderId;
+    const c = await this.deps.providers.harnesses.ensure(providerId);
+    if (c.state !== 'ready') {
+      throw new OrchestratorError(c.message ?? `${HARNESS[providerId].name} isn't ready.`, 'conflict');
+    }
+    if (!agent.workDir) {
+      throw new OrchestratorError(`Pick a folder for ${agent.name} to work in first (click the agent, then Setup).`, 'conflict');
+    }
+  }
 
   private async route(target: EnqueueTarget) {
     const { db } = this.deps;
@@ -263,26 +298,31 @@ export class Orchestrator {
       await this.finish(task.id, { status: 'failed', failureKind: 'provider_error', error: `${providerId} was switched off.` });
       return;
     }
-    if (mode === 'live' && (await providers.status(providerId)).closed) {
-      await this.finish(task.id, {
-        status: 'failed',
-        failureKind: 'daily_cap',
-        error: `${providerId} reached its daily spending cap. Closed for today.`,
-      });
-      return;
+    if (mode === 'live') {
+      const c = await providers.harnesses.ensure(providerId);
+      if (c.state !== 'ready' || !providers.harnesses.executable(providerId) || !agent.workDir || providerId !== 'anthropic') {
+        await this.finish(task.id, {
+          status: 'failed',
+          failureKind: 'signed_out',
+          error: !agent.workDir ? `${agent.name} has no folder to work in.` : c.message ?? `${HARNESS[providerId].name} isn't ready.`,
+        });
+        return;
+      }
     }
 
     let adapter;
-    try {
-      adapter = await resolveAdapter(providerId, mode);
-    } catch (err) {
-      await this.finish(task.id, { status: 'failed', failureKind: 'provider_error', error: (err as Error).message });
-      return;
+    if (mode === 'mock') {
+      try {
+        adapter = await resolveAdapter(providerId, mode);
+      } catch (err) {
+        await this.finish(task.id, { status: 'failed', failureKind: 'provider_error', error: (err as Error).message });
+        return;
+      }
     }
 
     const started = await db.task.update({
       where: { id: task.id },
-      data: { isMock: adapter.kind === 'mock' },
+      data: { isMock: adapter?.kind === 'mock' },
     });
     this.publishTask(started);
     await this.record(task.id, task.agentId, { kind: 'status', status: 'running' });
@@ -295,18 +335,48 @@ export class Orchestrator {
       });
     };
 
-    const outcome = await runTask({
-      task: { prompt: task.prompt, model: task.model, maxCostUsd: task.maxCostUsd },
-      agent: { systemPrompt: agent.systemPrompt },
-      adapter,
-      tools,
-      signal: ctrl.signal,
-      emit,
-      ...(this.deps.maxSteps ? { maxSteps: this.deps.maxSteps } : {}),
-    });
+    const outcome = adapter
+      ? await runTask({
+          task: { prompt: task.prompt, model: task.model, maxCostUsd: task.maxCostUsd },
+          agent: { systemPrompt: agent.systemPrompt },
+          adapter,
+          tools,
+          signal: ctrl.signal,
+          emit,
+          ...(this.deps.maxSteps ? { maxSteps: this.deps.maxSteps } : {}),
+        })
+      : await (this.deps.runClaude ?? runClaudeTask)({
+          task: { prompt: task.prompt, model: task.model },
+          agent: { systemPrompt: agent.systemPrompt, workDir: agent.workDir!, permission: agent.permission as AgentPermission },
+          executable: providers.harnesses.executable(providerId)!,
+          signal: ctrl.signal,
+          emit,
+          approve: (ask, signal) => this.askUser(task.id, ask, emit, signal),
+          onRateLimit: (info) => {
+            if (!providers.harnesses.recordUsage(providerId, info)) return;
+            void providers.status(providerId).then((provider) => this.deps.bus.publish({ type: 'provider.updated', provider }));
+          },
+        });
     await chain;
     await this.finish(task.id, outcomeToFinish(outcome));
-    if (adapter.kind === 'live') this.deps.bus.publish({ type: 'provider.updated', provider: await providers.status(providerId) });
+  }
+
+  /** Parks a harness permission prompt until the user answers (or the task is cancelled). */
+  private askUser(taskId: string, ask: ApprovalAsk, emit: (e: TaskEventData) => void, signal: AbortSignal): Promise<'allow' | 'deny'> {
+    const approval: ApprovalDTO = { id: randomUUID(), ...ask, requestedAt: new Date().toISOString() };
+    return new Promise((resolve) => {
+      const settle = (decision: 'allow' | 'deny') => {
+        signal.removeEventListener('abort', onAbort);
+        this.approvals.delete(approval.id);
+        emit({ kind: 'approval.resolved', approvalId: approval.id, decision });
+        resolve(decision);
+      };
+      const onAbort = () => settle('deny');
+      if (signal.aborted) return settle('deny');
+      signal.addEventListener('abort', onAbort, { once: true });
+      this.approvals.set(approval.id, { taskId, resolve: settle });
+      emit({ kind: 'approval.request', approval });
+    });
   }
 
   private async onRunEvent(taskId: string, agentId: string, e: TaskEventData): Promise<void> {
@@ -316,7 +386,11 @@ export class Orchestrator {
       return;
     }
     await this.record(taskId, agentId, e);
-    if (e.kind === 'status') {
+    if (e.kind === 'approval.request') {
+      this.publishTask(await db.task.update({ where: { id: taskId }, data: { pendingApproval: JSON.stringify(e.approval) } }));
+    } else if (e.kind === 'approval.resolved') {
+      this.publishTask(await db.task.update({ where: { id: taskId }, data: { pendingApproval: null } }));
+    } else if (e.kind === 'status') {
       this.publishTask(await db.task.update({ where: { id: taskId }, data: { status: e.status } }));
     } else if (e.kind === 'model.end') {
       const t = await db.task.findUniqueOrThrow({ where: { id: taskId } });
@@ -345,6 +419,7 @@ export class Orchestrator {
         output: f.output ?? null,
         error: f.error ?? null,
         failureKind: f.failureKind ?? null,
+        pendingApproval: null,
         finishedAt: new Date(),
       },
     });

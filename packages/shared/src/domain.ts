@@ -7,7 +7,7 @@
 export const PROVIDER_IDS = ['openai', 'anthropic'] as const;
 export type ProviderId = (typeof PROVIDER_IDS)[number];
 
-/** live = real API calls, mock = scripted demo runs, off = refuses new tasks. */
+/** live = runs on the floor's harness, mock = scripted demo runs, off = refuses new tasks. */
 export type ProviderMode = 'live' | 'mock' | 'off';
 
 export type TaskStatus =
@@ -33,11 +33,27 @@ export const isActive = (s: TaskStatus): boolean => s === 'running' || s === 'to
 export type FailureKind =
   | 'provider_error'
   | 'budget'
-  | 'daily_cap'
   | 'max_steps'
-  | 'refusal';
+  | 'refusal'
+  /** The plan's usage limit was hit. */
+  | 'usage_limit'
+  /** The harness isn't signed in (or installed). */
+  | 'signed_out';
 
-/** Built-in, sandboxed tools. Each one maps to a café station (see web/src/sim). */
+/**
+ * The vendor agent that runs a floor's live tasks, signed in with the user's own
+ * subscription. Agent Café never sees credentials; see docs/specs/…-subscription-harnesses.md.
+ */
+export type HarnessId = 'claude-code' | 'codex';
+export const HARNESS: Record<ProviderId, { id: HarnessId; name: string; login: string }> = {
+  anthropic: { id: 'claude-code', name: 'Claude Code', login: 'claude auth login' },
+  openai: { id: 'codex', name: 'Codex', login: 'codex login' },
+};
+
+/** How much an agent may do without asking. Commands always ask unless the harness allows them. */
+export type AgentPermission = 'ask' | 'acceptEdits';
+
+/** Built-in, sandboxed tools used by demo runs. Harness tools (Read, Bash…) are plain strings. */
 export const TOOL_NAMES = [
   'notes_read',
   'notes_write',
@@ -56,8 +72,23 @@ export interface AgentDTO {
   systemPrompt: string;
   /** Deterministic seed for sprite colours, so an agent always looks the same. */
   spriteSeed: number;
+  /** Folder the agent works in on live runs (absolute). Null until chosen. */
+  workDir: string | null;
+  permission: AgentPermission;
   createdAt: string;
   archivedAt: string | null;
+}
+
+/** A harness asking the user before it acts (a command, an edit…). */
+export interface ApprovalDTO {
+  id: string;
+  /** Harness tool name, e.g. Bash, Edit, WebFetch. */
+  tool: string;
+  /** One line: the command, the file, the URL. */
+  summary: string;
+  /** Why the harness asked, when it says. */
+  reason: string | null;
+  requestedAt: string;
 }
 
 export interface TaskDTO {
@@ -79,24 +110,52 @@ export interface TaskDTO {
   error: string | null;
   failureKind: FailureKind | null;
   retryOf: string | null;
+  /** Set while the harness waits for the user to allow or deny an action. */
+  pendingApproval: ApprovalDTO | null;
   createdAt: string;
   startedAt: string | null;
   finishedAt: string | null;
 }
 
+export type HarnessState = 'checking' | 'ready' | 'signed_out' | 'not_installed' | 'unsupported' | 'error';
+
+export interface HarnessConnectionDTO {
+  state: HarnessState;
+  version: string | null;
+  /** Signed-in account (email), when the harness reports it. */
+  account: string | null;
+  /** Subscription plan, e.g. "max". */
+  plan: string | null;
+  /** What to tell the user when not ready. */
+  message: string | null;
+  checkedAt: string | null;
+}
+
+/** The plan's current rate-limit window, as last reported by the harness. */
+export interface PlanUsageDTO {
+  status: 'allowed' | 'allowed_warning' | 'rejected';
+  /** e.g. five_hour, seven_day. */
+  window: string | null;
+  /** 0..1 when known. */
+  utilization: number | null;
+  resetsAt: string | null;
+}
+
 export interface ProviderStatusDTO {
   id: ProviderId;
   mode: ProviderMode;
-  hasKey: boolean;
-  /** Where the active key comes from. `.env` wins over a key stored via the UI. */
-  keySource: 'env' | 'stored' | null;
-  /** Masked hint such as `sk-…a1b2`. The key itself never leaves the server. */
-  keyHint: string | null;
-  dailyCapUsd: number;
-  /** Live (non-mock) spend since local midnight. */
-  spentTodayUsd: number;
-  /** True when live spend has reached the daily cap: "Closed for today". */
+  harness: HarnessId;
+  connection: HarnessConnectionDTO;
+  usage: PlanUsageDTO | null;
+  /** True when the plan's usage limit is reached: "Limit reached". */
   closed: boolean;
+}
+
+/** A model the harness offers (value is what the agent stores). */
+export interface HarnessModelDTO {
+  value: string;
+  label: string;
+  description: string;
 }
 
 export interface SettingsDTO {
@@ -105,9 +164,11 @@ export interface SettingsDTO {
 }
 
 export const DEFAULTS = {
+  /** Demo runs only: simulated budget per task. */
   maxCostUsd: 0.5,
-  dailyCapUsd: 5,
   maxSteps: 8,
+  /** Live harness runs: model round-trips per task. */
+  maxTurns: 60,
   /** Seconds without an event before a running agent is shown as stuck (zzz). */
   stuckAfterSec: 60,
 } as const;

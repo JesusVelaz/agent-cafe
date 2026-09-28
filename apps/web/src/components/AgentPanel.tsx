@@ -1,7 +1,17 @@
 'use client';
 
-import { isActive, isTerminal, type FailureKind, type TaskDTO, type TaskEventDTO } from '@agent-cafe/shared';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  HARNESS,
+  isActive,
+  isTerminal,
+  type AgentDTO,
+  type AgentPermission,
+  type FailureKind,
+  type HarnessModelDTO,
+  type TaskDTO,
+  type TaskEventDTO,
+} from '@agent-cafe/shared';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { activityLabel, deriveActivity } from '@/sim/activity';
 import { api } from '@/lib/api';
 import { duration, FLOOR_NAME, PROVIDER_NAME, STATUS_LABEL, STATUS_TONE, taskDuration, tokens, usd } from '@/lib/format';
@@ -14,9 +24,10 @@ import { ACTIVITY_TONE, Label, StatusDot } from './Panel';
 const FAILURE_COPY: Record<FailureKind, string> = {
   provider_error: 'The provider returned an error.',
   budget: 'Stopped at this order’s budget cap.',
-  daily_cap: 'This floor reached its daily spending cap.',
   max_steps: 'Stopped after too many steps without a final answer.',
   refusal: 'The model declined this request.',
+  usage_limit: 'Your plan’s usage limit was reached. It resets on its own.',
+  signed_out: 'The harness isn’t signed in.',
 };
 
 // ── Agent selected ───────────────────────────────────────────────────────────
@@ -77,6 +88,8 @@ export function AgentDetail({ agentId, onClose }: { agentId: string; onClose: ()
         </button>
       </header>
 
+      <AgentSetup agent={agent} />
+
       {task ? <TaskView task={task} now={now} /> : <p className="p-4 text-xs text-chalk-faint">No orders yet. Send one from the order pad.</p>}
 
       {history.length > 1 && (
@@ -92,7 +105,7 @@ export function AgentDetail({ agentId, onClose }: { agentId: string; onClose: ()
                 >
                   <StatusDot color={STATUS_TONE[t.status]} />
                   <span className="min-w-0 flex-1 truncate">{t.prompt}</span>
-                  <span className="shrink-0 text-chalk-faint">{usd(t.costUsd)}</span>
+                  <span className="shrink-0 text-chalk-faint">{t.isMock ? usd(t.costUsd) : tokens(t.inputTokens + t.outputTokens)}</span>
                 </button>
               </li>
             ))}
@@ -154,7 +167,11 @@ function TaskView({ task, now }: { task: TaskDTO; now: number }) {
         <Metric label="Time" value={elapsed === null ? '—' : duration(elapsed)} />
         <Metric label="Steps" value={String(task.steps)} />
         <Metric label="Tokens" value={`${tokens(task.inputTokens)}/${tokens(task.outputTokens)}`} title="Input / output tokens" />
-        <Metric label="Cost" value={usd(task.costUsd)} title={`Budget cap ${usd(task.maxCostUsd, 2)}`} />
+        {task.isMock ? (
+          <Metric label="Cost" value={usd(task.costUsd)} title={`Demo price; budget cap ${usd(task.maxCostUsd, 2)}`} />
+        ) : (
+          <Metric label="Billed" value="Plan" title="Runs on your subscription" />
+        )}
       </dl>
 
       <div>
@@ -238,7 +255,7 @@ function describe(e: TaskEventDTO): Row | null {
       return { text: `Step ${e.step} · thinking`, tone: 'var(--color-chalk-dim)' };
     case 'model.end':
       return {
-        text: `Step ${e.step} · ${tokens(e.inputTokens)} in / ${tokens(e.outputTokens)} out · ${usd(e.costUsd)}`,
+        text: `Step ${e.step} · ${tokens(e.inputTokens)} in / ${tokens(e.outputTokens)} out${e.costUsd === null ? '' : ` · ${usd(e.costUsd)}`}`,
         ...(e.text ? { detail: short(e.text) } : {}),
         tone: 'var(--color-chalk)',
       };
@@ -255,6 +272,10 @@ function describe(e: TaskEventDTO): Row | null {
         text: e.message,
         tone: e.level === 'error' ? 'var(--color-coral)' : e.level === 'warn' ? 'var(--color-amber)' : 'var(--color-chalk-dim)',
       };
+    case 'approval.request':
+      return { text: `? Asked to use ${e.approval.tool}`, detail: short(e.approval.summary, 160), tone: 'var(--color-amber)' };
+    case 'approval.resolved':
+      return { text: e.decision === 'allow' ? '✓ You allowed it' : '✕ You denied it', tone: e.decision === 'allow' ? 'var(--color-mint)' : 'var(--color-coral)' };
     case 'model.delta':
       return null;
   }
@@ -278,5 +299,128 @@ function ActionButton({ children, onClick, disabled }: { children: React.ReactNo
     >
       {children}
     </button>
+  );
+}
+
+// ── Setup: model, working folder, permission ─────────────────────────────────
+
+const PERMISSIONS: Array<{ value: AgentPermission; label: string; hint: string }> = [
+  { value: 'ask', label: 'Ask first', hint: 'Asks before editing files or running commands.' },
+  { value: 'acceptEdits', label: 'Auto-accept edits', hint: 'Edits files without asking; commands still ask.' },
+];
+
+function AgentSetup({ agent }: { agent: AgentDTO }) {
+  const provider = useCafe((s) => s.providers[agent.providerId]);
+  const [models, setModels] = useState<HarnessModelDTO[] | null>(null);
+  const [folder, setFolder] = useState(agent.workDir ?? '');
+  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
+  const ids = { model: useId(), folder: useId() };
+  const harness = HARNESS[agent.providerId];
+  const live = provider?.mode === 'live';
+  const connection = provider?.connection.state;
+
+  useEffect(() => setFolder(agent.workDir ?? ''), [agent.workDir]);
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .models(agent.providerId)
+      .then((r) => !cancelled && setModels(r.models))
+      .catch(() => !cancelled && setModels([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [agent.providerId, connection]);
+
+  const save = (patch: Parameters<typeof api.updateAgent>[1], done = 'Saved.') => {
+    setNote(null);
+    api
+      .updateAgent(agent.id, patch)
+      .then(() => setNote({ ok: true, text: done }))
+      .catch((e: Error) => setNote({ ok: false, text: e.message }));
+  };
+
+  const options = models ?? [];
+  const known = options.some((m) => m.value === agent.model);
+
+  return (
+    <details open={live && !agent.workDir} className="border-b-2 border-slate-line">
+      <summary className="flex cursor-pointer items-center gap-2 px-4 py-2.5 font-label text-[10px] text-chalk-dim hover:text-chalk">
+        SETUP
+        {live && !agent.workDir && <span className="text-coral">· PICK A FOLDER</span>}
+        <span className="ml-auto normal-case text-chalk-faint">{live ? harness.name : 'Demo'}</span>
+      </summary>
+      <div className="flex flex-col gap-3 px-4 pb-4 text-xs">
+        <div className="flex flex-col gap-1">
+          <label htmlFor={ids.model} className="font-label text-[10px] text-chalk-dim">MODEL</label>
+          <select
+            id={ids.model}
+            value={agent.model}
+            onChange={(e) => save({ model: e.target.value }, 'Model saved. Applies to new tasks.')}
+            className="h-9 border-2 border-slate-line bg-night px-2 text-chalk"
+          >
+            {!known && <option value={agent.model}>{agent.model}</option>}
+            {options.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+                {m.description && m.description !== m.label ? ` · ${m.description}` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <form
+          className="flex flex-col gap-1"
+          onSubmit={(e) => {
+            e.preventDefault();
+            save({ workDir: folder.trim() || null }, folder.trim() ? 'Folder saved.' : 'Folder cleared.');
+          }}
+        >
+          <label htmlFor={ids.folder} className="font-label text-[10px] text-chalk-dim">WORKING FOLDER</label>
+          <div className="flex gap-1.5">
+            <input
+              id={ids.folder}
+              value={folder}
+              onChange={(e) => setFolder(e.target.value)}
+              placeholder="C:\Users\you\projects\my-app"
+              spellCheck={false}
+              className="h-9 min-w-0 flex-1 border-2 border-slate-line bg-night px-2 font-mono text-[12px] text-chalk placeholder:text-chalk-faint"
+            />
+            <button
+              type="submit"
+              disabled={(folder.trim() || null) === agent.workDir}
+              className="h-9 border-2 border-walnut-dark bg-walnut px-2.5 font-label text-[10px] text-chalk hover:bg-walnut-light disabled:opacity-40"
+            >
+              SAVE
+            </button>
+          </div>
+          <p className="text-[11px] text-chalk-faint">Where {agent.name} reads and edits files on live runs. Paste a full path.</p>
+        </form>
+
+        <fieldset className="flex flex-col gap-1">
+          <legend className="mb-1 font-label text-[10px] text-chalk-dim">PERMISSION</legend>
+          {PERMISSIONS.map((opt) => (
+            <label key={opt.value} className="flex cursor-pointer items-start gap-2">
+              <input
+                type="radio"
+                name={`perm-${agent.id}`}
+                checked={agent.permission === opt.value}
+                onChange={() => save({ permission: opt.value })}
+                className="mt-0.5 accent-[var(--color-brass)]"
+              />
+              <span>
+                <span className="text-chalk">{opt.label}</span>
+                <span className="block text-[11px] text-chalk-faint">{opt.hint}</span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
+
+        {note && (
+          <p role={note.ok ? 'status' : 'alert'} className={`text-[11px] ${note.ok ? 'text-mint' : 'text-coral'}`}>
+            {note.text}
+          </p>
+        )}
+      </div>
+    </details>
   );
 }

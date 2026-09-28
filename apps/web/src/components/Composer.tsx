@@ -1,6 +1,6 @@
 'use client';
 
-import { DEFAULTS, PROVIDER_IDS, type ProviderId } from '@agent-cafe/shared';
+import { DEFAULTS, HARNESS, PROVIDER_IDS, type ProviderId } from '@agent-cafe/shared';
 import { useEffect, useId, useState } from 'react';
 import { api } from '@/lib/api';
 import { PROVIDER_NAME } from '@/lib/format';
@@ -32,19 +32,20 @@ export function Composer({ variant }: { variant: 'card' | 'bar' }) {
   const targetAgent = target.startsWith('agent:') ? agents[target.slice(6)] : undefined;
   const provider = anyProvider ?? targetAgent?.providerId;
   const mode = provider ? providers[provider]?.mode : undefined;
+  const needsFolder = mode === 'live' && targetAgent && !targetAgent.workDir;
 
   const send = async () => {
     const text = prompt.trim();
     if (!text || sending) return;
     const maxCostUsd = Number(cap.replace('$', ''));
-    if (!(maxCostUsd > 0)) {
+    if (mode === 'mock' && !(maxCostUsd > 0)) {
       setNotice({ ok: false, text: 'Set a budget above $0.' });
       return;
     }
     setSending(true);
     setNotice(null);
     try {
-      const task = await api.createTask({ prompt: text, maxCostUsd, ...(anyProvider ? { providerId: anyProvider } : { agentId: targetAgent?.id }) });
+      const task = await api.createTask({ prompt: text, ...(mode === 'mock' ? { maxCostUsd } : {}), ...(anyProvider ? { providerId: anyProvider } : { agentId: targetAgent?.id }) });
       setNotice({ ok: true, text: `Sent to ${agents[task.agentId]?.name ?? 'an agent'}.` });
       setPrompt('');
       selectAgent(task.agentId, task.id);
@@ -85,7 +86,11 @@ export function Composer({ variant }: { variant: 'card' | 'bar' }) {
     <span className={notice.ok ? '' : 'text-coral'}>{notice.text}</span>
   ) : (
     <span className="opacity-75">
-      {mode === 'mock' ? 'Demo floor: scripted run, no API calls. ' : mode === 'live' ? 'Live: uses your API key. ' : mode === 'off' ? 'That floor is switched off. ' : ''}
+      {needsFolder
+        ? `Pick a folder for ${targetAgent.name} first (click them, then Setup). `
+        : mode === 'mock' ? 'Demo floor: scripted run, no real calls. '
+        : mode === 'live' && provider ? `Live: ${HARNESS[provider].name} on your subscription. `
+        : mode === 'off' ? 'That floor is switched off. ' : ''}
       Ctrl+Enter to send.
     </span>
   );
@@ -136,8 +141,12 @@ export function Composer({ variant }: { variant: 'card' | 'bar' }) {
       <div className="flex flex-wrap items-center gap-2">
         <label htmlFor={ids.target} className="font-label text-[10px] text-ink-soft">FOR</label>
         {targetSelect}
-        <label htmlFor={ids.cap} className="font-label text-[10px] text-ink-soft">BUDGET</label>
-        <input id={ids.cap} value={cap} onChange={(e) => setCap(e.target.value)} inputMode="decimal" className="h-11 w-16 border-2 border-ink bg-[#f7eedb] px-2 text-sm text-ink" />
+        {mode === 'mock' && (
+          <>
+            <label htmlFor={ids.cap} className="font-label text-[10px] text-ink-soft" title="Demo runs simulate a price; this caps it">BUDGET</label>
+            <input id={ids.cap} value={cap} onChange={(e) => setCap(e.target.value)} inputMode="decimal" className="h-11 w-16 border-2 border-ink bg-[#f7eedb] px-2 text-sm text-ink" />
+          </>
+        )}
         <button type="submit" disabled={sending || !prompt.trim() || mode === 'off'} className="ml-auto h-11 bg-ink px-4 font-label text-[11px] text-receipt hover:bg-walnut disabled:opacity-40">
           {sending ? 'SENDING…' : 'SEND TASK'}
         </button>

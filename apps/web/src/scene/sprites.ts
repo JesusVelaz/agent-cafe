@@ -162,6 +162,9 @@ export const ICONS = {
   check: ['......g', '.....g.', 'g...g..', '.g.g...', '..g....'],
   alert: ['...r...', '...r...', '...r...', '.......', '...r...'],
   hourglass: ['kkkkkkk', '.kyyyk.', '..kyk..', '.k.y.k.', 'kkkkkkk'],
+  term: ['kkkkkkk', 'kgkkkkk', 'kkgkkkk', 'kgkkggk', 'kkkkkkk'],
+  pen: ['.....kk', '....kyk', '...kyk.', '..kyk..', '.bk....'],
+  ask: ['..bbb..', '.b...b.', '....b..', '.......', '...b...'],
 } as const satisfies Record<string, Grid>;
 export type IconName = keyof typeof ICONS;
 export const ICON_PAL = { k: K.ink, w: '#ffffff', b: '#5d7fb8', y: K.amber, g: '#2f9e5f', r: '#d9443a' };

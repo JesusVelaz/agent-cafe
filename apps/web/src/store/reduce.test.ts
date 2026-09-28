@@ -5,7 +5,7 @@ import { activeTaskFor, emptyData, needsAttention, queuedFor, reduce } from './r
 const task = (over: Partial<TaskDTO> = {}): TaskDTO => ({
   id: 't1', agentId: 'a1', providerId: 'openai', model: 'gpt-6-sol', prompt: 'hi', status: 'queued',
   isMock: true, maxCostUsd: 0.5, inputTokens: 0, outputTokens: 0, costUsd: null, steps: 0,
-  output: null, error: null, failureKind: null, retryOf: null,
+  output: null, error: null, failureKind: null, retryOf: null, pendingApproval: null,
   createdAt: '2026-09-27T10:00:00.000Z', startedAt: null, finishedAt: null, ...over,
 });
 
@@ -16,7 +16,7 @@ describe('reduce', () => {
   it('hydrates from a snapshot', () => {
     const s = reduce(emptyData(), {
       type: 'snapshot',
-      agents: [{ id: 'a1', name: 'Mocha', providerId: 'openai', model: 'gpt-6-sol', systemPrompt: '', spriteSeed: 1, createdAt: '', archivedAt: null }],
+      agents: [{ id: 'a1', name: 'Mocha', providerId: 'openai', model: 'gpt-6-sol', systemPrompt: '', spriteSeed: 1, workDir: null, permission: 'ask' as const, createdAt: '', archivedAt: null }],
       tasks: [task()],
       lastEvents: {},
       providers: [],
@@ -46,7 +46,7 @@ describe('reduce', () => {
   });
 
   it('drops archived agents', () => {
-    const agent = { id: 'a1', name: 'M', providerId: 'openai' as const, model: 'x', systemPrompt: '', spriteSeed: 1, createdAt: '', archivedAt: null };
+    const agent = { id: 'a1', name: 'M', providerId: 'openai' as const, model: 'x', systemPrompt: '', spriteSeed: 1, workDir: null, permission: 'ask' as const, createdAt: '', archivedAt: null };
     let s = reduce(emptyData(), { type: 'agent.upserted', agent });
     s = reduce(s, { type: 'agent.upserted', agent: { ...agent, archivedAt: '2026-09-27T00:00:00Z' } });
     expect(s.agents).toEqual({});
@@ -70,6 +70,13 @@ describe('needsAttention', () => {
   it('lists stuck runs first, then fresh un-retried failures the agent has not recovered from', () => {
     const got = needsAttention({ tasks, lastActivityAt }, now);
     expect(got.map((a) => `${a.kind}:${a.task.id}`)).toEqual(['stuck:quiet', 'failed:fail']);
+  });
+
+  it('puts approvals first, and a quiet task waiting on you is not stuck', () => {
+    const approval = { id: 'ap', tool: 'Bash', summary: 'npm test', reason: null, requestedAt: '2026-09-27T11:51:00Z' };
+    const waiting = { ...tasks, quiet: { ...tasks.quiet, status: 'tool_wait' as const, pendingApproval: approval } };
+    const got = needsAttention({ tasks: waiting, lastActivityAt }, now);
+    expect(got.map((a) => `${a.kind}:${a.task.id}`)).toEqual(['approval:quiet', 'failed:fail']);
   });
 
   it('honours dismissals', () => {

@@ -2,7 +2,7 @@
  * Seeds the café's starting crew and provider rows. Idempotent: existing agents
  * (matched by name) and provider configs are left alone.
  */
-import { DEFAULTS, PROVIDER_IDS, type ProviderId } from '@agent-cafe/shared';
+import { PROVIDER_IDS, type ProviderId } from '@agent-cafe/shared';
 import type { Db } from './client.js';
 
 interface SeedAgent {
@@ -30,7 +30,7 @@ export async function seed(db: Db): Promise<void> {
   for (const id of PROVIDER_IDS) {
     await db.providerConfig.upsert({
       where: { id },
-      create: { id, mode: 'mock', dailyCapUsd: DEFAULTS.dailyCapUsd },
+      create: { id, mode: 'mock' },
       update: {},
     });
   }

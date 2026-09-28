@@ -1,5 +1,7 @@
 import type {
   AgentDTO,
+  AgentPermission,
+  ApprovalDTO,
   FailureKind,
   ProviderId,
   TaskDTO,
@@ -18,6 +20,8 @@ export function toAgentDTO(a: Agent): AgentDTO {
     model: a.model,
     systemPrompt: a.systemPrompt,
     spriteSeed: a.spriteSeed,
+    workDir: a.workDir,
+    permission: a.permission as AgentPermission,
     createdAt: a.createdAt.toISOString(),
     archivedAt: iso(a.archivedAt),
   };
@@ -41,6 +45,7 @@ export function toTaskDTO(t: Task): TaskDTO {
     error: t.error,
     failureKind: (t.failureKind as FailureKind | null) ?? null,
     retryOf: t.retryOf,
+    pendingApproval: t.pendingApproval ? (JSON.parse(t.pendingApproval) as ApprovalDTO) : null,
     createdAt: t.createdAt.toISOString(),
     startedAt: iso(t.startedAt),
     finishedAt: iso(t.finishedAt),

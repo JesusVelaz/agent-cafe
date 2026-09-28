@@ -1,10 +1,10 @@
 'use client';
 
-import { DEFAULTS, PROVIDER_IDS, type ProviderId, type ProviderMode } from '@agent-cafe/shared';
+import { DEFAULTS, HARNESS, PROVIDER_IDS, type ProviderId, type ProviderMode, type ProviderStatusDTO } from '@agent-cafe/shared';
 import { useState } from 'react';
 import type { ThemeChoice } from '@/lib/theme';
 import { api } from '@/lib/api';
-import { PROVIDER_NAME, usd } from '@/lib/format';
+import { PROVIDER_NAME } from '@/lib/format';
 import { useNow } from '@/lib/useNow';
 import type { ThemeId } from '@/scene/atmosphere';
 import { useCafe } from '@/store/cafe';
@@ -60,23 +60,14 @@ export function TopBar({ themeChoice, theme, onTheme }: Props) {
       <div className="ml-auto flex flex-wrap items-center gap-5">
         {PROVIDER_IDS.map((id) => {
           const p = state.providers[id];
-          const pct = p ? Math.min(100, (p.spentTodayUsd / Math.max(p.dailyCapUsd, 0.01)) * 100) : 0;
+          const ready = p?.connection.state === 'ready';
           return (
             <div key={id} className="flex items-center gap-2.5">
-              <div className="w-32">
-                <div className="flex justify-between font-label text-[10px] text-chalk-dim">
-                  <span>{PROVIDER_NAME[id].toUpperCase()}</span>
-                  <span className={p?.closed ? 'text-coral' : ''}>{p?.closed ? 'CLOSED' : ''}</span>
-                </div>
-                <div className="mt-1 h-1.5 bg-slate-2" title="Live spend today against the daily cap">
-                  <div className="h-1.5" style={{ width: `${pct}%`, background: pct >= 100 ? 'var(--color-coral)' : 'var(--color-mint)' }} />
-                </div>
-                <div className="mt-0.5 text-[11px] text-chalk-dim">{p ? `${usd(p.spentTodayUsd, 2)} of ${usd(p.dailyCapUsd, 2)} today` : '—'}</div>
-              </div>
+              <FloorStatus id={id} p={p} onError={setError} />
               <div role="radiogroup" aria-label={`${PROVIDER_NAME[id]} mode`} className="flex">
                 {MODES.map(({ mode, label }) => {
                   const on = p?.mode === mode;
-                  const disabled = mode === 'live' && !p?.hasKey;
+                  const disabled = mode === 'live' && !ready && !on;
                   return (
                     <button
                       key={mode}
@@ -85,7 +76,7 @@ export function TopBar({ themeChoice, theme, onTheme }: Props) {
                       aria-checked={on}
                       aria-label={label}
                       disabled={disabled}
-                      title={disabled ? 'Add an API key to go live' : undefined}
+                      title={disabled ? p?.connection.message ?? `Sign in to ${HARNESS[id].name} to go live` : undefined}
                       onClick={() => !on && setMode(id, mode)}
                       className={`-ml-[2px] h-8 border-2 border-slate-line px-2 font-label text-[10px] first:ml-0 ${
                         on
@@ -134,6 +125,63 @@ export function TopBar({ themeChoice, theme, onTheme }: Props) {
         </p>
       )}
     </header>
+  );
+}
+
+const WINDOW_NAME: Record<string, string> = {
+  five_hour: '5-hour limit',
+  seven_day: 'Weekly limit',
+  seven_day_opus: 'Weekly Opus limit',
+  seven_day_sonnet: 'Weekly Sonnet limit',
+};
+
+/** Which harness runs the floor, whether it's signed in, and how much of the plan's window is used. */
+function FloorStatus({ id, p, onError }: { id: ProviderId; p: ProviderStatusDTO | undefined; onError: (m: string | null) => void }) {
+  const [checking, setChecking] = useState(false);
+  const harness = HARNESS[id];
+  const c = p?.connection;
+  const check = () => {
+    setChecking(true);
+    onError(null);
+    api.checkProvider(id).catch((e: Error) => onError(e.message)).finally(() => setChecking(false));
+  };
+  const pct = p?.usage?.utilization != null ? Math.round(p.usage.utilization * 100) : null;
+
+  return (
+    <div className="w-44" title={c?.message ?? undefined}>
+      <div className="flex justify-between gap-2 font-label text-[10px] text-chalk-dim">
+        <span className="truncate">{PROVIDER_NAME[id].toUpperCase()} · {harness.name.toUpperCase()}</span>
+        {p?.closed && <span className="text-coral">LIMIT</span>}
+      </div>
+      <div className="mt-0.5 flex items-center gap-1.5 text-[11px]">
+        {!c || c.state === 'checking' || checking ? (
+          <span className="text-chalk-faint">Checking…</span>
+        ) : c.state === 'ready' ? (
+          <span className="truncate text-chalk-dim">{[c.account, c.plan].filter(Boolean).join(' · ') || 'Signed in'}</span>
+        ) : c.state === 'unsupported' ? (
+          <span className="text-chalk-faint">{harness.name} is coming next</span>
+        ) : (
+          <>
+            <span className="truncate text-coral">
+              {c.state === 'signed_out' ? 'Signed out' : c.state === 'not_installed' ? 'Not installed' : 'Can’t reach it'}
+            </span>
+            <button type="button" onClick={check} className="ml-auto shrink-0 font-label text-[9px] text-chalk underline decoration-dotted hover:text-brass">
+              CHECK AGAIN
+            </button>
+          </>
+        )}
+      </div>
+      {c?.state === 'signed_out' || c?.state === 'not_installed' ? (
+        <code className="mt-0.5 block truncate font-mono text-[10px] text-amber">{harness.login}</code>
+      ) : pct !== null ? (
+        <div className="mt-1 flex items-center gap-1.5" title={p?.usage?.resetsAt ? `Resets ${new Date(p.usage.resetsAt).toLocaleString()}` : undefined}>
+          <div className="h-1.5 flex-1 bg-slate-2">
+            <div className="h-1.5" style={{ width: `${pct}%`, background: pct >= 90 ? 'var(--color-coral)' : pct >= 70 ? 'var(--color-amber)' : 'var(--color-mint)' }} />
+          </div>
+          <span className="shrink-0 text-[10px] text-chalk-faint">{WINDOW_NAME[p!.usage!.window ?? ''] ?? 'Plan'} {pct}%</span>
+        </div>
+      ) : null}
+    </div>
   );
 }
 

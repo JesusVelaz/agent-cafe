@@ -76,6 +76,9 @@ interface Item {
 
 const TOOL_ICON: Record<string, IconName> = {
   calculator: 'calc', current_time: 'clock', notes_read: 'note', notes_write: 'note', read_file: 'book', list_files: 'book',
+  Read: 'book', Glob: 'book', Grep: 'book', LS: 'book', WebFetch: 'book', WebSearch: 'book',
+  Edit: 'pen', MultiEdit: 'pen', Write: 'pen', NotebookEdit: 'pen', TodoWrite: 'note',
+  Bash: 'term', PowerShell: 'term',
 };
 
 export function renderScene(R: Raster, agents: SceneAgent[], o: SceneOptions): AgentHit[] {
@@ -174,7 +177,7 @@ export function renderScene(R: Raster, agents: SceneAgent[], o: SceneOptions): A
   }
   for (const id of ['openai', 'anthropic'] as const) {
     const f = o.floors?.[id];
-    const sign = f?.mode === 'off' ? 'SWITCHED OFF' : f?.closed && f.mode === 'live' ? 'CLOSED FOR TODAY' : null;
+    const sign = f?.mode === 'off' ? 'SWITCHED OFF' : f?.closed && f.mode === 'live' ? 'USAGE LIMIT REACHED' : null;
     if (!sign) continue;
     const q = id === 'openai' ? P(W / 2 + 2.5, D / 2 + 2.5, 30) : P(UW / 2, UD / 2, H1 + 30);
     const w = textW(sign) + 8;
@@ -261,6 +264,11 @@ function drawBubble(R: Raster, hit: AgentHit, a: SceneAgent, t: number) {
     for (let i = 0; i < n; i++) R.rect(bx + 3 + i * 3, by + 4, 2, 2, K.ink);
     return;
   }
-  const icon: IconName = b.kind === 'tool' ? TOOL_ICON[b.tool] ?? 'book' : b.kind === 'wait' ? 'hourglass' : b.kind === 'done' ? 'check' : 'alert';
+  const icon: IconName =
+    b.kind === 'tool' ? TOOL_ICON[b.tool] ?? 'hourglass'
+    : b.kind === 'wait' ? 'hourglass'
+    : b.kind === 'done' ? 'check'
+    : b.kind === 'ask' ? 'ask'
+    : 'alert';
   R.grid(ICONS[icon], ICON_PAL, bx + 3, by + 2);
 }

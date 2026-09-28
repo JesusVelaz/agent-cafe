@@ -1,5 +1,7 @@
 import type {
   AgentDTO,
+  AgentPermission,
+  HarnessModelDTO,
   ModelInfo,
   ProviderId,
   ProviderMode,
@@ -61,9 +63,14 @@ export const api = {
   },
   createAgent: (a: { name: string; providerId: ProviderId; model: string; systemPrompt?: string }) =>
     post<AgentDTO>('/api/agents', a),
-  updateProvider: (
-    id: ProviderId,
-    p: { mode?: ProviderMode; apiKey?: string; clearKey?: boolean; dailyCapUsd?: number },
-  ) => patch<ProviderStatusDTO>(`/api/providers/${id}`, p),
+  updateAgent: (
+    id: string,
+    a: { name?: string; model?: string; systemPrompt?: string; workDir?: string | null; permission?: AgentPermission },
+  ) => patch<AgentDTO>(`/api/agents/${id}`, a),
+  answerApproval: (taskId: string, approvalId: string, decision: 'allow' | 'deny') =>
+    post<TaskDTO>(`/api/tasks/${taskId}/approvals/${approvalId}`, { decision }),
+  updateProvider: (id: ProviderId, p: { mode?: ProviderMode }) => patch<ProviderStatusDTO>(`/api/providers/${id}`, p),
+  checkProvider: (id: ProviderId) => post<ProviderStatusDTO>(`/api/providers/${id}/check`),
+  models: (id: ProviderId) => request<{ source: 'harness' | 'catalog'; models: HarnessModelDTO[] }>(`/api/providers/${id}/models`),
   updateSettings: (s: Partial<SettingsDTO>) => patch<SettingsDTO>('/api/settings', s),
 };

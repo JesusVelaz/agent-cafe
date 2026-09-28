@@ -4,7 +4,7 @@ import { DEFAULTS, type FailureKind, type TaskDTO } from '@agent-cafe/shared';
 import { useState } from 'react';
 import { activityLabel, deriveActivity } from '@/sim/activity';
 import { api } from '@/lib/api';
-import { ago, duration, FLOOR_NAME, taskDuration, usd } from '@/lib/format';
+import { ago, duration, FLOOR_NAME, taskDuration, tokens, usd } from '@/lib/format';
 import { useNow } from '@/lib/useNow';
 import { useCafe } from '@/store/cafe';
 import { latestTaskFor, needsAttention, queuedFor, recentFinished, type Attention } from '@/store/reduce';
@@ -15,10 +15,14 @@ import { ACTIVITY_TONE } from './Panel';
 const FAILURE_SHORT: Record<FailureKind, string> = {
   provider_error: 'Provider error',
   budget: 'Hit its budget cap',
-  daily_cap: 'Floor hit its daily cap',
   max_steps: 'Ran out of steps',
   refusal: 'Model declined',
+  usage_limit: 'Plan usage limit reached',
+  signed_out: 'Not signed in',
 };
+
+/** What a finished or running task cost: simulated dollars on demo runs, tokens on your plan. */
+const costLabel = (t: TaskDTO) => (t.isMock ? `${usd(t.costUsd)} demo` : `${tokens(t.inputTokens + t.outputTokens)} tok`);
 
 /** The right-hand board: what needs you, who is working, what finished. Agent detail replaces it on select. */
 export function WorkBoard() {
@@ -50,9 +54,9 @@ function Board() {
       {attention.length > 0 && (
         <section aria-labelledby="need-h" className="flex flex-col gap-2">
           <h2 id="need-h" className="font-label text-[11px] font-normal text-coral">NEEDS YOU · {attention.length}</h2>
-          {attention.map((a) => (
-            <AttentionCard key={a.task.id} item={a} now={now} />
-          ))}
+          {attention.map((a) =>
+            a.kind === 'approval' ? <ApprovalCard key={a.task.id} task={a.task} /> : <AttentionCard key={a.task.id} item={a} now={now} />,
+          )}
         </section>
       )}
 
@@ -84,7 +88,7 @@ function Board() {
             <span className="truncate">{state.agents[t.agentId]?.name ?? '—'}</span>
             <span className="truncate text-chalk-dim">{t.prompt}</span>
             <span className="text-[12px] text-chalk-faint">
-              {duration(taskDuration(t, now) ?? 0)} · {usd(t.costUsd)}{t.isMock ? ' demo' : ''} · {ago(t.finishedAt!, now)}
+              {duration(taskDuration(t, now) ?? 0)} · {costLabel(t)} · {ago(t.finishedAt!, now)}
             </span>
           </button>
         ))}
@@ -99,7 +103,42 @@ function summarize(names: string[]): string {
   return [...counts].map(([n, c]) => `${c} for ${n}`).join(', ');
 }
 
-function AttentionCard({ item, now }: { item: Attention; now: number }) {
+/** A harness asking before it acts: the command / file, and Allow or Deny. */
+function ApprovalCard({ task }: { task: TaskDTO }) {
+  const agent = useCafe((s) => s.agents[task.agentId]);
+  const selectAgent = useCafe((s) => s.selectAgent);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const ask = task.pendingApproval!;
+  const answer = (decision: 'allow' | 'deny') => {
+    setBusy(true);
+    setError(null);
+    api
+      .answerApproval(task.id, ask.id, decision)
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setBusy(false));
+  };
+  return (
+    <article aria-label={`${agent?.name ?? 'Agent'} wants to use ${ask.tool}`} className="flex flex-col gap-2 border-2 border-amber bg-slate-2 px-3 py-2.5">
+      <div className="flex items-baseline gap-2.5">
+        <button type="button" onClick={() => selectAgent(task.agentId, task.id)} className="font-display text-2xl leading-none hover:text-brass">
+          {agent?.name ?? 'Unknown'}
+        </button>
+        <span className="text-[13px] text-amber">wants to use {ask.tool}</span>
+      </div>
+      <code className="block max-h-24 overflow-y-auto whitespace-pre-wrap break-all bg-night px-2 py-1.5 font-mono text-[12px] text-chalk scroll-chalk">{ask.summary}</code>
+      {ask.reason && <p className="text-[12px] text-chalk-dim">{ask.reason}</p>}
+      <div className="flex items-center gap-1.5">
+        <span className="min-w-0 flex-1 truncate text-[12px] text-chalk-faint">{task.prompt}</span>
+        <SmallButton onClick={() => answer('deny')} disabled={busy}>DENY</SmallButton>
+        <SmallButton primary onClick={() => answer('allow')} disabled={busy}>ALLOW</SmallButton>
+      </div>
+      {error && <p role="alert" className="text-[12px] text-coral">{error}</p>}
+    </article>
+  );
+}
+
+function AttentionCard({ item, now }: { item: Exclude<Attention, { kind: 'approval' }>; now: number }) {
   const agent = useCafe((s) => s.agents[item.agentId]);
   const selectAgent = useCafe((s) => s.selectAgent);
   const dismiss = useCafe((s) => s.dismiss);
@@ -169,26 +208,31 @@ function WorkingRow({ task, now }: { task: TaskDTO; now: number }) {
           {activity.kind === 'thinking' ? '' : ` · step ${step}`}
         </span>
       </span>
-      <span className="flex gap-0.5" aria-label={`Step ${step} of ${DEFAULTS.maxSteps}`}>
-        {Array.from({ length: DEFAULTS.maxSteps }, (_, i) => (
-          <span key={i} className="h-2 flex-1" style={{ background: i < step ? tone : 'var(--color-slate-2)' }} />
-        ))}
-      </span>
+      {task.isMock ? (
+        <span className="flex gap-0.5" aria-label={`Step ${step} of ${DEFAULTS.maxSteps}`}>
+          {Array.from({ length: DEFAULTS.maxSteps }, (_, i) => (
+            <span key={i} className="h-2 flex-1" style={{ background: i < step ? tone : 'var(--color-slate-2)' }} />
+          ))}
+        </span>
+      ) : (
+        <span className="text-center font-label text-[10px] text-chalk-faint">STEP {step}</span>
+      )}
       <span className="text-right text-[13px]">
         <span className="block">{duration(taskDuration(task, now) ?? 0)}</span>
-        <span className="block text-[12px] text-chalk-faint">{usd(task.costUsd)}</span>
+        <span className="block text-[12px] text-chalk-faint">{task.isMock ? usd(task.costUsd) : tokens(task.inputTokens + task.outputTokens)}</span>
       </span>
     </button>
   );
 }
 
-function SmallButton({ children, onClick, primary, label }: { children: React.ReactNode; onClick: () => void; primary?: boolean; label?: string }) {
+function SmallButton({ children, onClick, primary, label, disabled }: { children: React.ReactNode; onClick: () => void; primary?: boolean; label?: string; disabled?: boolean }) {
   return (
     <button
       type="button"
       aria-label={label}
       onClick={onClick}
-      className={`h-11 min-w-11 border-2 px-2.5 font-label text-[10px] ${primary ? 'border-brass bg-brass text-night' : 'border-slate-line bg-slate text-chalk hover:bg-slate-2'}`}
+      disabled={disabled}
+      className={`h-11 min-w-11 border-2 px-2.5 font-label text-[10px] disabled:opacity-50 ${primary ? 'border-brass bg-brass text-night' : 'border-slate-line bg-slate text-chalk hover:bg-slate-2'}`}
     >
       {children}
     </button>

@@ -52,7 +52,11 @@ export function FocusView({ theme }: { theme: ThemeId }) {
         >
           <span className="font-display text-xl leading-none text-chalk">{state.agents[a.agentId]?.name}</span>
           <span className="text-[12px] text-coral">
-            {a.kind === 'stuck' ? `No activity for ${duration(a.quietSec * 1000)}` : a.task.status === 'interrupted' ? 'Interrupted' : 'Failed'}
+            {a.kind === 'approval'
+              ? `Wants to use ${a.task.pendingApproval?.tool ?? 'a tool'}`
+              : a.kind === 'stuck'
+                ? `No activity for ${duration(a.quietSec * 1000)}`
+                : a.task.status === 'interrupted' ? 'Interrupted' : 'Failed'}
           </span>
           <span className="truncate text-[12px] text-chalk-dim">{a.task.prompt}</span>
         </button>

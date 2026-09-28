@@ -131,6 +131,7 @@ export function recentFinished(s: Pick<CafeData, 'tasks'>, limit: number): TaskD
 // ── Attention ────────────────────────────────────────────────────────────────
 
 export type Attention =
+  | { kind: 'approval'; agentId: string; task: TaskDTO }
   | { kind: 'stuck'; agentId: string; task: TaskDTO; quietSec: number }
   | { kind: 'failed'; agentId: string; task: TaskDTO };
 
@@ -138,7 +139,8 @@ export type Attention =
 export const FAILURE_TTL_MS = 60 * 60_000;
 
 /**
- * What needs the user: running tasks gone quiet past the stuck threshold, and
+ * What needs the user: actions waiting for approval (oldest first), running
+ * tasks gone quiet past the stuck threshold, and
  * failures/interruptions that are still the agent's latest finished task (once
  * the agent finishes something newer, it has recovered), not yet retried or
  * dismissed, and under an hour old. Stuck first, then newest failures.
@@ -157,10 +159,13 @@ export function needsAttention(
     const cur = latestFinished.get(t.agentId);
     if (!cur || t.finishedAt > cur) latestFinished.set(t.agentId, t.finishedAt);
   }
+  const approvals: Attention[] = [];
   const stuck: Attention[] = [];
   const failed: Attention[] = [];
   for (const t of tasks) {
-    if (t.status === 'running' || t.status === 'tool_wait') {
+    if (t.pendingApproval && (t.status === 'running' || t.status === 'tool_wait')) {
+      approvals.push({ kind: 'approval', agentId: t.agentId, task: t });
+    } else if (t.status === 'running' || t.status === 'tool_wait') {
       const since = s.lastActivityAt[t.id] ?? (t.startedAt ? Date.parse(t.startedAt) : now);
       const quietSec = (now - since) / 1000;
       if (quietSec > stuckAfterSec) stuck.push({ kind: 'stuck', agentId: t.agentId, task: t, quietSec });
@@ -176,5 +181,6 @@ export function needsAttention(
     }
   }
   failed.sort((a, b) => b.task.finishedAt!.localeCompare(a.task.finishedAt!));
-  return [...stuck, ...failed];
+  approvals.sort((a, b) => a.task.pendingApproval!.requestedAt.localeCompare(b.task.pendingApproval!.requestedAt));
+  return [...approvals, ...stuck, ...failed];
 }

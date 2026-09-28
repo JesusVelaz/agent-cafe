@@ -15,6 +15,8 @@ const createBody = z
   })
   .refine((b) => b.agentId || b.providerId, { message: 'Pick an agent or a provider.' });
 
+const approvalBody = z.object({ decision: z.enum(['allow', 'deny']) }).strict();
+
 const listQuery = z.object({
   limit: z.coerce.number().int().min(1).max(500).default(50),
   agentId: z.string().optional(),
@@ -57,6 +59,9 @@ export const taskRoutes =
     });
 
     app.post<{ Params: { id: string } }>('/api/tasks/:id/cancel', (req) => orchestrator.cancel(req.params.id));
+    app.post<{ Params: { id: string; approvalId: string } }>('/api/tasks/:id/approvals/:approvalId', (req) =>
+      orchestrator.resolveApproval(req.params.id, req.params.approvalId, approvalBody.parse(req.body).decision),
+    );
     app.post<{ Params: { id: string } }>('/api/tasks/:id/retry', async (req, reply) =>
       reply.code(201).send(await orchestrator.retry(req.params.id)),
     );

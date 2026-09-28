@@ -1,4 +1,3 @@
-import { randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { EventBus } from '../events/bus.js';
 import { ProviderConfigService } from '../providers/config.js';
@@ -7,13 +6,14 @@ import { SettingsService } from '../settings.js';
 import { testDb } from '../test/testDb.js';
 import type { ToolRegistry } from '../tools/registry.js';
 import { AmbientDriver } from './ambient.js';
+import { fakeHarnesses } from '../test/fakeHarness.js';
 import { Orchestrator } from './orchestrator.js';
 
 const tools: ToolRegistry = { specs: [], execute: async () => ({ ok: true, output: 'ok' }) };
 
 async function setup() {
   const db = await testDb({ seed: true });
-  const providers = new ProviderConfigService(db, { anthropic: 'sk-ant-test-123456' }, randomBytes(32));
+  const providers = new ProviderConfigService(db, fakeHarnesses());
   const settings = new SettingsService(db);
   const mock = new MockAdapter({ sleep: async () => {}, failRate: 0 });
   const orchestrator = new Orchestrator({

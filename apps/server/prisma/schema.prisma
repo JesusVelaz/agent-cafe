@@ -9,14 +9,15 @@ datasource db {
   provider = "sqlite"
 }
 
-/// Per-provider settings. The API key (if entered via UI) is AES-256-GCM encrypted.
+/// Per-provider settings. No credentials: live runs use the harness the user signed in to.
 model ProviderConfig {
-  id           String   @id // 'openai' | 'anthropic'
-  mode         String   @default("mock") // live | mock | off
+  id        String   @id // 'openai' | 'anthropic'
+  mode      String   @default("mock") // live | mock | off
+  updatedAt DateTime @updatedAt
+  // Legacy (API-key era), unused. Kept until the owner OKs dropping them.
   encryptedKey String?
   keyHint      String?
   dailyCapUsd  Float    @default(5)
-  updatedAt    DateTime @updatedAt
 }
 
 model Agent {
@@ -26,6 +27,8 @@ model Agent {
   model        String
   systemPrompt String
   spriteSeed   Int
+  workDir      String? // absolute folder for live runs
+  permission   String    @default("ask") // ask | acceptEdits
   createdAt    DateTime  @default(now())
   archivedAt   DateTime?
   tasks        Task[]
@@ -49,6 +52,7 @@ model Task {
   error        String?
   failureKind  String?
   retryOf      String?
+  pendingApproval String? // JSON ApprovalDTO while the harness waits on the user
   createdAt    DateTime    @default(now())
   startedAt    DateTime?
   finishedAt   DateTime?

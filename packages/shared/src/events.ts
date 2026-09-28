@@ -1,10 +1,10 @@
 import type {
   AgentDTO,
+  ApprovalDTO,
   ProviderStatusDTO,
   SettingsDTO,
   TaskDTO,
   TaskStatus,
-  ToolName,
 } from './domain';
 
 /**
@@ -25,8 +25,11 @@ export type TaskEventData =
       outputTokens: number;
       costUsd: number | null;
     }
-  | { kind: 'tool.start'; step: number; callId: string; tool: ToolName; input: unknown }
-  | { kind: 'tool.end'; step: number; callId: string; tool: ToolName; ok: boolean; output: string }
+  /** `tool` is a built-in ToolName on demo runs, the harness's own name (Read, Bash…) on live ones. */
+  | { kind: 'tool.start'; step: number; callId: string; tool: string; input: unknown }
+  | { kind: 'tool.end'; step: number; callId: string; tool: string; ok: boolean; output: string }
+  | { kind: 'approval.request'; approval: ApprovalDTO }
+  | { kind: 'approval.resolved'; approvalId: string; decision: 'allow' | 'deny' }
   | { kind: 'log'; level: 'info' | 'warn' | 'error'; message: string };
 
 export type TaskEventKind = TaskEventData['kind'];

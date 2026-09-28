@@ -23,6 +23,7 @@ export const ACTIVITY_TONE: Record<Activity['kind'], string> = {
   idle: 'var(--color-chalk-faint)',
   thinking: 'var(--color-mint)',
   tool: 'var(--color-amber)',
+  approval: 'var(--color-coral)',
   stuck: 'var(--color-coral)',
   done: 'var(--color-mint)',
   failed: 'var(--color-coral)',
