@@ -5,8 +5,7 @@
  */
 import { BUILDING, type Prop } from '@/sim/layout';
 import { isDim, THEMES } from './atmosphere';
-import { text, textW } from './font';
-import { box, disc, plane, planePt, quad } from './iso';
+import { box, disc, plane, quad } from './iso';
 import { hash, K, shade } from './palette';
 import type { Pt2 } from './raster';
 import type { DrawCtx } from './props';
@@ -127,13 +126,14 @@ function bench(c: DrawCtx, p: Prop) {
 function parasolTable(c: DrawCtx, x: number, y: number) {
   const { R, P, theme } = c;
   const z = 1;
+  // Back chair, table, then the chair on the viewer's side (painter's order).
+  bistroChair(c, x - 0.85, y, z, 'x+');
   box(R, P, x - 0.05, y - 0.05, z, 0.1, 0.1, 10, K.ink);
-  disc(R, P, x, y, 0.45, z + 10, '#e9dcc3');
-  for (const [cx, cy] of [[x - 0.8, y], [x + 0.8, y]] as const) {
-    box(R, P, cx - 0.18, cy - 0.18, z + 6, 0.36, 0.36, 2, K.teal, { line: true });
-    box(R, P, cx - 0.15, cy + 0.12, z, 0.04, 0.04, 6, K.ink);
-  }
-  box(R, P, x - 0.03, y - 0.03, z + 10, 0.06, 0.06, 26, '#e9dcc3');
+  disc(R, P, x, y, 0.45, z + 10, '#3f4a4f');
+  disc(R, P, x, y, 0.45, z + 11, '#e9dcc3');
+  box(R, P, x - 0.15, y + 0.05, z + 11, 0.13, 0.13, 3, K.white, { line: K.metalD });
+  bistroChair(c, x + 0.85, y, z, 'x-');
+  box(R, P, x - 0.03, y - 0.03, z + 11, 0.06, 0.06, 25, '#e9dcc3');
   const top = P(x, y, z + 38);
   // Striped canopy.
   const pts = (r: number): Pt2[] => Array.from({ length: 8 }, (_, i) => {
@@ -144,6 +144,19 @@ function parasolTable(c: DrawCtx, x: number, y: number) {
   const ring = pts(12);
   for (let i = 0; i < 8; i += 2) R.poly([[top[0], top[1]], ring[i]!, ring[(i + 1) % 8]!], theme === 'snow' ? '#e6ecf1' : K.cream);
   R.rect(top[0] - 1, top[1] - 2, 3, 3, K.ink);
+}
+
+/** Café bistro chair: dark metal frame, rattan seat, slatted back behind the sitter. */
+function bistroChair(c: DrawCtx, x: number, y: number, z: number, face: 'x+' | 'x-') {
+  const { R, P } = c;
+  const frame = '#2f3a3f';
+  for (const [lx, ly] of [[-0.16, -0.16], [0.12, -0.16], [-0.16, 0.12], [0.12, 0.12]] as const) box(R, P, x + lx, y + ly, z, 0.04, 0.04, 7, frame);
+  box(R, P, x - 0.2, y - 0.2, z + 7, 0.4, 0.4, 2, '#c9a06a', { line: frame });
+  const bx = face === 'x+' ? x - 0.22 : x + 0.17;
+  for (const ly of [-0.18, 0.14]) box(R, P, bx, y + ly, z + 9, 0.05, 0.04, 10, frame);
+  box(R, P, bx, y - 0.2, z + 18, 0.05, 0.4, 2, frame);
+  box(R, P, bx, y - 0.14, z + 12, 0.05, 0.28, 1, '#c9a06a');
+  box(R, P, bx, y - 0.14, z + 15, 0.05, 0.28, 1, '#c9a06a');
 }
 
 function planterBox(c: DrawCtx, p: Prop) {
@@ -180,25 +193,6 @@ function hydrant(c: DrawCtx, x: number, y: number) {
   box(R, P, x - 0.08, y - 0.08, 9, 0.16, 0.16, 2, snowy(c) ? '#ffffff' : '#a83a33');
 }
 
-function car(c: DrawCtx, p: Prop) {
-  const { R, P } = c;
-  const z = -2;
-  const body = '#5d7fb8';
-  for (const [wx, wy] of [[0.35, 0.05], [p.w - 0.55, 0.05], [0.35, p.d - 0.25], [p.w - 0.55, p.d - 0.25]] as const) {
-    box(R, P, p.x + wx, p.y + wy, z, 0.3, 0.2, 5, '#23262b');
-  }
-  box(R, P, p.x, p.y + 0.1, z + 3, p.w, p.d - 0.2, 7, body, { line: true });
-  box(R, P, p.x + 0.6, p.y + 0.2, z + 10, p.w - 1.3, p.d - 0.4, 6, shade(body, 0.08), { line: true, top: snowy(c) ? '#ffffff' : shade(body, 0.2) });
-  plane(R, P, { y: p.y + p.d - 0.2 }, p.x + 0.7, p.x + p.w - 0.8, z + 11, z + 15, '#9fd0ea', 1, true);
-  plane(R, P, { x: p.x + p.w - 0.7 }, p.y + 0.3, p.y + p.d - 0.3, z + 11, z + 15, '#7fb6d2', 1, true);
-  if (snowy(c)) quad(R, P, p.x + 0.05, p.y + 0.15, 0.55, p.d - 0.3, z + 10.1, '#ffffff');
-  const hl = P(p.x + p.w, p.y + 0.3, z + 7), hr = P(p.x + p.w, p.y + p.d - 0.4, z + 7);
-  const lit = isDim(c.theme);
-  R.rect(hl[0], hl[1], 2, 1, lit ? '#fff3c4' : '#e8e2c8', 1, lit);
-  R.rect(hr[0], hr[1], 2, 1, lit ? '#fff3c4' : '#e8e2c8', 1, lit);
-  if (lit) c.lights.push({ x: hr[0] + 10, y: hr[1] + 6, r: 26, col: [1, 0.95, 0.75], s: 0.8 });
-}
-
 export function drawOutdoor(c: DrawCtx, p: Prop): void {
   const cx = p.x + p.w / 2, cy = p.y + p.d / 2;
   switch (p.kind) {
@@ -209,28 +203,7 @@ export function drawOutdoor(c: DrawCtx, p: Prop): void {
     case 'planterBox': return planterBox(c, p);
     case 'bikeRack': return bikeRack(c, p);
     case 'hydrant': return hydrant(c, cx, cy);
-    case 'car': return car(c, p);
     default:
       return;
   }
-}
-
-/** The café's name, standing on the upper floor's roofline (inside the building's footprint). */
-export function rooftopSign(c: DrawCtx, x0: number, x1: number, z: number, label: string) {
-  const { R, P } = c;
-  for (const px of [x0 + 0.5, x1 - 0.5]) box(R, P, px - 0.05, -0.2, z, 0.1, 0.1, 6, K.ink);
-  const pl = { y: -0.12 } as const;
-  plane(R, P, pl, x0, x1, z + 5, z + 21, K.woodD);
-  plane(R, P, pl, x0 + 0.1, x1 - 0.1, z + 6, z + 20, '#2f2622');
-  const w = textW(label) * 2;
-  const mid = (x0 + x1) / 2;
-  const start = planePt(P, pl, mid, z + 17);
-  const lit = isDim(c.theme);
-  text(R, label, start[0] - w / 2, start[1] - Math.round((w / 2) * 0.5), lit ? '#ffd27a' : K.amber, { slope: 0.5, em: true, scale: 2 });
-  if (lit) {
-    const q = planePt(P, pl, mid, z + 13);
-    c.lights.push({ x: q[0], y: q[1], r: 44, col: [1, 0.8, 0.45], s: 0.6 });
-  }
-  // Snow on top.
-  if (snowy(c)) plane(R, P, pl, x0, x1, z + 21, z + 23, '#ffffff');
 }

@@ -7,7 +7,7 @@ import { AGENT_FRAMES, AGENT_H, AGENT_W, agentGrid, agentLook, ICONS, TREE } fro
 
 describe('sprite grids', () => {
   it.each(AGENT_FRAMES)('%s is 14×20 for every hairstyle, outfit and accessory', (f) => {
-    for (const hair of ['short', 'bob', 'long', 'ponytail'] as const) for (const outfit of ['barista', 'office'] as const) for (const acc of ['none', 'glasses', 'phones', 'visor', 'beanie'] as const) {
+    for (const hair of ['short', 'bob', 'long', 'ponytail'] as const) for (const outfit of ['casual', 'office'] as const) for (const acc of ['none', 'glasses', 'phones', 'visor', 'beanie'] as const) {
       const g = agentGrid(f, { hair, outfit, accessory: acc });
       expect(g).toHaveLength(AGENT_H);
       for (const row of g) expect(row).toHaveLength(AGENT_W);

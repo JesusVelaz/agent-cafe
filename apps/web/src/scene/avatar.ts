@@ -2,7 +2,7 @@
 import type { ProviderId } from '@agent-cafe/shared';
 import { agentGrid, agentLook } from './sprites';
 
-export const outfitFor = (providerId: ProviderId) => (providerId === 'openai' ? 'barista' : 'office');
+export const outfitFor = (providerId: ProviderId) => (providerId === 'openai' ? 'casual' : 'office');
 
 export function drawAvatar(canvas: HTMLCanvasElement, seed: number, providerId: ProviderId) {
   const look = agentLook(seed, outfitFor(providerId));

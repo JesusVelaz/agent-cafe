@@ -84,8 +84,7 @@ export type PropKind =
   | 'parasolTable'
   | 'planterBox'
   | 'bikeRack'
-  | 'hydrant'
-  | 'car';
+  | 'hydrant';
 
 export interface Prop {
   kind: PropKind;
@@ -252,7 +251,6 @@ export const OUTDOOR: Prop[] = [
   P('planterBox', 14.9, 10.2, 0.5, 1.4, true),
   P('bikeRack', 16.4, 12.7, 1.6, 0.4, true),
   P('hydrant', 18.6, 13.55, 0.3, 0.3, true),
-  P('car', 2.6, 14.9, 2.6, 1.3, true),
 ];
 
 /** Upper floor (Anthropic): the loft office. Stairwell opening at the back-left. */

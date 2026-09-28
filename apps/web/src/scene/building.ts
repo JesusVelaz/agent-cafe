@@ -14,7 +14,7 @@ import type { Bubble, Pose } from '@/sim/world';
 import { backdrop, frontWeather, grade, type ThemeId } from './atmosphere';
 import { text, textW } from './font';
 import { iso } from './iso';
-import { drawStreet, rooftopSign } from './outdoor';
+import { drawStreet } from './outdoor';
 import { K } from './palette';
 import {
   chairBackFront, drawDecor, drawProp, floorTiles, railing, roofPlanter,
@@ -147,7 +147,6 @@ export function renderScene(R: Raster, agents: SceneAgent[], o: SceneOptions): A
     for (const it of L) it.f();
   }
   roofPlanter(c, UW + 0.5, 3.6, H1);
-  rooftopSign(c, 0.8, 8.2, TOP, 'AGENT CAFE');
   stringLights(c, [[UW, 0, H1 - 1], [11.5, 0, H1 - 1], [W, 0, H1 - 1]], 0);
   stringLights(c, [[0, UD, H1 - 1], [0, 8.5, H1 - 1], [0, D, H1 - 1]], 2);
   stringLights(c, [[0, 0, TOP - 2], [4.5, 0, TOP - 2], [UW, 0, TOP - 2]], 3);

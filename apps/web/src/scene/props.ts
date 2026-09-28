@@ -348,19 +348,18 @@ function coffeeTable(c: DrawCtx, p: Prop) {
   plantPot(c, p.x + 0.55, p.y + 0.3, 7, false);
 }
 
+/** A high coffee bar with stools, under the pendant lamps. */
 function workBar(c: DrawCtx, p: Prop) {
   const { R, P } = c;
   box(R, P, p.x + 0.1, p.y + 0.1, 0, 0.1, p.d - 0.2, 14, K.woodD);
   box(R, P, p.x + p.w - 0.2, p.y + 0.1, 0, 0.1, p.d - 0.2, 14, K.woodD);
   box(R, P, p.x, p.y, 14, p.w, p.d, 2, K.woodL, { line: true, top: K.counterTop });
-  // Laptops open toward the stools on the front side.
-  for (const lx of [0.25, 1.2, 2.15]) {
-    box(R, P, p.x + lx, p.y + 0.2, 16, 0.5, 0.35, 1, K.metal);
-    box(R, P, p.x + lx, p.y + 0.18, 17, 0.5, 0.05, 7, K.metalD, { top: K.metal });
-    const g = P(p.x + lx + 0.1, p.y + 0.23, 22);
-    R.rect(g[0], g[1], 3, 2, K.screen, 1, true);
+  // Cups, a sugar jar and a little plant: a coffee bar, not a desk.
+  for (const [lx, col] of [[0.35, K.white], [1.3, '#e8b4b8'], [2.2, K.white]] as const) {
+    box(R, P, p.x + lx, p.y + 0.3, 16, 0.14, 0.14, 3, col, { line: K.metalD });
   }
-  box(R, P, p.x + 2.75, p.y + 0.45, 16, 0.12, 0.12, 3, K.white);
+  box(R, P, p.x + 0.85, p.y + 0.2, 16, 0.16, 0.16, 4, K.glass, { a: 0.8 });
+  plantPot(c, p.x + 1.8, p.y + 0.3, 16, false);
 }
 
 function barStool(c: DrawCtx, x: number, y: number) {

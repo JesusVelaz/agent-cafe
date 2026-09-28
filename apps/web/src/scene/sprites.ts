@@ -23,14 +23,14 @@ const HEAD_TOP = S(['....ooo', '...ohhh', '..ohhhh', '.ohhhhh', '.ohHhhh']);
 export type HairStyle = 'short' | 'bob' | 'long' | 'ponytail';
 
 const FACE: Record<HairStyle, string[]> = {
-  short: S(['.ohhsss', '.ohsEEs', '.ohsEEs', '.ohsbsm', '..ossss']),
-  bob: S(['.ohhhss', '.ohsEEs', '.ohsEEs', '.ohsbsm', '.ohosss']),
-  long: S(['.ohhhss', '.ohsEEs', '.ohsEEs', '.ohsbsm', '.ohosss']),
-  ponytail: S(['.ohhsss', '.ohsEEs', '.ohsEEs', '.ohsbsm', '..ossss']),
+  short: S(['.ohhsss', '.ohssEs', '.ohssEs', '.ohsbsm', '..ossss']),
+  bob: S(['.ohhhss', '.ohssEs', '.ohssEs', '.ohsbsm', '.ohosss']),
+  long: S(['.ohhhss', '.ohssEs', '.ohssEs', '.ohsbsm', '.ohosss']),
+  ponytail: S(['.ohhsss', '.ohssEs', '.ohssEs', '.ohsbsm', '..ossss']),
 };
 const HEAD_BACK = [...HEAD_TOP, ...S(['.ohhhhh', '.ohhhhh', '.ohHhhh', '.ohhhhh', '..ohhhh'])];
 
-export type Outfit = 'barista' | 'office';
+export type Outfit = 'casual' | 'office';
 
 const BODY: Record<Outfit, { front: string[]; typing: string[]; back: string[] }> = {
   office: {
@@ -38,10 +38,11 @@ const BODY: Record<Outfit, { front: string[]; typing: string[]; back: string[] }
     typing: S(['...oCcw', '..oCccT', '.oCcccT', '.oCcccc', '.oCcssc', '..oCccc', '..oCCCC']),
     back: S(['...oCcc', '..oCccc', '.oCcccc', '.oCcccc', '.osCccc', '..oCccc', '..oCCCC']),
   },
-  barista: {
-    front: S(['...oCcw', '..oCcaa', '.oCccaa', '.oCcaaa', '.osCaaa', '..oaaaa', '..oAAAA']),
-    typing: S(['...oCcw', '..oCcaa', '.oCccaa', '.oCcaaa', '.oCcsaa', '..oaaaa', '..oAAAA']),
-    back: S(['...oCcc', '..oCccc', '.oCcccc', '.oCaaaa', '.osCccc', '..oCccc', '..oCCCC']),
+  // Hoodie with drawstrings and a front pocket.
+  casual: {
+    front: S(['...oCcc', '..oCcwc', '.oCccwc', '.oCcccc', '.osCcCC', '..oCccc', '..oCCCC']),
+    typing: S(['...oCcc', '..oCcwc', '.oCccwc', '.oCcccc', '.oCcsCC', '..oCccc', '..oCCCC']),
+    back: S(['...oCCC', '..oCccc', '.oCcccc', '.oCcccc', '.osCccc', '..oCccc', '..oCCCC']),
   },
 };
 
@@ -124,11 +125,11 @@ function seeded(seed: number) {
 
 const JACKETS = ['#34405a', '#4a3a57', '#5b4a3c', '#2f4f4f', '#6b3f3f', '#3d4a3a'];
 const TIES = [K.berry, K.teal, K.amber, '#8a6fb8', '#e76f51'];
-const BARISTA_SHIRTS = ['#f3e6cc', '#e8b4b8', '#9fc4d6', '#f2d88a', '#c7d9b0'];
+const HOODIES = ['#d9a441', '#4f9aa5', '#c46b4e', '#8a6fb8', '#5d7fb8', '#7a8c4a', '#e8b4b8', '#6b4a3a'];
 
 /**
  * Deterministic look from an agent's spriteSeed (an agent always looks the
- * same). The outfit comes from the floor: café aprons downstairs (OpenAI),
+ * same). The outfit comes from the floor: casual hoodies downstairs (OpenAI),
  * office wear upstairs (Anthropic).
  */
 export function agentLook(seed: number, outfit: Outfit): AgentLook {
@@ -137,8 +138,8 @@ export function agentLook(seed: number, outfit: Outfit): AgentLook {
   const hair = pick(['short', 'bob', 'long', 'ponytail'] as const);
   const hairCol = pick(HAIR);
   const skin = pick(SKIN);
-  const accessory = outfit === 'barista' ? pick(['none', 'glasses', 'visor', 'none'] as const) : pick(['none', 'glasses', 'phones', 'beanie'] as const);
-  const cloth = outfit === 'office' ? pick(JACKETS) : pick(BARISTA_SHIRTS);
+  const accessory = pick(['none', 'glasses', 'phones', 'beanie', 'none'] as const);
+  const cloth = outfit === 'office' ? pick(JACKETS) : pick(HOODIES);
   return {
     hair,
     outfit,

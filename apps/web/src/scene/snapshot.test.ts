@@ -63,7 +63,7 @@ describe('character sheet', () => {
     const R = new Raster((AGENT_W + 4) * frames.length * 2, (AGENT_H + 4) * seeds.length / 2);
     R.rect(0, 0, R.w, R.h, '#efe3cf');
     seeds.forEach((seed, i) => {
-      const outfit = i % 2 ? 'office' : 'barista';
+      const outfit = i % 2 ? 'office' : 'casual';
       const look = agentLook(seed, outfit);
       frames.forEach((f, j) => {
         const col = (i % 2) * frames.length + j, row = Math.floor(i / 2);
