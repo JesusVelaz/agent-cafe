@@ -30,12 +30,15 @@ const assistant = (id: string, content: unknown[]) => ({
   message: { id, content, usage: { input_tokens: 10, cache_read_input_tokens: 5, output_tokens: 7 } },
 });
 
-async function run(script: Parameters<typeof fakeQuery>[0], decision: 'allow' | 'deny' = 'allow') {
+async function run(script: Parameters<typeof fakeQuery>[0], decision: 'allow' | 'deny' = 'allow', extra: { resume?: string } = {}) {
   const { q, calls } = fakeQuery(script);
   const events: TaskEventData[] = [];
   const asks: ApprovalAsk[] = [];
   const limits: unknown[] = [];
+  const sessions: string[] = [];
   const outcome = await runClaudeTask({
+    ...extra,
+    onSession: (id) => sessions.push(id),
     task: { prompt: 'fix the bug', model: 'sonnet' },
     agent: { systemPrompt: 'Be tidy.', workDir: '/work', permission: 'ask' },
     executable: '/bin/claude',
@@ -45,7 +48,7 @@ async function run(script: Parameters<typeof fakeQuery>[0], decision: 'allow' | 
     onRateLimit: (i) => limits.push(i),
     query: q,
   });
-  return { outcome, events, asks, limits, options: calls[0]! };
+  return { outcome, events, asks, limits, sessions, options: calls[0]! };
 }
 
 describe('runClaudeTask', () => {
@@ -53,7 +56,8 @@ describe('runClaudeTask', () => {
     process.env.ANTHROPIC_API_KEY = 'sk-should-not-leak';
     const { options } = await run([{ type: 'result', subtype: 'success', is_error: false, result: 'ok', num_turns: 1 }]);
     delete process.env.ANTHROPIC_API_KEY;
-    expect(options).toMatchObject({ cwd: '/work', model: 'sonnet', permissionMode: 'default', pathToClaudeCodeExecutable: '/bin/claude', persistSession: false });
+    expect(options).toMatchObject({ cwd: '/work', model: 'sonnet', permissionMode: 'default', pathToClaudeCodeExecutable: '/bin/claude', persistSession: true });
+    expect(options.resume).toBeUndefined();
     expect(options.systemPrompt).toEqual({ type: 'preset', preset: 'claude_code', append: 'Be tidy.' });
     expect(options.env?.ANTHROPIC_API_KEY).toBeUndefined();
   });
@@ -76,6 +80,20 @@ describe('runClaudeTask', () => {
       'model.start', 'model.delta', 'status', 'tool.start', 'tool.end', 'status', 'model.end', 'model.start', 'model.end',
     ]);
     expect(events.find((e) => e.kind === 'tool.end')).toMatchObject({ tool: 'Bash', ok: true, output: 'allow' });
+  });
+
+  it('resumes an earlier session and reports the new one once', async () => {
+    const { options, sessions } = await run(
+      [
+        { type: 'system', subtype: 'init', session_id: 'sess-2' },
+        assistant('m1', [{ type: 'text', text: 'Hi again' }]),
+        { type: 'result', subtype: 'success', is_error: false, result: 'Hi again', num_turns: 1, session_id: 'sess-2' },
+      ],
+      'allow',
+      { resume: 'sess-1' },
+    );
+    expect(options.resume).toBe('sess-1');
+    expect(sessions).toEqual(['sess-2']);
   });
 
   it('tells Claude when the user declines', async () => {

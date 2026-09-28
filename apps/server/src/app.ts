@@ -5,6 +5,7 @@ import { ZodError } from 'zod';
 import { OrchestratorError } from './orchestrator/orchestrator.js';
 import { ConfigError } from './providers/config.js';
 import { agentRoutes } from './routes/agents.js';
+import { projectRoutes } from './routes/projects.js';
 import { providerRoutes } from './routes/providers.js';
 import { streamRoutes } from './routes/stream.js';
 import { taskRoutes } from './routes/tasks.js';
@@ -13,7 +14,7 @@ import type { Services } from './services.js';
 
 export async function buildApp(services?: Services): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
-  await app.register(cors, { origin: ALLOWED_ORIGINS, methods: ['GET', 'POST', 'PATCH'] });
+  await app.register(cors, { origin: ALLOWED_ORIGINS, methods: ['GET', 'POST', 'PATCH', 'DELETE'] });
 
   app.setErrorHandler((err, _req, reply) => {
     if (err instanceof ZodError) {
@@ -36,6 +37,7 @@ export async function buildApp(services?: Services): Promise<FastifyInstance> {
     await app.register(agentRoutes(services));
     await app.register(taskRoutes(services));
     await app.register(providerRoutes(services));
+    await app.register(projectRoutes(services));
     await app.register(streamRoutes(services));
   }
   return app;

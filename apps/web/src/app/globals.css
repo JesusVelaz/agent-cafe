@@ -1,71 +1,49 @@
 @import "tailwindcss";
 
 /*
- * Agent Café tokens. Same palette as the scene (src/scene/palette.ts):
- * espresso chrome, warm panels, one receipt-paper composer, brass accent.
+ * Agent Café tokens. A cool charcoal UI so the warm pixel café is the colour on
+ * screen; one blue accent (send, primary actions, focus); status hues that also
+ * differ in lightness (working > asking > needs you).
  */
 @theme {
-  --color-night: #1f1814;
-  --color-night-2: #261d18;
-  --color-slate: #2a211c;
-  --color-slate-2: #33281f;
-  --color-slate-line: #433428;
-  --color-chalk: #f3e6cc;
-  --color-chalk-dim: #c2b199;
-  --color-chalk-faint: #a8977f;
-  --color-walnut: #7a4a2a;
-  --color-walnut-dark: #433428;
-  --color-walnut-light: #9a6438;
-  --color-receipt: #f0e4c9;
-  --color-receipt-line: #d8cbaa;
-  --color-ink: #2a2320;
-  --color-ink-soft: #5b5047;
-  --color-brass: #e0a84a;
-  --color-mint: #6fcf97;
-  --color-amber: #f2c14e;
-  --color-coral: #f08a6c;
+  --color-night: #121317; /* page */
+  --color-night-2: #17191e; /* panels, top bar */
+  --color-slate: #1f2228; /* raised: cards, inputs */
+  --color-slate-2: #262a31; /* hover, selected */
+  --color-slate-line: #2d313a; /* hairlines */
+  --color-code: #0d0e11;
+  --color-mine: #26314f; /* your messages */
+  --color-chalk: #eceef2; /* text */
+  --color-chalk-dim: #a3a9b5;
+  --color-chalk-faint: #7d8491;
+  --color-accent: #6b8cff;
+  --color-accent-dark: #4a66d4;
+  --color-brass: #6b8cff; /* legacy name for the accent */
+  --color-mint: #7ad69a; /* working, done */
+  --color-amber: #f5c451; /* asking you */
+  --color-coral: #ff8a6b; /* needs you, failed */
+  --color-claude: #e8906a;
   --color-teal: #4f9aa5;
+  --color-walnut: #2d313a;
+  --color-walnut-dark: #2d313a;
+  --color-walnut-light: #3a3f4a;
+  --color-ink: #121317;
 
   --font-display: var(--font-jersey), ui-monospace, monospace;
   --font-label: var(--font-silk), ui-monospace, monospace;
   --font-mono: var(--font-plex), ui-monospace, monospace;
+  --font-sans: var(--font-plex-sans), system-ui, sans-serif;
 }
 
 html,
 body {
   background: var(--color-night);
   color: var(--color-chalk);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
 }
 
-/* Pixel frame: a 3px border whose corners are notched, like a sprite outline. */
-@utility pixel-frame {
-  --frame: var(--color-walnut-dark);
-  box-shadow:
-    0 -3px 0 0 var(--frame),
-    0 3px 0 0 var(--frame),
-    -3px 0 0 0 var(--frame),
-    3px 0 0 0 var(--frame),
-    inset 0 0 0 2px var(--color-walnut);
-}
 
-/* Panel surface. */
-@utility chalkboard {
-  background-color: var(--color-slate);
-}
 
-/* The order pad is a paper receipt with a perforated top edge. */
-@utility receipt {
-  background-color: var(--color-receipt);
-  color: var(--color-ink);
-  position: relative;
-  -webkit-mask:
-    radial-gradient(circle 4px at 8px 0, transparent 3.5px, #000 4px) top left / 16px 8px repeat-x,
-    linear-gradient(#000, #000) 0 8px / 100% calc(100% - 8px) no-repeat;
-  mask:
-    radial-gradient(circle 4px at 8px 0, transparent 3.5px, #000 4px) top left / 16px 8px repeat-x,
-    linear-gradient(#000, #000) 0 8px / 100% calc(100% - 8px) no-repeat;
-}
 
 /* Blueprint dots behind the café: an operations-room hint, kept very faint. */
 @utility scene-backdrop {
@@ -85,8 +63,8 @@ body {
 }
 
 ::selection {
-  background: var(--color-brass);
-  color: var(--color-ink);
+  background: var(--color-accent);
+  color: #ffffff;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -5,6 +5,8 @@ import type { Services } from '../services.js';
 
 const idParam = z.object({ id: z.enum(PROVIDER_IDS) });
 
+const TIER_NOTE = { flagship: 'Most capable', balanced: 'Balanced', fast: 'Fastest' } as const;
+
 const providerPatch = z.object({ mode: z.enum(['live', 'mock', 'off']).optional() }).strict();
 
 const settingsPatch = z.object({ ambient: z.boolean().optional() }).strict();
@@ -33,12 +35,21 @@ export const providerRoutes =
       return provider;
     });
 
-    /** Models the floor's harness offers when signed in; the demo catalog otherwise. */
+    /**
+     * Every model for the floor, newest first, as full ids (the harness accepts them).
+     * When the harness is signed in, its default is tagged so the picker can say so.
+     */
     app.get('/api/providers/:id/models', async (req): Promise<{ source: 'harness' | 'catalog'; models: HarnessModelDTO[] }> => {
       const { id } = idParam.parse(req.params);
+      const models: HarnessModelDTO[] = modelsFor(id).map((m) => ({
+        value: m.id,
+        label: m.label.replace(/^Claude /, ''),
+        description: TIER_NOTE[m.tier],
+      }));
       const live = await providers.harnesses.models(id).catch(() => []);
-      if (live.length) return { source: 'harness', models: live };
-      return { source: 'catalog', models: modelsFor(id).map((m) => ({ value: m.id, label: m.label, description: m.tier })) };
+      if (!live.length) return { source: 'catalog', models };
+      const def = live.find((m) => m.value === 'default')?.resolved?.replace(/\[1m\]$/, '').replace(/-\d{8}$/, '');
+      return { source: 'harness', models: models.map((m) => (m.value === def ? { ...m, tag: 'Default' } : m)) };
     });
 
     app.get('/api/settings', () => settings.get());

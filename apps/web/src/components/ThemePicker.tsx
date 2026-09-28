@@ -2,6 +2,7 @@
 
 import type { ThemeId } from '@/scene/atmosphere';
 import type { ThemeChoice } from '@/lib/theme';
+import { Caret, Popover } from './ui';
 
 const ICONS: Record<ThemeId, React.ReactNode> = {
   day: (
@@ -38,30 +39,46 @@ export function ThemeIcon({ theme }: { theme: ThemeId }) {
   );
 }
 
-/** Auto plus the five looks. Auto shows which theme it currently resolves to. */
+/** Auto plus the five looks, in a small menu. Auto shows which look it resolves to right now. */
 export function ThemePicker({ choice, theme, onChange }: { choice: ThemeChoice; theme: ThemeId; onChange: (c: ThemeChoice) => void }) {
   const options: ThemeChoice[] = ['auto', 'day', 'summer', 'rain', 'snow', 'night'];
   return (
-    <div role="radiogroup" aria-label="Café theme" className="flex">
-      {options.map((opt) => {
-        const on = opt === choice;
-        return (
-          <button
-            key={opt}
-            type="button"
-            role="radio"
-            aria-checked={on}
-            aria-label={LABELS[opt]}
-            title={opt === 'auto' ? `Auto: ${LABELS[theme]} right now` : LABELS[opt]}
-            onClick={() => onChange(opt)}
-            className={`-ml-[2px] grid h-10 min-w-10 place-items-center border-2 border-slate-line px-2 first:ml-0 ${
-              on ? 'relative z-10 bg-brass text-night' : 'bg-slate text-chalk-dim hover:text-chalk'
-            }`}
-          >
-            {opt === 'auto' ? <span className="font-label text-[10px]">AUTO</span> : <ThemeIcon theme={opt} />}
-          </button>
-        );
-      })}
-    </div>
+    <Popover
+      label="Café theme"
+      side="bottom"
+      align="end"
+      className="w-[220px]"
+      trigger={({ open, toggle }) => (
+        <button
+          type="button"
+          onClick={toggle}
+          aria-expanded={open}
+          aria-label={`Theme: ${LABELS[choice]}`}
+          className={`flex h-9 items-center gap-2 rounded-lg border px-2.5 text-[13px] text-chalk-dim hover:text-chalk ${open ? 'border-[#434a58] bg-slate' : 'border-slate-line hover:bg-slate'}`}
+        >
+          <ThemeIcon theme={theme} />
+          {choice === 'auto' ? 'Auto' : LABELS[choice]}
+          <Caret />
+        </button>
+      )}
+    >
+      {(close) => (
+        <div role="radiogroup" aria-label="Café theme" className="flex flex-col p-1.5">
+          {options.map((opt) => (
+            <button
+              key={opt}
+              type="button"
+              role="radio"
+              aria-checked={opt === choice}
+              onClick={() => (onChange(opt), close())}
+              className={`flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[13px] ${opt === choice ? 'bg-slate-2 text-chalk' : 'text-chalk-dim hover:bg-slate-2 hover:text-chalk'}`}
+            >
+              <ThemeIcon theme={opt === 'auto' ? theme : opt} />
+              {opt === 'auto' ? `Auto · ${LABELS[theme]} now` : LABELS[opt]}
+            </button>
+          ))}
+        </div>
+      )}
+    </Popover>
   );
 }

@@ -27,7 +27,12 @@ export const MODEL_CATALOG: readonly ModelInfo[] = [
   { id: 'claude-fable-5-1', providerId: 'anthropic', label: 'Claude Fable 5.1', inputPerMTok: 10, outputPerMTok: 50, tier: 'flagship' },
   { id: 'claude-opus-5-5', providerId: 'anthropic', label: 'Claude Opus 5.5', inputPerMTok: 4, outputPerMTok: 20, tier: 'flagship' },
   { id: 'claude-opus-5', providerId: 'anthropic', label: 'Claude Opus 5', inputPerMTok: 5, outputPerMTok: 25, tier: 'flagship' },
+  { id: 'claude-fable-5', providerId: 'anthropic', label: 'Claude Fable 5', inputPerMTok: 10, outputPerMTok: 50, tier: 'flagship' },
+  { id: 'claude-opus-4-8', providerId: 'anthropic', label: 'Claude Opus 4.8', inputPerMTok: 5, outputPerMTok: 25, tier: 'flagship' },
+  { id: 'claude-opus-4-7', providerId: 'anthropic', label: 'Claude Opus 4.7', inputPerMTok: 5, outputPerMTok: 25, tier: 'flagship' },
+  { id: 'claude-opus-4-6', providerId: 'anthropic', label: 'Claude Opus 4.6', inputPerMTok: 5, outputPerMTok: 25, tier: 'flagship' },
   { id: 'claude-sonnet-5', providerId: 'anthropic', label: 'Claude Sonnet 5', inputPerMTok: 2, outputPerMTok: 10, tier: 'balanced' },
+  { id: 'claude-sonnet-4-6', providerId: 'anthropic', label: 'Claude Sonnet 4.6', inputPerMTok: 3, outputPerMTok: 15, tier: 'balanced' },
   { id: 'claude-haiku-4-5', providerId: 'anthropic', label: 'Claude Haiku 4.5', inputPerMTok: 1, outputPerMTok: 5, tier: 'fast' },
   // OpenAI
   { id: 'gpt-6-astra', providerId: 'openai', label: 'GPT-6 Astra', inputPerMTok: 10, outputPerMTok: 50, tier: 'flagship' },

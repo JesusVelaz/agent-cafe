@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { PROVIDER_NAME } from '@/lib/format';
 import { THEMES, type ThemeId } from '@/scene/atmosphere';
 import { CafeRenderer, SCENE_H, SCENE_W, type AgentHit } from '@/scene/renderer';
 import { activityLabel, deriveActivity } from '@/sim/activity';
@@ -55,7 +54,10 @@ export function CafeScene({ theme, labels = true, reserveBottom = 0, onFrame, ov
       },
       pickAgent: (id) => {
         const s = useCafe.getState();
-        s.selectAgent(s.selectedAgentId === id ? null : id);
+        // In the café view, clicking an agent opens the panel on them.
+        const deselect = s.selectedAgentId === id && !s.panelCollapsed;
+        s.selectAgent(deselect ? null : id);
+        if (!deselect && s.panelCollapsed) s.setPanelCollapsed(false);
       },
       hover: (h) => {
         setHoverId(h?.id ?? null);
@@ -85,7 +87,6 @@ export function CafeScene({ theme, labels = true, reserveBottom = 0, onFrame, ov
         </div>
         {overlay}
       </div>
-      <FloorLegend />
     </div>
   );
 }
@@ -103,32 +104,11 @@ function AgentTooltip({ id }: { id: string }) {
     now: Date.now(),
   });
   return (
-    <div className="max-w-64 border-2 border-slate-line bg-night-2 px-2.5 py-1.5 text-[11px] leading-snug text-chalk shadow-lg">
+    <div className="max-w-64 rounded-lg border border-slate-line bg-night-2 px-2.5 py-1.5 text-[11px] leading-snug text-chalk shadow-lg">
       <div className="font-display text-lg leading-none">{agent.name}</div>
       <div className="text-chalk-faint">{agent.model}</div>
       <div>{activityLabel(activity)}</div>
       {active && <div className="truncate text-chalk-dim">“{active.prompt}”</div>}
-    </div>
-  );
-}
-
-/** Which floor is which provider, and its mode. */
-function FloorLegend() {
-  const providers = useCafe((s) => s.providers);
-  const row = (id: 'anthropic' | 'openai', floor: string) => {
-    const mode = providers[id]?.mode;
-    return (
-      <div className="flex items-center gap-2">
-        <span className="text-chalk-faint">{floor}</span>
-        <span>{PROVIDER_NAME[id]}</span>
-        <span className={mode === 'live' ? 'text-mint' : mode === 'off' ? 'text-coral' : 'text-brass'}>{mode === 'live' ? 'LIVE' : mode === 'off' ? 'OFF' : 'DEMO'}</span>
-      </div>
-    );
-  };
-  return (
-    <div className="absolute left-3 top-3 flex flex-col gap-0.5 border-2 border-slate-line bg-night-2/90 px-2.5 py-1.5 font-label text-[10px] text-chalk">
-      {row('anthropic', 'UPSTAIRS')}
-      {row('openai', 'GROUND')}
     </div>
   );
 }

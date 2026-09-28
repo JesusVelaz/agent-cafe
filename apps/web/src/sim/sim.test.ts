@@ -8,7 +8,7 @@ import { findPath } from './pathfinding';
 const task = (over: Partial<TaskDTO> = {}): TaskDTO => ({
   id: 't', agentId: 'a', providerId: 'openai', model: 'm', prompt: 'p', status: 'running', isMock: true,
   maxCostUsd: 1, inputTokens: 0, outputTokens: 0, costUsd: 0, steps: 0, output: null, error: null,
-  failureKind: null, retryOf: null, pendingApproval: null, createdAt: '2026-09-27T10:00:00Z',
+  failureKind: null, retryOf: null, pendingApproval: null, projectId: null, permission: 'ask', continueOf: null, sessionId: null, createdAt: '2026-09-27T10:00:00Z',
   startedAt: '2026-09-27T10:00:00Z', finishedAt: null, ...over,
 });
 const T0 = Date.parse('2026-09-27T10:00:00Z');
@@ -73,8 +73,8 @@ describe('World', () => {
   it('walks an agent to the tool station and back home', async () => {
     const { World } = await import('./world');
     const { emptyData, reduce } = await import('@/store/reduce');
-    const agent = { id: 'a', name: 'Mocha', providerId: 'openai' as const, model: 'm', systemPrompt: '', spriteSeed: 1, workDir: null, permission: 'ask' as const, createdAt: '2026-01-01T00:00:00Z', archivedAt: null };
-    let data = reduce(emptyData(), { type: 'snapshot', agents: [agent], tasks: [], lastEvents: {}, providers: [], settings: { ambient: false } });
+    const agent = { id: 'a', name: 'Mocha', providerId: 'openai' as const, model: 'm', systemPrompt: '', spriteSeed: 1, projectId: null, permission: 'ask' as const, createdAt: '2026-01-01T00:00:00Z', archivedAt: null };
+    let data = reduce(emptyData(), { type: 'snapshot', agents: [agent], tasks: [], lastEvents: {}, providers: [], projects: [], settings: { ambient: false } });
     const world = new World();
     const now = T0;
     world.update(0.016, data, now);

@@ -64,16 +64,27 @@ export const TOOL_NAMES = [
 ] as const;
 export type ToolName = (typeof TOOL_NAMES)[number];
 
+/** A folder agents can work in, added once and picked by name (like a checkout). */
+export interface ProjectDTO {
+  id: string;
+  name: string;
+  /** Absolute folder path. */
+  path: string;
+  createdAt: string;
+}
+
 export interface AgentDTO {
   id: string;
   name: string;
   providerId: ProviderId;
+  /** The model this agent used last: the composer's default for them. */
   model: string;
   systemPrompt: string;
   /** Deterministic seed for sprite colours, so an agent always looks the same. */
   spriteSeed: number;
-  /** Folder the agent works in on live runs (absolute). Null until chosen. */
-  workDir: string | null;
+  /** The project this agent worked in last: the composer's default for them. */
+  projectId: string | null;
+  /** The permission this agent used last. */
   permission: AgentPermission;
   createdAt: string;
   archivedAt: string | null;
@@ -110,6 +121,13 @@ export interface TaskDTO {
   error: string | null;
   failureKind: FailureKind | null;
   retryOf: string | null;
+  /** Project the task runs in (required for live runs). */
+  projectId: string | null;
+  permission: AgentPermission;
+  /** The earlier task whose conversation this one continues. */
+  continueOf: string | null;
+  /** The harness's session id, once known; follow-ups resume it. */
+  sessionId: string | null;
   /** Set while the harness waits for the user to allow or deny an action. */
   pendingApproval: ApprovalDTO | null;
   createdAt: string;
@@ -156,6 +174,10 @@ export interface HarnessModelDTO {
   value: string;
   label: string;
   description: string;
+  /** e.g. "Default", "Most capable". */
+  tag?: string;
+  /** The full model id an alias resolves to (harness aliases only). */
+  resolved?: string;
 }
 
 export interface SettingsDTO {

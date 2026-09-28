@@ -84,7 +84,12 @@ export const claudeCodeProbe: HarnessProbe = {
     const q = query({ prompt: noPrompt(), options: { pathToClaudeCodeExecutable: executable, env: harnessEnv(), persistSession: false } });
     try {
       const models = await q.supportedModels();
-      return models.map((m) => ({ value: m.value, label: m.displayName, description: m.description }));
+      return models.map((m) => ({
+        value: m.value,
+        label: m.displayName,
+        description: m.description,
+        ...(m.resolvedModel ? { resolved: m.resolvedModel } : {}),
+      }));
     } finally {
       hold();
       q.close();

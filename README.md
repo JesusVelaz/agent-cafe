@@ -4,10 +4,10 @@ A local-first control room for AI agents, drawn as a cosy two-story pixel-art ca
 
 The point is to see what your agents are doing and hand them work. Each agent is a worker in
 the café, and where they stand is what they're doing: a tool call walks them to that tool's
-station, and bubbles show thinking, waiting, asking, done or failed. Next to the café, a
-**work board** lists what needs you (including actions waiting for your OK), who is working on
-what, and what just finished. Click anyone for their current task, streamed output, tool
-timeline, tokens and duration, and to set their model, folder and permissions.
+station, and bubbles show thinking, waiting, asking, done or failed. Next to the café, the
+**side panel** lists what needs you (including actions waiting for your OK), who is working on
+what, and what just finished. Click anyone to open their thread: your messages, their steps and
+answers, and a message box to prompt them directly.
 
 - **Ground floor: OpenAI.** **Upstairs: Anthropic.** The upper floor sits on top, one step smaller.
 - **No API keys.** Live floors run the vendor's own coding agent (Claude Code, and Codex next),
@@ -35,11 +35,16 @@ agents (Mocha, Chai and Biscotti downstairs; Earl, Matcha and Scone upstairs), a
 1. Install [Claude Code](https://code.claude.com) and sign in once in a terminal:
    `claude auth login`. (The Claude desktop app's sign-in is separate; the `claude` command needs its own.)
 2. In the top bar, the Anthropic floor shows your account. If it says *Signed out*, press **Check again**.
-3. Click an upstairs agent, open **Setup**, and paste the full path of the folder it should work in.
-   Pick a model (the list comes from Claude Code) and a permission: **Ask first** (default) or
-   **Auto-accept edits** (commands still ask).
-4. Switch the floor to **Live** and send a task. When Claude Code wants to run a command or edit
-   a file, the agent raises a hand and an **Allow / Deny** card appears under *Needs you*.
+3. Open the floor chip and switch it to **Live**.
+4. Under the message box, open the project chip and **add a project**: paste the full path of a
+   folder once, then pick it by name from then on (like a checkout).
+5. Send a task. In the box, pick the model (every model Claude Code offers) and a permission:
+   **Ask first** (default) or **Auto-accept edits** (commands still ask). When Claude Code wants to
+   run a command or edit a file, the agent raises a hand and an **Allow / Deny** card appears.
+
+Messaging an agent again continues their last conversation in that project (Claude Code resumes
+the session); switch the footer chip to **New thread** to start fresh. Each agent remembers the
+model, permission and project it used last.
 
 Live runs count against your plan's normal usage limits; the top bar shows the current window.
 
@@ -58,11 +63,12 @@ Live runs count against your plan's normal usage limits; the top bar shows the c
 | "Usage limit reached" sign | That floor's plan limit is used up for now |
 
 The top bar answers the at-a-glance questions: how many are working, need you and are queued,
-plus each floor's harness, sign-in and plan usage. **Needs you** lists approvals first, then
-stuck agents and failures; allow, deny, retry, cancel or dismiss them there.
+plus each floor's harness, sign-in, plan usage and mode (open the floor chip). **Needs you** lists
+approvals first, then stuck agents and failures; allow, deny, retry, stop or dismiss them there.
 
-**Focus mode** (top bar) lets the café fill the screen: only agents that need you get a
-callout, a command bar sits at the bottom, and the selected agent opens in a drawer.
+**Café view:** fold the side panel away (» at its top) and the café fills the screen. Agents that
+need you get a callout, a message bar sits at the bottom, and a rail on the right shows everyone's
+status; click anyone to open the panel on them. « brings the panel back.
 
 **Themes:** Auto follows your local time (day, golden hour from 17:30, night from 20:00) and
 season (snow in December to February). Pick Day, Summer, Rain, Snow or Night to override it;
@@ -89,7 +95,7 @@ Useful scripts: `pnpm test`, `pnpm typecheck`, `pnpm db:reset` (wipe and reseed)
 apps/web (Next.js 16, Tailwind 4, canvas)           apps/server (Fastify 5, Prisma 7 / SQLite)
 ┌───────────────────────────────────────┐            ┌─────────────────────────────────────────┐
 │ UI: TopBar · WorkBoard · AgentPanel   │   REST     │ routes/     agents · tasks · providers  │
-│     Composer · CafeScene · FocusView  │ ─────────► │ orchestrator/  Orchestrator (per-agent  │
+│     Composer · CafeStage · SidePanel  │ ─────────► │ orchestrator/  Orchestrator (per-agent  │
 │ store/  zustand + pure reducer        │            │   FIFO, routing, approvals, recovery)   │
 │ sim/    layout · A* · activity · cats │   SSE      │   · runner (demo tool loop) · ambient   │
 │ scene/  software rasteriser · sprites │ ◄───────── │ providers/  harness (sign-in, models) · │
@@ -130,7 +136,7 @@ apps/server/src         app.ts · index.ts · services.ts (composition root)
   routes/  db/  events/
 apps/web/src
   app/                  layout.tsx · page.tsx · globals.css (design tokens)
-  components/           CafeApp · TopBar · WorkBoard · AgentPanel · Composer · CafeScene · FocusView
+  components/           CafeApp · TopBar · SidePanel · AgentThread · Composer · pickers · CafeStage · CafeScene
   store/                reduce.ts (pure, incl. needsAttention) · cafe.ts (zustand)
   sim/                  layout.ts · pathfinding.ts · activity.ts · world.ts · cats.ts
   scene/                renderer.ts · building.ts · props.ts · outdoor.ts · atmosphere.ts · sprites.ts · raster.ts
@@ -141,7 +147,8 @@ docs/                   specs/ (design decisions) · plans/ (implementation plan
 ## Roadmap
 
 - **Done:** orchestrator with queues and recovery, demo provider, SSE; stacked café on a street
-  corner with cats, work board, Focus mode, auto themes; Claude Code on the Anthropic floor.
+  corner with cats, side panel with agent threads and café view, auto themes; Claude Code on the
+  Anthropic floor with projects, per-message models and resumable conversations.
 - **Next:** Codex (`codex app-server`) on the OpenAI floor, signed in with `codex login`.
-- **Later:** follow-up messages into a finished session, "always allow" rules, history page,
+- **Later:** "always allow" rules, history page,
   live weather (Open-Meteo), `POST /api/events` ingest so outside sessions appear as visiting agents.

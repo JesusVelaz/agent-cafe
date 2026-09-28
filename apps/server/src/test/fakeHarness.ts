@@ -13,7 +13,10 @@ export function fakeProbe(state: HarnessState = 'ready'): HarnessProbe {
       checkedAt: new Date().toISOString(),
       executable: state === 'not_installed' ? null : '/usr/local/bin/claude',
     }),
-    models: async () => [{ value: 'sonnet', label: 'Sonnet', description: 'Balanced' }],
+    models: async () => [
+      { value: 'default', label: 'Default', description: 'Recommended', resolved: 'claude-sonnet-5-20260101' },
+      { value: 'sonnet', label: 'Sonnet', description: 'Balanced', resolved: 'claude-sonnet-5' },
+    ],
   };
 }
 

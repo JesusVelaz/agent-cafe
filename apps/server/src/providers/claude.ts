@@ -29,6 +29,10 @@ export interface ClaudeRunContext {
   /** Resolves when the user answers (deny if the task is cancelled first). */
   approve: (ask: ApprovalAsk, signal: AbortSignal) => Promise<'allow' | 'deny'>;
   onRateLimit: (info: SDKRateLimitInfo) => void;
+  /** Called once with the harness session id, so a follow-up can resume it. */
+  onSession?: (sessionId: string) => void;
+  /** Resume this earlier session (a follow-up message). */
+  resume?: string;
   maxTurns?: number;
   /** Injected in tests. */
   query?: typeof sdkQuery;
@@ -89,7 +93,9 @@ export async function runClaudeTask(ctx: ClaudeRunContext): Promise<RunOutcome> 
       abortController: ac,
       systemPrompt: { type: 'preset', preset: 'claude_code', append: agent.systemPrompt },
       includePartialMessages: true,
-      persistSession: false,
+      // Sessions are kept (in Claude Code's own history) so follow-ups can resume them.
+      persistSession: true,
+      ...(ctx.resume ? { resume: ctx.resume } : {}),
       maxTurns: ctx.maxTurns ?? DEFAULTS.maxTurns,
     },
   });
@@ -120,7 +126,12 @@ export async function runClaudeTask(ctx: ClaudeRunContext): Promise<RunOutcome> 
 
   try {
     let result: Extract<SDKMessage, { type: 'result' }> | null = null;
+    let sessionSeen = false;
     for await (const m of q) {
+      if (!sessionSeen && 'session_id' in m && typeof m.session_id === 'string' && m.session_id) {
+        sessionSeen = true;
+        ctx.onSession?.(m.session_id);
+      }
       if (m.type === 'stream_event') {
         if (m.parent_tool_use_id) continue;
         const ev = m.event;

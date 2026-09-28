@@ -5,6 +5,7 @@
 import type {
   AgentDTO,
   CafeEvent,
+  ProjectDTO,
   ProviderId,
   ProviderStatusDTO,
   SettingsDTO,
@@ -19,6 +20,7 @@ export interface CafeData {
   agents: Record<string, AgentDTO>;
   tasks: Record<string, TaskDTO>;
   providers: Partial<Record<ProviderId, ProviderStatusDTO>>;
+  projects: Record<string, ProjectDTO>;
   settings: SettingsDTO;
   /** Persisted events seen for each task, in seq order. */
   events: Record<string, TaskEventDTO[]>;
@@ -35,6 +37,7 @@ export const emptyData = (): CafeData => ({
   agents: {},
   tasks: {},
   providers: {},
+  projects: {},
   settings: { ambient: false },
   events: {},
   lastEvent: {},
@@ -53,6 +56,7 @@ export function reduce(s: CafeData, e: CafeEvent, now: number = Date.now()): Caf
         agents: Object.fromEntries(e.agents.map((a) => [a.id, a])),
         tasks,
         providers: Object.fromEntries(e.providers.map((p) => [p.id, p])),
+        projects: Object.fromEntries(e.projects.map((p) => [p.id, p])),
         settings: e.settings,
         events: Object.fromEntries(Object.entries(e.lastEvents).map(([id, ev]) => [id, [ev]])),
         lastEvent: { ...e.lastEvents },
@@ -73,6 +77,13 @@ export function reduce(s: CafeData, e: CafeEvent, now: number = Date.now()): Caf
       return { ...s, providers: { ...s.providers, [e.provider.id]: e.provider } };
     case 'settings.updated':
       return { ...s, settings: e.settings };
+    case 'project.upserted':
+      return { ...s, projects: { ...s.projects, [e.project.id]: e.project } };
+    case 'project.removed': {
+      const projects = { ...s.projects };
+      delete projects[e.projectId];
+      return { ...s, projects };
+    }
     case 'task.event': {
       const { taskId, event } = e;
       const lastActivityAt = { ...s.lastActivityAt, [taskId]: now };

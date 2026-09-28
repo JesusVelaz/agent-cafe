@@ -1,54 +1,100 @@
 'use client';
 
-import { DEFAULTS, HARNESS, PROVIDER_IDS, type ProviderId } from '@agent-cafe/shared';
-import { useEffect, useId, useState } from 'react';
+import { HARNESS, type AgentPermission, type ProviderId } from '@agent-cafe/shared';
+import { useEffect, useId, useRef, useState } from 'react';
 import { api } from '@/lib/api';
-import { PROVIDER_NAME } from '@/lib/format';
+import { useModels } from '@/lib/models';
 import { useCafe } from '@/store/cafe';
+import { tasksFor } from '@/store/reduce';
+import { ModelPicker, PermissionPicker, ProjectPicker, TargetPicker, type Target } from './pickers';
+import { Chip, PixelSend } from './ui';
 
 /**
- * Task a specific agent (`agent:<id>`) or whoever is free on a floor (`any:<provider>`).
- * `card` sits at the top of the work board; `bar` is Focus mode's command bar.
+ * The message box, docked at the bottom of the side panel (and Focus mode's bar).
+ *
+ * On the board it addresses whoever is free on a floor, or a named agent; with an
+ * agent open it messages them. Model, permission and project are chosen per
+ * message (defaulting to what that agent used last). A message to an agent
+ * continues their latest conversation in that project unless "New thread" is on.
  */
-export function Composer({ variant }: { variant: 'card' | 'bar' }) {
+export function Composer({ variant }: { variant: 'panel' | 'bar' }) {
   const agents = useCafe((s) => s.agents);
   const providers = useCafe((s) => s.providers);
+  const projects = useCafe((s) => s.projects);
+  const tasks = useCafe((s) => s.tasks);
   const selectedAgentId = useCafe((s) => s.selectedAgentId);
   const selectAgent = useCafe((s) => s.selectAgent);
-  const [target, setTarget] = useState('any:anthropic');
+
+  const [boardTarget, setBoardTarget] = useState<Target>({ kind: 'any', provider: 'anthropic' });
+  // The café view's bar always addresses the board, not whoever was open in the panel.
+  const selected = variant === 'panel' && selectedAgentId ? agents[selectedAgentId] : undefined;
+  const target: Target = selected ? { kind: 'agent', agentId: selected.id } : boardTarget;
+  const agent = target.kind === 'agent' ? agents[target.agentId] : undefined;
+  const provider: ProviderId = agent?.providerId ?? (target.kind === 'any' ? target.provider : 'anthropic');
+
+  // Choices for "anyone" (per floor), and per-message overrides for a named agent.
+  const [anyModel, setAnyModel] = useState<Partial<Record<ProviderId, string>>>({});
+  const [anyPermission, setAnyPermission] = useState<AgentPermission>('ask');
+  const [anyProject, setAnyProject] = useState<string | null | undefined>(undefined);
+  const [override, setOverride] = useState<{ model?: string; permission?: AgentPermission; projectId?: string | null }>({});
+  const [newThread, setNewThread] = useState(false);
+  useEffect(() => {
+    setOverride({});
+    setNewThread(false);
+  }, [agent?.id]);
+
+  const models = useModels(provider);
+  // The harness's own default when signed in; otherwise what this floor's first agent used last.
+  const floorAgent = Object.values(agents)
+    .filter((a) => a.providerId === provider)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0];
+  const floorDefault = models.find((m) => m.tag === 'Default')?.value ?? floorAgent?.model ?? models[0]?.value ?? '';
+  const model = agent ? (override.model ?? agent.model) : (anyModel[provider] ?? floorDefault);
+  const permission = agent ? (override.permission ?? agent.permission) : anyPermission;
+  const firstProject = Object.values(projects).sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0]?.id ?? null;
+  const rawProject = agent ? (override.projectId !== undefined ? override.projectId : agent.projectId) : anyProject !== undefined ? anyProject : firstProject;
+  const projectId = rawProject && projects[rawProject] ? rawProject : null;
+
+  const mode = providers[provider]?.mode;
+  const live = mode === 'live';
+  const thread = agent ? tasksFor({ tasks }, agent.id).find((t) => t.projectId === projectId) : undefined;
+  const continuing = Boolean(thread) && !newThread;
+
   const [prompt, setPrompt] = useState('');
-  const [cap, setCap] = useState(String(DEFAULTS.maxCostUsd));
   const [sending, setSending] = useState(false);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
-  const ids = { target: useId(), prompt: useId(), cap: useId() };
+  const promptId = useId();
+  const box = useRef<HTMLTextAreaElement>(null);
 
-  // Selecting an agent addresses the next task to them.
+  // Grow with the text, up to a limit.
   useEffect(() => {
-    if (selectedAgentId) setTarget(`agent:${selectedAgentId}`);
-  }, [selectedAgentId]);
+    const el = box.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 180)}px`;
+  }, [prompt]);
 
-  const crew = Object.values(agents).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-  const anyProvider = target.startsWith('any:') ? (target.slice(4) as ProviderId) : null;
-  const targetAgent = target.startsWith('agent:') ? agents[target.slice(6)] : undefined;
-  const provider = anyProvider ?? targetAgent?.providerId;
-  const mode = provider ? providers[provider]?.mode : undefined;
-  const needsFolder = mode === 'live' && targetAgent && !targetAgent.workDir;
+  const blocked = mode === 'off' ? 'That floor is switched off.' : live && !projectId ? 'Pick a project for live work.' : null;
 
   const send = async () => {
     const text = prompt.trim();
     if (!text || sending) return;
-    const maxCostUsd = Number(cap.replace('$', ''));
-    if (mode === 'mock' && !(maxCostUsd > 0)) {
-      setNotice({ ok: false, text: 'Set a budget above $0.' });
-      return;
-    }
+    if (blocked) return setNotice({ ok: false, text: blocked });
     setSending(true);
     setNotice(null);
     try {
-      const task = await api.createTask({ prompt: text, ...(mode === 'mock' ? { maxCostUsd } : {}), ...(anyProvider ? { providerId: anyProvider } : { agentId: targetAgent?.id }) });
-      setNotice({ ok: true, text: `Sent to ${agents[task.agentId]?.name ?? 'an agent'}.` });
+      const task = await api.createTask({
+        prompt: text,
+        ...(target.kind === 'agent' ? { agentId: target.agentId } : { providerId: target.provider }),
+        model,
+        permission,
+        projectId,
+        ...(continuing && thread ? { continueTaskId: thread.id } : {}),
+      });
       setPrompt('');
-      selectAgent(task.agentId, task.id);
+      setNewThread(false);
+      if (!agent) setNotice({ ok: true, text: `Sent to ${agents[task.agentId]?.name ?? 'an agent'}.` });
+      if (variant === 'panel' && !agent) selectAgent(task.agentId, task.id);
     } catch (e) {
       setNotice({ ok: false, text: (e as Error).message });
     } finally {
@@ -56,102 +102,94 @@ export function Composer({ variant }: { variant: 'card' | 'bar' }) {
     }
   };
 
-  const targetSelect = (
-    <select
-      id={ids.target}
-      value={target}
-      onChange={(e) => setTarget(e.target.value)}
-      className={variant === 'card' ? 'h-11 border-2 border-ink bg-[#f7eedb] px-2 text-sm text-ink' : 'h-11 border-2 border-slate-line bg-night px-2 text-sm text-chalk'}
-    >
-      <optgroup label="Whoever is free">
-        {PROVIDER_IDS.map((p) => (
-          <option key={p} value={`any:${p}`}>
-            Any {PROVIDER_NAME[p]} agent
-          </option>
-        ))}
-      </optgroup>
-      {PROVIDER_IDS.map((p) => (
-        <optgroup key={p} label={PROVIDER_NAME[p]}>
-          {crew.filter((a) => a.providerId === p).map((a) => (
-            <option key={a.id} value={`agent:${a.id}`}>
-              {a.name} · {a.model}
-            </option>
-          ))}
-        </optgroup>
-      ))}
-    </select>
-  );
-
-  const status = notice ? (
-    <span className={notice.ok ? '' : 'text-coral'}>{notice.text}</span>
-  ) : (
-    <span className="opacity-75">
-      {needsFolder
-        ? `Pick a folder for ${targetAgent.name} first (click them, then Setup). `
-        : mode === 'mock' ? 'Demo floor: scripted run, no real calls. '
-        : mode === 'live' && provider ? `Live: ${HARNESS[provider].name} on your subscription. `
-        : mode === 'off' ? 'That floor is switched off. ' : ''}
-      Ctrl+Enter to send.
-    </span>
-  );
-
-  const onKey = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey || variant === 'bar')) {
-      e.preventDefault();
-      void send();
-    }
-  };
-
-  if (variant === 'bar') {
-    return (
-      <form onSubmit={(e) => { e.preventDefault(); void send(); }} aria-label="New task" className="flex w-full flex-col gap-1">
-        <div className="flex items-center gap-2 border-2 border-brass bg-night-2 p-2">
-          <label htmlFor={ids.target} className="sr-only">For</label>
-          {targetSelect}
-          <label htmlFor={ids.prompt} className="sr-only">Task</label>
-          <input
-            id={ids.prompt}
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            onKeyDown={onKey}
-            placeholder={targetAgent ? `Give ${targetAgent.name} a task…` : 'Describe the task…'}
-            className="h-11 min-w-0 flex-1 border-2 border-slate-line bg-night px-3 text-sm text-chalk placeholder:text-chalk-faint"
-          />
-          <button type="submit" disabled={sending || !prompt.trim() || mode === 'off'} className="h-11 bg-brass px-4 font-label text-[11px] text-night disabled:opacity-40">
-            {sending ? 'SENDING…' : 'SEND'}
-          </button>
-        </div>
-        <p role="status" className="px-1 text-[11px] text-chalk-dim">{status}</p>
-      </form>
-    );
-  }
+  const placeholder = agent
+    ? continuing
+      ? `Message ${agent.name}…`
+      : `Give ${agent.name} a new task…`
+    : `Ask anyone ${provider === 'anthropic' ? 'upstairs' : 'downstairs'} to…`;
+  const floorNote = mode === 'live' ? `Live · ${HARNESS[provider].name}` : mode === 'off' ? 'Floor is off' : 'Demo · no real calls';
 
   return (
-    <form onSubmit={(e) => { e.preventDefault(); void send(); }} aria-label="New task" className="flex flex-col gap-2.5 bg-receipt px-4 py-3.5 text-ink">
-      <label htmlFor={ids.prompt} className="font-label text-[10px] text-ink-soft">NEW TASK</label>
-      <textarea
-        id={ids.prompt}
-        rows={2}
-        value={prompt}
-        onChange={(e) => setPrompt(e.target.value)}
-        onKeyDown={onKey}
-        placeholder="e.g. Read the workspace README and list anything outdated"
-        className="resize-none border-2 border-ink bg-[#f7eedb] px-2.5 py-2 text-[13px] text-ink placeholder:text-ink-soft/70"
-      />
-      <div className="flex flex-wrap items-center gap-2">
-        <label htmlFor={ids.target} className="font-label text-[10px] text-ink-soft">FOR</label>
-        {targetSelect}
-        {mode === 'mock' && (
-          <>
-            <label htmlFor={ids.cap} className="font-label text-[10px] text-ink-soft" title="Demo runs simulate a price; this caps it">BUDGET</label>
-            <input id={ids.cap} value={cap} onChange={(e) => setCap(e.target.value)} inputMode="decimal" className="h-11 w-16 border-2 border-ink bg-[#f7eedb] px-2 text-sm text-ink" />
-          </>
-        )}
-        <button type="submit" disabled={sending || !prompt.trim() || mode === 'off'} className="ml-auto h-11 bg-ink px-4 font-label text-[11px] text-receipt hover:bg-walnut disabled:opacity-40">
-          {sending ? 'SENDING…' : 'SEND TASK'}
-        </button>
+    <form
+      aria-label={agent ? `Message ${agent.name}` : 'New task'}
+      onSubmit={(e) => {
+        e.preventDefault();
+        void send();
+      }}
+      className={
+        variant === 'panel'
+          ? 'flex flex-col gap-1 border-t border-slate-line px-3 pb-2.5 pt-3'
+          : 'flex flex-col gap-1 rounded-2xl border border-slate-line bg-night-2/95 p-2 pb-1.5 shadow-[0_20px_50px_rgba(0,0,0,.45)] backdrop-blur'
+      }
+    >
+      <div className="rounded-xl border border-slate-line bg-slate px-3 pb-1.5 pt-2.5 focus-within:border-[#434a58]">
+        <label htmlFor={promptId} className="sr-only">{placeholder}</label>
+        <textarea
+          id={promptId}
+          ref={box}
+          rows={2}
+          value={prompt}
+          onChange={(e) => {
+            setPrompt(e.target.value);
+            if (notice) setNotice(null);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              void send();
+            }
+          }}
+          placeholder={placeholder}
+          className="block w-full resize-none bg-transparent text-[14px] leading-snug text-chalk outline-none placeholder:text-chalk-faint"
+        />
+        <div className="mt-1 flex min-w-0 items-center gap-0.5">
+          {!selected && <TargetPicker target={boardTarget} onPick={setBoardTarget} />}
+          <ModelPicker
+            provider={provider}
+            model={model}
+            {...(agent ? { lockedTo: agent.providerId } : {})}
+            onPick={(p, m) => {
+              if (agent) setOverride((o) => ({ ...o, model: m }));
+              else {
+                setAnyModel((a) => ({ ...a, [p]: m }));
+                if (p !== provider) setBoardTarget({ kind: 'any', provider: p });
+              }
+            }}
+          />
+          {live && (
+            <PermissionPicker value={permission} onPick={(v) => (agent ? setOverride((o) => ({ ...o, permission: v })) : setAnyPermission(v))} />
+          )}
+          <span className="ml-auto" />
+          <PixelSend disabled={!prompt.trim() || sending || mode === 'off'} busy={sending} />
+        </div>
       </div>
-      <p role="status" className="text-[11px] text-ink-soft">{status}</p>
+      <div className="flex min-w-0 items-center gap-0.5 px-0.5">
+        <ProjectPicker
+          projectId={projectId}
+          required={live}
+          onPick={(id) => (agent ? setOverride((o) => ({ ...o, projectId: id })) : setAnyProject(id))}
+        />
+        {agent && thread && (
+          <Chip
+            onClick={() => setNewThread((n) => !n)}
+            active={newThread}
+            label={newThread ? 'Starting a new thread. Click to continue the last one instead' : 'Continuing the last thread. Click to start a new one'}
+          >
+            {newThread ? (
+              <>
+                <span aria-hidden>＋</span> New thread
+              </>
+            ) : (
+              <>
+                <span aria-hidden>↳</span> Continuing
+              </>
+            )}
+          </Chip>
+        )}
+        <span role="status" className={`ml-auto truncate pl-2 text-[11px] ${notice ? (notice.ok ? 'text-mint' : 'text-coral') : 'text-chalk-faint'}`}>
+          {notice?.text ?? floorNote}
+        </span>
+      </div>
     </form>
   );
 }

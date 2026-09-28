@@ -1,6 +1,6 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
 import type { ServerConfig } from '../config.js';
@@ -51,21 +51,27 @@ describe('HTTP API', () => {
     const checked = (await app.inject({ method: 'POST', url: '/api/providers/anthropic/check' })).json();
     expect(checked).toMatchObject({ harness: 'claude-code', connection: { state: 'ready', account: 'barista@example.com' } });
     const models = (await app.inject('/api/providers/anthropic/models')).json();
-    expect(models).toEqual({ source: 'harness', models: [{ value: 'sonnet', label: 'Sonnet', description: 'Balanced' }] });
+    expect(models.source).toBe('harness');
+    expect(models.models.map((m: { value: string }) => m.value)).toEqual(expect.arrayContaining(['claude-opus-5-5', 'claude-opus-4-8', 'claude-haiku-4-5']));
+    expect(models.models.find((m: { value: string }) => m.value === 'claude-sonnet-5')).toMatchObject({ label: 'Sonnet 5', tag: 'Default' });
     const demo = (await app.inject('/api/providers/openai/models')).json();
     expect(demo.source).toBe('catalog');
   });
 
-  it('sets an agent folder only when it exists', async () => {
-    const { app, db } = await setup();
-    const earl = await db.agent.findFirstOrThrow({ where: { name: 'Earl' } });
-    const url = `/api/agents/${earl.id}`;
-    expect((await app.inject({ method: 'PATCH', url, payload: { workDir: 'relative/path' } })).statusCode).toBe(400);
-    expect((await app.inject({ method: 'PATCH', url, payload: { workDir: join(tmpdir(), 'no-such-folder-cafe') } })).statusCode).toBe(400);
+  it('adds projects only for folders that exist, named after the folder', async () => {
+    const { app } = await setup();
+    const post = (payload: object) => app.inject({ method: 'POST', url: '/api/projects', payload });
+    expect((await post({ path: 'relative/path' })).statusCode).toBe(400);
+    expect((await post({ path: join(tmpdir(), 'no-such-folder-cafe') })).statusCode).toBe(400);
     const dir = mkdtempSync(join(tmpdir(), 'cafe-work-'));
-    const ok = await app.inject({ method: 'PATCH', url, payload: { workDir: dir, permission: 'acceptEdits' } });
-    expect(ok.statusCode).toBe(200);
-    expect(ok.json()).toMatchObject({ workDir: dir, permission: 'acceptEdits' });
+    const created = await post({ path: `"${dir}"` });
+    expect(created.statusCode).toBe(201);
+    expect(created.json()).toMatchObject({ path: dir, name: basename(dir) });
+    expect((await post({ path: dir })).json().id).toBe(created.json().id); // same folder, same project
+    const renamed = await app.inject({ method: 'PATCH', url: `/api/projects/${created.json().id}`, payload: { name: 'Café' } });
+    expect(renamed.json().name).toBe('Café');
+    expect((await app.inject({ method: 'DELETE', url: `/api/projects/${created.json().id}` })).statusCode).toBe(204);
+    expect((await app.inject('/api/projects')).json()).toEqual([]);
   });
 
   it('answers 409 for an approval that is not pending', async () => {

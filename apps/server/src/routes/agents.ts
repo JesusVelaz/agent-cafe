@@ -1,6 +1,4 @@
 import { randomInt } from 'node:crypto';
-import { statSync } from 'node:fs';
-import { isAbsolute, resolve } from 'node:path';
 import { PROVIDER_IDS } from '@agent-cafe/shared';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
@@ -17,33 +15,11 @@ const createBody = z.object({
   systemPrompt: z.string().max(8000).optional(),
 });
 
-/** An existing folder, as an absolute path (or null to clear it). */
-const workDir = z
-  .string()
-  .trim()
-  .max(1000)
-  .nullable()
-  .transform((p, ctx) => {
-    if (!p) return null;
-    const dir = p.replace(/^"(.*)"$/, '$1');
-    if (!isAbsolute(dir)) {
-      ctx.addIssue({ code: 'custom', message: 'Use a full path, like C:\\Users\\you\\project.' });
-      return z.NEVER;
-    }
-    try {
-      if (statSync(dir).isDirectory()) return resolve(dir);
-    } catch {
-      /* fall through */
-    }
-    ctx.addIssue({ code: 'custom', message: "That folder doesn't exist." });
-    return z.NEVER;
-  });
-
 const patchBody = z.object({
   name: z.string().trim().min(1).max(24).optional(),
   model: z.string().trim().min(1).max(100).optional(),
   systemPrompt: z.string().max(8000).optional(),
-  workDir: workDir.optional(),
+  projectId: z.string().nullable().optional(),
   permission: z.enum(['ask', 'acceptEdits']).optional(),
   archived: z.boolean().optional(),
 });

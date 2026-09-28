@@ -168,9 +168,9 @@ describe('Orchestrator', () => {
     };
     const { orch, providers, agent, db } = await setup({ runClaude });
     const earl = await agent('Earl');
-    await db.agent.update({ where: { id: earl.id }, data: { workDir: '/tmp/project', permission: 'acceptEdits' } });
+    const project = await db.project.create({ data: { name: 'app', path: '/tmp/project' } });
     await providers.update('anthropic', { mode: 'live' });
-    const t = await orch.enqueue({ prompt: 'list files', target: { agentId: earl.id } });
+    const t = await orch.enqueue({ prompt: 'list files', target: { agentId: earl.id }, projectId: project.id, permission: 'acceptEdits', model: 'claude-sonnet-5' });
     await waitFor(async () => Boolean((await db.task.findUniqueOrThrow({ where: { id: t.id } })).pendingApproval));
     const pending = JSON.parse((await db.task.findUniqueOrThrow({ where: { id: t.id } })).pendingApproval!);
     expect(pending).toMatchObject({ tool: 'Bash', summary: 'ls' });
@@ -179,6 +179,11 @@ describe('Orchestrator', () => {
     const done = await db.task.findUniqueOrThrow({ where: { id: t.id } });
     expect(done).toMatchObject({ status: 'completed', output: 'allow', isMock: false, pendingApproval: null });
     expect(seen[0]!.agent).toMatchObject({ workDir: '/tmp/project', permission: 'acceptEdits' });
+    expect(seen[0]!.task.model).toBe('claude-sonnet-5');
+    // The agent remembers the last choices as the composer's defaults.
+    expect(await db.agent.findUniqueOrThrow({ where: { id: earl.id } })).toMatchObject({
+      model: 'claude-sonnet-5', permission: 'acceptEdits', projectId: project.id,
+    });
     await expect(orch.resolveApproval(t.id, pending.id, 'deny')).rejects.toThrow(/already answered/);
     const kinds = (await db.taskEvent.findMany({ where: { taskId: t.id } })).map((e) => e.kind);
     expect(kinds).toEqual(expect.arrayContaining(['approval.request', 'approval.resolved']));
@@ -191,9 +196,9 @@ describe('Orchestrator', () => {
     };
     const { orch, providers, agent, db } = await setup({ runClaude });
     const earl = await agent('Earl');
-    await db.agent.update({ where: { id: earl.id }, data: { workDir: '/tmp/project' } });
+    const project = await db.project.create({ data: { name: 'app', path: '/tmp/project' } });
     await providers.update('anthropic', { mode: 'live' });
-    const t = await orch.enqueue({ prompt: 'edit', target: { agentId: earl.id } });
+    const t = await orch.enqueue({ prompt: 'edit', target: { agentId: earl.id }, projectId: project.id });
     await waitFor(async () => Boolean((await db.task.findUniqueOrThrow({ where: { id: t.id } })).pendingApproval));
     await orch.cancel(t.id);
     await orch.idle();
@@ -201,13 +206,38 @@ describe('Orchestrator', () => {
     expect(await db.task.findUniqueOrThrow({ where: { id: t.id } })).toMatchObject({ pendingApproval: null });
   });
 
-  it('refuses live tasks until Claude Code is signed in and the agent has a folder', async () => {
+  it('continues a conversation by resuming the earlier task’s session', async () => {
+    const seen: ClaudeRunContext[] = [];
+    const runClaude = async (ctx: ClaudeRunContext): Promise<RunOutcome> => {
+      seen.push(ctx);
+      ctx.onSession?.(`sess-${seen.length}`);
+      return { status: 'completed', output: 'ok', totals: { inputTokens: 1, outputTokens: 1, costUsd: null, steps: 1 } };
+    };
+    const { orch, providers, agent, db } = await setup({ runClaude });
+    const earl = await agent('Earl');
+    const project = await db.project.create({ data: { name: 'app', path: '/tmp/project' } });
+    const other = await db.project.create({ data: { name: 'site', path: '/tmp/site' } });
+    await providers.update('anthropic', { mode: 'live' });
+    const first = await orch.enqueue({ prompt: 'one', target: { agentId: earl.id }, projectId: project.id });
+    await orch.idle();
+    expect((await db.task.findUniqueOrThrow({ where: { id: first.id } })).sessionId).toBe('sess-1');
+    const second = await orch.enqueue({ prompt: 'two', target: { agentId: earl.id }, continueTaskId: first.id });
+    await orch.idle();
+    expect(second).toMatchObject({ continueOf: first.id, projectId: project.id });
+    expect(seen[1]!.resume).toBe('sess-1');
+    await expect(orch.enqueue({ prompt: 'x', target: { agentId: earl.id }, projectId: other.id, continueTaskId: first.id })).rejects.toThrow(/same project/);
+    const matcha = await agent('Matcha');
+    await expect(orch.enqueue({ prompt: 'x', target: { agentId: matcha.id }, continueTaskId: first.id })).rejects.toThrow(/another agent/);
+  });
+
+  it('refuses live tasks until Claude Code is signed in and a project is picked', async () => {
     const signedOut = await setup({ harness: 'signed_out' });
     await expect(signedOut.providers.update('anthropic', { mode: 'live' })).rejects.toThrow(/claude auth login/);
 
     const ready = await setup();
     await ready.providers.update('anthropic', { mode: 'live' });
-    await expect(ready.orch.enqueue({ prompt: 'x', target: { agentId: (await ready.agent('Earl')).id } })).rejects.toThrow(/folder/);
+    await expect(ready.orch.enqueue({ prompt: 'x', target: { agentId: (await ready.agent('Earl')).id } })).rejects.toThrow(/project/);
+    await expect(ready.orch.enqueue({ prompt: 'x', target: { agentId: (await ready.agent('Earl')).id }, projectId: 'nope' })).rejects.toThrow(/no longer exists/);
     // Codex isn't wired yet: the ground floor can't go live.
     await expect(ready.providers.update('openai', { mode: 'live' })).rejects.toThrow(/coming next/);
   });

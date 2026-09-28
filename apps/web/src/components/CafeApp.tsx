@@ -4,46 +4,59 @@ import dynamic from 'next/dynamic';
 import { useEffect } from 'react';
 import { connectStream } from '@/lib/stream';
 import { useTheme } from '@/lib/theme';
-import { useCafe } from '@/store/cafe';
+import { readFlag, useCafe } from '@/store/cafe';
+import { PanelRail, SidePanel } from './SidePanel';
 import { TopBar } from './TopBar';
-import { WorkBoard } from './WorkBoard';
 
 // The scene uses canvas APIs on mount; keep it out of the server render.
-const CafeScene = dynamic(() => import('./CafeScene').then((m) => m.CafeScene), {
+const CafeStage = dynamic(() => import('./CafeStage').then((m) => m.CafeStage), {
   ssr: false,
   loading: () => <div className="grid place-items-center bg-night text-xs text-chalk-faint">Opening the café…</div>,
 });
-const FocusView = dynamic(() => import('./FocusView').then((m) => m.FocusView), { ssr: false });
 
 /**
- * Default: café on the left, work board on the right.
- * Focus mode: the café fills the screen with callouts, a command bar and a drawer.
+ * The café on the left, the side panel (board and agent threads) on the right.
+ * Folding the panel into its rail gives the café view: the café fills the screen,
+ * with callouts for agents that need you and a message bar. The switch animates.
  */
 export function CafeApp() {
   useEffect(() => {
     const { apply, setConnection } = useCafe.getState();
     return connectStream(apply, setConnection);
   }, []);
+  useEffect(() => useCafe.setState({ panelCollapsed: readFlag('cafe.panelCollapsed') }), []);
 
   const { choice, theme, setChoice } = useTheme();
-  const focus = useCafe((s) => s.focus);
   const hydrated = useCafe((s) => s.hydrated);
   const connection = useCafe((s) => s.connection);
+  const collapsed = useCafe((s) => s.panelCollapsed);
 
   return (
     <div className="grid h-dvh grid-rows-[auto_minmax(0,1fr)] bg-night text-chalk">
       <TopBar themeChoice={choice} theme={theme} onTheme={setChoice} />
       <div className="relative grid min-h-0">
-        {focus ? (
-          <FocusView theme={theme} />
-        ) : (
-          <main className="grid min-h-0 grid-rows-[minmax(360px,1fr)_auto] lg:grid-cols-[minmax(0,1fr)_540px] lg:grid-rows-1">
-            <CafeScene theme={theme} />
-            <div className="min-h-0 border-slate-line lg:border-l-[3px]">
-              <WorkBoard />
+        <main
+          className={`grid min-h-0 grid-rows-[minmax(360px,1fr)_auto] lg:grid-rows-1 lg:transition-[grid-template-columns] lg:duration-300 lg:ease-[cubic-bezier(.2,.8,.2,1)] ${
+            collapsed ? 'lg:grid-cols-[minmax(0,1fr)_56px]' : 'lg:grid-cols-[minmax(0,1fr)_440px]'
+          }`}
+        >
+          <CafeStage theme={theme} collapsed={collapsed} />
+          {/* Both panel faces stay mounted; the column slides and they cross-fade. */}
+          <div className="relative min-h-0 overflow-hidden border-slate-line lg:border-l">
+            <div
+              inert={collapsed}
+              className={`h-[70dvh] transition-opacity duration-200 lg:absolute lg:inset-y-0 lg:left-0 lg:h-auto lg:w-[440px] ${collapsed ? 'lg:opacity-0' : 'opacity-100 lg:delay-100'}`}
+            >
+              <SidePanel />
             </div>
-          </main>
-        )}
+            <div
+              inert={!collapsed}
+              className={`hidden transition-opacity duration-200 lg:absolute lg:inset-y-0 lg:left-0 lg:block lg:w-14 ${collapsed ? 'opacity-100 lg:delay-150' : 'pointer-events-none opacity-0'}`}
+            >
+              <PanelRail />
+            </div>
+          </div>
+        </main>
         {!hydrated && connection === 'down' && <OfflineNotice />}
       </div>
     </div>
@@ -53,10 +66,10 @@ export function CafeApp() {
 function OfflineNotice() {
   return (
     <div className="absolute inset-0 grid place-items-center bg-night/80 p-6">
-      <div className="max-w-sm border-2 border-slate-line bg-slate p-5 text-center">
+      <div className="max-w-sm rounded-xl border border-slate-line bg-slate p-5 text-center">
         <p className="font-display text-3xl leading-none">The café is closed</p>
         <p className="mt-2 text-xs text-chalk-dim">
-          The server isn’t answering on 127.0.0.1:4318. Start everything with <code className="text-brass">pnpm dev</code> from the repo root.
+          The server isn’t answering on 127.0.0.1:4318. Start everything with <code className="font-mono text-accent">pnpm dev</code> from the repo root.
           This page reconnects by itself.
         </p>
       </div>

@@ -27,8 +27,9 @@ model Agent {
   model        String
   systemPrompt String
   spriteSeed   Int
-  workDir      String? // absolute folder for live runs
-  permission   String    @default("ask") // ask | acceptEdits
+  workDir      String? // legacy (per-agent folder), superseded by projects
+  projectId    String? // project used last (composer default)
+  permission   String    @default("ask") // ask | acceptEdits, used last
   createdAt    DateTime  @default(now())
   archivedAt   DateTime?
   tasks        Task[]
@@ -53,6 +54,10 @@ model Task {
   failureKind  String?
   retryOf      String?
   pendingApproval String? // JSON ApprovalDTO while the harness waits on the user
+  projectId    String?
+  permission   String      @default("ask")
+  continueOf   String? // task whose conversation this continues
+  sessionId    String? // harness session id (resumable)
   createdAt    DateTime    @default(now())
   startedAt    DateTime?
   finishedAt   DateTime?
@@ -86,4 +91,12 @@ model Note {
 model Setting {
   key   String @id
   value String
+}
+
+/// A folder agents can work in, added once and picked by name.
+model Project {
+  id        String   @id @default(cuid())
+  name      String
+  path      String   @unique
+  createdAt DateTime @default(now())
 }

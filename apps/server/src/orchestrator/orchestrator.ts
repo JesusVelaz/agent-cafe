@@ -20,7 +20,7 @@ import {
   type TaskEventDTO,
 } from '@agent-cafe/shared';
 import type { Db } from '../db/client.js';
-import { toAgentDTO, toTaskDTO, toTaskEventDTO } from '../db/mappers.js';
+import { toAgentDTO, toProjectDTO, toTaskDTO, toTaskEventDTO } from '../db/mappers.js';
 import type { EventBus } from '../events/bus.js';
 import type { Task } from '../generated/prisma/client.js';
 import { runClaudeTask, type ApprovalAsk, type ClaudeRunContext } from '../providers/claude.js';
@@ -46,6 +46,12 @@ export interface EnqueueInput {
   target: EnqueueTarget;
   maxCostUsd?: number;
   retryOf?: string;
+  /** Defaults to the agent's last-used values. */
+  projectId?: string | null;
+  model?: string;
+  permission?: AgentPermission;
+  /** Continue the conversation of this earlier task (same agent and project). */
+  continueTaskId?: string;
 }
 
 export interface OrchestratorDeps {
@@ -124,18 +130,39 @@ export class Orchestrator {
     if (mode === 'off') {
       throw new OrchestratorError(`${agent.providerId} is switched off. Switch it to Live or Demo.`, 'conflict');
     }
-    if (mode === 'live') await this.assertLiveReady(agent);
+    const model = input.model?.trim() || agent.model;
+    const permission = input.permission ?? (agent.permission as AgentPermission);
+    const projectId = input.projectId === undefined ? agent.projectId : input.projectId;
+    if (projectId && !(await db.project.findUnique({ where: { id: projectId } }))) {
+      throw new OrchestratorError('That project no longer exists. Pick another one.', 'invalid');
+    }
+    let continueOf: string | null = null;
+    if (input.continueTaskId) {
+      const prev = await db.task.findUnique({ where: { id: input.continueTaskId } });
+      if (!prev || prev.agentId !== agent.id) throw new OrchestratorError('That conversation belongs to another agent.', 'invalid');
+      if (prev.projectId !== projectId) throw new OrchestratorError('Follow-ups stay in the same project. Start a new thread to switch.', 'invalid');
+      continueOf = prev.id;
+    }
+    if (mode === 'live') await this.assertLiveReady(agent, projectId);
     const row = await db.task.create({
       data: {
         agentId: agent.id,
         providerId: agent.providerId,
-        model: agent.model,
+        model,
         prompt,
         isMock: mode === 'mock',
         maxCostUsd: input.maxCostUsd ?? DEFAULTS.maxCostUsd,
         retryOf: input.retryOf ?? null,
+        projectId,
+        permission,
+        continueOf,
       },
     });
+    // The composer remembers each agent's last choices.
+    if (agent.model !== model || agent.permission !== permission || agent.projectId !== projectId) {
+      const updated = await db.agent.update({ where: { id: agent.id }, data: { model, permission, projectId } });
+      this.deps.bus.publish({ type: 'agent.upserted', agent: toAgentDTO(updated) });
+    }
     const task = this.publishTask(row);
     await this.record(row.id, row.agentId, { kind: 'status', status: 'queued' });
     this.pump(agent.id);
@@ -181,6 +208,10 @@ export class Orchestrator {
       target: { agentId: task.agentId },
       maxCostUsd: task.maxCostUsd,
       retryOf: task.id,
+      projectId: task.projectId,
+      model: task.model,
+      permission: task.permission as AgentPermission,
+      ...(task.continueOf ? { continueTaskId: task.continueOf } : {}),
     });
   }
 
@@ -204,21 +235,20 @@ export class Orchestrator {
       tasks: [...tasks.values()],
       lastEvents,
       providers: await providers.all(),
+      projects: (await db.project.findMany({ orderBy: { createdAt: 'asc' } })).map(toProjectDTO),
       settings: await settings.get(),
     };
   }
 
   // ── Routing ──────────────────────────────────────────────────────────────
 
-  private async assertLiveReady(agent: { name: string; providerId: string; workDir: string | null }) {
+  private async assertLiveReady(agent: { providerId: string }, projectId: string | null) {
     const providerId = agent.providerId as ProviderId;
     const c = await this.deps.providers.harnesses.ensure(providerId);
     if (c.state !== 'ready') {
       throw new OrchestratorError(c.message ?? `${HARNESS[providerId].name} isn't ready.`, 'conflict');
     }
-    if (!agent.workDir) {
-      throw new OrchestratorError(`Pick a folder for ${agent.name} to work in first (click the agent, then Setup).`, 'conflict');
-    }
+    if (!projectId) throw new OrchestratorError('Pick a project for this task first.', 'invalid');
   }
 
   private async route(target: EnqueueTarget) {
@@ -298,14 +328,19 @@ export class Orchestrator {
       await this.finish(task.id, { status: 'failed', failureKind: 'provider_error', error: `${providerId} was switched off.` });
       return;
     }
+    const project = task.projectId ? await db.project.findUnique({ where: { id: task.projectId } }) : null;
+    // A follow-up resumes the harness session of the task it continues (known once that task started).
+    const resume = task.continueOf
+      ? (await db.task.findUnique({ where: { id: task.continueOf }, select: { sessionId: true } }))?.sessionId ?? undefined
+      : undefined;
     if (mode === 'live') {
       const c = await providers.harnesses.ensure(providerId);
-      if (c.state !== 'ready' || !providers.harnesses.executable(providerId) || !agent.workDir || providerId !== 'anthropic') {
-        await this.finish(task.id, {
-          status: 'failed',
-          failureKind: 'signed_out',
-          error: !agent.workDir ? `${agent.name} has no folder to work in.` : c.message ?? `${HARNESS[providerId].name} isn't ready.`,
-        });
+      if (c.state !== 'ready' || !providers.harnesses.executable(providerId) || providerId !== 'anthropic') {
+        await this.finish(task.id, { status: 'failed', failureKind: 'signed_out', error: c.message ?? `${HARNESS[providerId].name} isn't ready.` });
+        return;
+      }
+      if (!project) {
+        await this.finish(task.id, { status: 'failed', failureKind: 'provider_error', error: 'This task has no project to work in.' });
         return;
       }
     }
@@ -347,8 +382,12 @@ export class Orchestrator {
         })
       : await (this.deps.runClaude ?? runClaudeTask)({
           task: { prompt: task.prompt, model: task.model },
-          agent: { systemPrompt: agent.systemPrompt, workDir: agent.workDir!, permission: agent.permission as AgentPermission },
+          agent: { systemPrompt: agent.systemPrompt, workDir: project!.path, permission: task.permission as AgentPermission },
           executable: providers.harnesses.executable(providerId)!,
+          ...(resume ? { resume } : {}),
+          onSession: (sessionId) => {
+            chain = chain.then(async () => this.publishTask(await db.task.update({ where: { id: task.id }, data: { sessionId } })));
+          },
           signal: ctrl.signal,
           emit,
           approve: (ask, signal) => this.askUser(task.id, ask, emit, signal),

@@ -12,11 +12,11 @@ interface CafeStore extends CafeData {
   selectedAgentId: string | null;
   /** When set, the inspector shows this task instead of the agent's latest. */
   selectedTaskId: string | null;
-  /** Focus mode: the café fills the screen and the board collapses. */
-  focus: boolean;
   /** Failures the user has acknowledged, hidden from "Needs you". */
   dismissed: ReadonlySet<string>;
-  setFocus(on: boolean): void;
+  /** The side panel is folded into a rail (remembered in this browser). */
+  panelCollapsed: boolean;
+  setPanelCollapsed(on: boolean): void;
   dismiss(taskId: string): void;
   apply(e: CafeEvent): void;
   setConnection(c: ConnectionState): void;
@@ -25,15 +25,34 @@ interface CafeStore extends CafeData {
   loadHistory(taskId: string, events: TaskEventDTO[]): void;
 }
 
+export function readFlag(key: string): boolean {
+  try {
+    return typeof localStorage !== 'undefined' && localStorage.getItem(key) === '1';
+  } catch {
+    return false;
+  }
+}
+function writeFlag(key: string, on: boolean) {
+  try {
+    localStorage.setItem(key, on ? '1' : '0');
+  } catch {
+    /* private mode: just not remembered */
+  }
+}
+
 export const useCafe = create<CafeStore>((set) => ({
   ...emptyData(),
   connection: 'connecting',
   catalog: MODEL_CATALOG,
   selectedAgentId: null,
   selectedTaskId: null,
-  focus: false,
   dismissed: new Set<string>(),
-  setFocus: (focus) => set({ focus }),
+  // Read after mount (see CafeApp) so the server render matches the first client render.
+  panelCollapsed: false,
+  setPanelCollapsed: (panelCollapsed) => {
+    writeFlag('cafe.panelCollapsed', panelCollapsed);
+    set({ panelCollapsed });
+  },
   dismiss: (taskId) => set((s) => ({ dismissed: new Set([...s.dismissed, taskId]) })),
   apply: (e) => set((s) => reduce(s, e)),
   setConnection: (connection) => set({ connection }),

@@ -1,4 +1,5 @@
 import type {
+  ProjectDTO,
   AgentDTO,
   AgentPermission,
   ApprovalDTO,
@@ -8,7 +9,7 @@ import type {
   TaskEventDTO,
   TaskStatus,
 } from '@agent-cafe/shared';
-import type { Agent, Task, TaskEvent } from '../generated/prisma/client.js';
+import type { Agent, Project, Task, TaskEvent } from '../generated/prisma/client.js';
 
 const iso = (d: Date | null): string | null => (d ? d.toISOString() : null);
 
@@ -20,7 +21,7 @@ export function toAgentDTO(a: Agent): AgentDTO {
     model: a.model,
     systemPrompt: a.systemPrompt,
     spriteSeed: a.spriteSeed,
-    workDir: a.workDir,
+    projectId: a.projectId,
     permission: a.permission as AgentPermission,
     createdAt: a.createdAt.toISOString(),
     archivedAt: iso(a.archivedAt),
@@ -45,11 +46,19 @@ export function toTaskDTO(t: Task): TaskDTO {
     error: t.error,
     failureKind: (t.failureKind as FailureKind | null) ?? null,
     retryOf: t.retryOf,
+    projectId: t.projectId,
+    permission: t.permission as AgentPermission,
+    continueOf: t.continueOf,
+    sessionId: t.sessionId,
     pendingApproval: t.pendingApproval ? (JSON.parse(t.pendingApproval) as ApprovalDTO) : null,
     createdAt: t.createdAt.toISOString(),
     startedAt: iso(t.startedAt),
     finishedAt: iso(t.finishedAt),
   };
+}
+
+export function toProjectDTO(p: Project): ProjectDTO {
+  return { id: p.id, name: p.name, path: p.path, createdAt: p.createdAt.toISOString() };
 }
 
 export function toTaskEventDTO(e: TaskEvent): TaskEventDTO {

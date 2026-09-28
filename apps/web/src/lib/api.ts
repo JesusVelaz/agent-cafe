@@ -2,6 +2,7 @@ import type {
   AgentDTO,
   AgentPermission,
   HarnessModelDTO,
+  ProjectDTO,
   ModelInfo,
   ProviderId,
   ProviderMode,
@@ -47,6 +48,9 @@ export interface CreateTaskInput {
   providerId?: ProviderId;
   model?: string;
   maxCostUsd?: number;
+  projectId?: string | null;
+  permission?: AgentPermission;
+  continueTaskId?: string;
 }
 
 export const api = {
@@ -65,7 +69,7 @@ export const api = {
     post<AgentDTO>('/api/agents', a),
   updateAgent: (
     id: string,
-    a: { name?: string; model?: string; systemPrompt?: string; workDir?: string | null; permission?: AgentPermission },
+    a: { name?: string; model?: string; systemPrompt?: string; projectId?: string | null; permission?: AgentPermission },
   ) => patch<AgentDTO>(`/api/agents/${id}`, a),
   answerApproval: (taskId: string, approvalId: string, decision: 'allow' | 'deny') =>
     post<TaskDTO>(`/api/tasks/${taskId}/approvals/${approvalId}`, { decision }),
@@ -73,4 +77,7 @@ export const api = {
   checkProvider: (id: ProviderId) => post<ProviderStatusDTO>(`/api/providers/${id}/check`),
   models: (id: ProviderId) => request<{ source: 'harness' | 'catalog'; models: HarnessModelDTO[] }>(`/api/providers/${id}/models`),
   updateSettings: (s: Partial<SettingsDTO>) => patch<SettingsDTO>('/api/settings', s),
+  addProject: (p: { path: string; name?: string }) => post<ProjectDTO>('/api/projects', p),
+  renameProject: (id: string, name: string) => patch<ProjectDTO>(`/api/projects/${id}`, { name }),
+  removeProject: (id: string) => request<void>(`/api/projects/${id}`, { method: 'DELETE' }),
 };

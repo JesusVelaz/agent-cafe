@@ -12,6 +12,9 @@ const createBody = z
     providerId: z.enum(PROVIDER_IDS).optional(),
     model: z.string().optional(),
     maxCostUsd: z.number().positive().max(100).optional(),
+    projectId: z.string().nullable().optional(),
+    permission: z.enum(['ask', 'acceptEdits']).optional(),
+    continueTaskId: z.string().optional(),
   })
   .refine((b) => b.agentId || b.providerId, { message: 'Pick an agent or a provider.' });
 
@@ -54,6 +57,10 @@ export const taskRoutes =
         prompt: b.prompt,
         target,
         ...(b.maxCostUsd ? { maxCostUsd: b.maxCostUsd } : {}),
+        ...(b.projectId !== undefined ? { projectId: b.projectId } : {}),
+        ...(b.model ? { model: b.model } : {}),
+        ...(b.permission ? { permission: b.permission } : {}),
+        ...(b.continueTaskId ? { continueTaskId: b.continueTaskId } : {}),
       });
       return reply.code(201).send(task);
     });

@@ -1,6 +1,7 @@
 import type {
   AgentDTO,
   ApprovalDTO,
+  ProjectDTO,
   ProviderStatusDTO,
   SettingsDTO,
   TaskDTO,
@@ -49,8 +50,11 @@ export type CafeEvent =
       /** Latest persisted event per active task, so the scene can place agents on reconnect. */
       lastEvents: Record<string, TaskEventDTO>;
       providers: ProviderStatusDTO[];
+      projects: ProjectDTO[];
       settings: SettingsDTO;
     }
+  | { type: 'project.upserted'; project: ProjectDTO }
+  | { type: 'project.removed'; projectId: string }
   | { type: 'agent.upserted'; agent: AgentDTO }
   | { type: 'task.upserted'; task: TaskDTO }
   | { type: 'task.event'; taskId: string; agentId: string; event: TaskEventDTO }
