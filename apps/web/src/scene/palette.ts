@@ -87,7 +87,7 @@ export function hash(n: number): number {
 }
 
 /** Agent look options, picked deterministically from spriteSeed. */
-export const HAIR = ['#3b2a20', '#6b3f22', '#d9b36a', '#2b2b2b', '#a8452c', '#e8e0d0', '#5a3b6b'];
+export const HAIR = ['#3b2a20', '#6b3f22', '#d9b36a', '#2b2b2b', '#a8452c', '#c49a6c', '#5a3b6b'];
 export const SKIN = ['#f2cfa7', '#e3b48a', '#c98e63', '#9c6644', '#6e4730'];
 export const SHIRT = ['#e76f51', '#4f9aa5', '#7fb069', '#d9a441', '#8a6fb8', '#e8b4b8', '#5d7fb8', '#c7d36f'];
 export const PANTS = ['#34405a', '#4a3a57', '#3d4a3a', '#55321c'];

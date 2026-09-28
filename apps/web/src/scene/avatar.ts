@@ -1,12 +1,13 @@
 /** Draws an agent's head and shoulders into a <canvas>, for UI avatars that match the scene. */
-import { accessorize, AGENT, agentLook, withApron } from './sprites';
+import type { ProviderId } from '@agent-cafe/shared';
+import { agentGrid, agentLook } from './sprites';
 
-export function drawAvatar(canvas: HTMLCanvasElement, seed: number, demo: boolean) {
-  const look = agentLook(seed);
-  let grid = accessorize(AGENT.stand, look.accessory, 'stand');
-  if (demo) grid = withApron(grid, 'stand');
-  grid = grid.slice(0, 14);
-  canvas.width = 12;
+export const outfitFor = (providerId: ProviderId) => (providerId === 'openai' ? 'barista' : 'office');
+
+export function drawAvatar(canvas: HTMLCanvasElement, seed: number, providerId: ProviderId) {
+  const look = agentLook(seed, outfitFor(providerId));
+  const grid = agentGrid('stand', look).slice(0, 14);
+  canvas.width = grid[0]!.length;
   canvas.height = grid.length;
   const ctx = canvas.getContext('2d')!;
   ctx.clearRect(0, 0, canvas.width, canvas.height);

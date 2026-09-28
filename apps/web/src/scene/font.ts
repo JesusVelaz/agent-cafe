@@ -27,6 +27,8 @@ export interface TextOpts {
   slope?: number;
   outline?: string;
   em?: boolean;
+  /** Pixel size multiplier (slope applies per scaled pixel). */
+  scale?: number;
 }
 
 export function text(R: Raster, s: string, x: number, y: number, col: string, opts: TextOpts = {}): void {
@@ -37,7 +39,8 @@ export function text(R: Raster, s: string, x: number, y: number, col: string, op
       for (let c = 0; c < 3; c++) if (row[c] === '#') pixels.push([i * 4 + c, r]);
     });
   });
-  const at = (px: number, py: number): [number, number] => [x + px, y + py + Math.round(px * slope)];
-  if (opts.outline) for (const [px, py] of pixels) { const p = at(px, py); R.rect(p[0] - 1, p[1] - 1, 3, 3, opts.outline); }
-  for (const [px, py] of pixels) { const p = at(px, py); R.px(p[0], p[1], col, 1, opts.em); }
+  const k = opts.scale ?? 1;
+  const at = (px: number, py: number): [number, number] => [x + px * k, y + py * k + Math.round(px * k * slope)];
+  if (opts.outline) for (const [px, py] of pixels) { const p = at(px, py); R.rect(p[0] - 1, p[1] - 1, k + 2, k + 2, opts.outline); }
+  for (const [px, py] of pixels) { const p = at(px, py); R.rect(p[0], p[1], k, k, col, 1, opts.em); }
 }

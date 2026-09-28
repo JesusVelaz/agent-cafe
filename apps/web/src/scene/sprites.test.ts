@@ -3,13 +3,12 @@ import { resolveTheme } from '@/lib/theme';
 import { grade } from './atmosphere';
 import { glyphRows } from './font';
 import { Raster } from './raster';
-import { accessorize, AGENT, AGENT_H, AGENT_W, agentLook, ICONS, withApron, type AgentFrame } from './sprites';
+import { AGENT_FRAMES, AGENT_H, AGENT_W, agentGrid, agentLook, ICONS, TREE } from './sprites';
 
 describe('sprite grids', () => {
-  const frames = Object.keys(AGENT) as AgentFrame[];
-  it.each(frames)('%s is 12×20, with every accessory and the apron', (f) => {
-    for (const acc of ['none', 'glasses', 'phones', 'beanie'] as const) {
-      const g = withApron(accessorize(AGENT[f], acc, f), f);
+  it.each(AGENT_FRAMES)('%s is 14×20 for every hairstyle, outfit and accessory', (f) => {
+    for (const hair of ['short', 'bob', 'long', 'ponytail'] as const) for (const outfit of ['barista', 'office'] as const) for (const acc of ['none', 'glasses', 'phones', 'visor', 'beanie'] as const) {
+      const g = agentGrid(f, { hair, outfit, accessory: acc });
       expect(g).toHaveLength(AGENT_H);
       for (const row of g) expect(row).toHaveLength(AGENT_W);
     }
@@ -19,7 +18,9 @@ describe('sprite grids', () => {
     for (const ch of 'ABCXYZ0189 .-!·$') { const rows = glyphRows(ch); expect(rows).toHaveLength(5); for (const r of rows) expect(r).toHaveLength(3); }
   });
   it('gives an agent the same look every time', () => {
-    expect(agentLook(41)).toEqual(agentLook(41));
+    expect(agentLook(41, 'office')).toEqual(agentLook(41, 'office'));
+    const rows = TREE.map((r) => r.length);
+    expect(new Set(rows).size).toBe(1);
   });
 });
 

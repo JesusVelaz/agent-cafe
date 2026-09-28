@@ -9,22 +9,25 @@
  * layer is enough.
  */
 import type { ProviderId, ProviderMode } from '@agent-cafe/shared';
-import { BUILDING, FLOORS, GROUND, UPSTAIRS, underUpperFloor, type Dir, type Prop } from '@/sim/layout';
+import { BUILDING, FLOORS, GROUND, OUTDOOR, UPSTAIRS, underUpperFloor, type Dir, type Prop } from '@/sim/layout';
 import type { Bubble, Pose } from '@/sim/world';
 import { backdrop, frontWeather, grade, type ThemeId } from './atmosphere';
 import { text, textW } from './font';
 import { iso } from './iso';
+import { drawStreet, rooftopSign } from './outdoor';
 import { K } from './palette';
 import {
-  baseSlab, bladeSign, chairBackFront, drawDecor, drawProp, floorTiles, railing, roofPlanter,
+  chairBackFront, drawDecor, drawProp, floorTiles, railing, roofPlanter,
   stringLights, wallCap, wallRun, type DrawCtx,
 } from './props';
 import type { Raster } from './raster';
-import { accessorize, AGENT, agentLook, ICON_PAL, ICONS, withApron, type AgentFrame, type IconName } from './sprites';
+import { outfitFor } from './avatar';
+import { agentGrid, agentLook, ICON_PAL, ICONS, type AgentFrame, type IconName } from './sprites';
 
-export const SCENE_W = 400;
-export const SCENE_H = 360;
-const ORIGIN = { x: 182, y: 162 };
+export const SCENE_W = 480;
+export const SCENE_H = 400;
+/** Screen position of the plot's back corner: centres the street plot in the frame. */
+const ORIGIN = { x: 222, y: 145 };
 
 export interface SceneAgent {
   id: string;
@@ -79,7 +82,7 @@ export function renderScene(R: Raster, agents: SceneAgent[], o: SceneOptions): A
   const TOP = H1 + H2;
 
   backdrop(R, o.theme, o.t, Boolean(o.transparent));
-  baseSlab(c, W, D);
+  drawStreet(c);
   floorTiles(c, W, D, 0, GROUND.floor);
 
   // Walls: full-height where the upper floor sits, one story where it steps back.
@@ -91,7 +94,6 @@ export function renderScene(R: Raster, agents: SceneAgent[], o: SceneOptions): A
   wallCap(c, 'L', UD, D, H1, -10);
   wallCap(c, 'R', 0, UW, TOP, H1);
   wallCap(c, 'L', 0, UD, TOP, H1);
-  bladeSign(c, W, 34, 'CAFE');
   for (const d of GROUND.decor) drawDecor(c, d);
   for (const d of UPSTAIRS.decor) drawDecor(c, d);
 
@@ -107,6 +109,7 @@ export function renderScene(R: Raster, agents: SceneAgent[], o: SceneOptions): A
     if (p.kind === 'chair' && (p.face === 'x-' || p.face === 'y-')) list.push({ d: cx + cy + 0.8, f: () => chairBackFront(c, cx, cy, z, p.face!) });
   };
   for (const p of GROUND.props) addProp(p, 0, H1, underUpperFloor({ x: p.x + p.w / 2, y: p.y + p.d / 2 }) ? under : front);
+  for (const p of OUTDOOR) addProp(p, 0, H1, front);
 
   // The upper floor: slab, boards, furniture, railings.
   up.push({
@@ -144,6 +147,7 @@ export function renderScene(R: Raster, agents: SceneAgent[], o: SceneOptions): A
     for (const it of L) it.f();
   }
   roofPlanter(c, UW + 0.5, 3.6, H1);
+  rooftopSign(c, 0.8, 8.2, TOP, 'AGENT CAFE');
   stringLights(c, [[UW, 0, H1 - 1], [11.5, 0, H1 - 1], [W, 0, H1 - 1]], 0);
   stringLights(c, [[0, UD, H1 - 1], [0, 8.5, H1 - 1], [0, D, H1 - 1]], 2);
   stringLights(c, [[0, 0, TOP - 2], [4.5, 0, TOP - 2], [UW, 0, TOP - 2]], 3);
@@ -200,17 +204,16 @@ function drawAgent(c: DrawCtx, a: SceneAgent, z: number, selected: boolean): Age
   const feet = P(a.x, a.y, z);
   const { frame, bob } = frameFor(a);
   const seated = frame === 'sit' || frame === 'typeA' || frame === 'typeB' || frame === 'sleep';
-  const look = agentLook(a.spriteSeed);
+  const look = agentLook(a.spriteSeed, outfitFor(a.providerId));
   if (selected) {
     // Brass diamond on the floor under the selected agent.
     R.poly([[feet[0], feet[1] - 4], [feet[0] + 9, feet[1]], [feet[0], feet[1] + 4], [feet[0] - 9, feet[1]]], K.brass, 0.45);
   }
   R.rect(feet[0] - 4, feet[1], 9, 1, '#000000', 0.22);
   R.rect(feet[0] - 3, feet[1] - 1, 7, 3, '#000000', 0.12);
-  let g = accessorize(AGENT[frame], look.accessory, frame);
-  if (a.demo) g = withApron(g, frame);
+  const g = agentGrid(frame, look);
   const top = feet[1] - g.length + 1 + (seated ? -2 : 0) + bob;
-  R.grid(g, look.palette, feet[0] - 6, top, a.face === 'y+' || a.face === 'x-');
+  R.grid(g, look.palette, feet[0] - 7, top, a.face === 'y+' || a.face === 'x-');
   const headY = top + (seated ? 3 : 0);
   return { id: a.id, x0: feet[0] - 7, y0: headY - 2, x1: feet[0] + 7, y1: feet[1] + 2, headX: feet[0], headY };
 }

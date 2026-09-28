@@ -9,6 +9,7 @@ import { text } from './font';
 import { box, disc, plane, planePt, quad, type Plane, type Proj } from './iso';
 import { hash, K, mix, shade } from './palette';
 import type { Raster } from './raster';
+import { drawOutdoor } from './outdoor';
 import { CAT_LOAF, CAT_PAL, CLOCK, CLOCK_PAL, PLANT_BIG, PLANT_HANG, PLANT_PAL, PLANT_SMALL } from './sprites';
 
 export interface DrawCtx {
@@ -325,9 +326,48 @@ function sofa(c: DrawCtx, p: Prop) {
 
 function armchair(c: DrawCtx, p: Prop, z: number) {
   const { R, P } = c;
-  box(R, P, p.x, p.y, z, 0.8, 0.8, 7, K.teal, { line: true });
-  box(R, P, p.x, p.y, z + 7, 0.18, 0.8, 8, shade(K.teal, -0.1), { line: true });
-  box(R, P, p.x + 0.18, p.y, z + 7, 0.62, 0.15, 5, shade(K.teal, -0.05), { line: true });
+  const col = '#c46b4e';
+  box(R, P, p.x, p.y, z, 0.8, 0.8, 7, col, { line: true });
+  if (p.face === 'x-') {
+    // Sitter faces the sofa: backrest on the far (+x) side, arms front and back.
+    box(R, P, p.x + 0.62, p.y, z + 7, 0.18, 0.8, 9, shade(col, -0.12), { line: true });
+    box(R, P, p.x, p.y, z + 7, 0.62, 0.14, 4, shade(col, -0.05), { line: true });
+    box(R, P, p.x, p.y + 0.66, z + 7, 0.62, 0.14, 4, shade(col, -0.05), { line: true });
+  } else {
+    box(R, P, p.x, p.y, z + 7, 0.18, 0.8, 9, shade(col, -0.12), { line: true });
+    box(R, P, p.x + 0.18, p.y, z + 7, 0.62, 0.14, 4, shade(col, -0.05), { line: true });
+  }
+}
+
+function coffeeTable(c: DrawCtx, p: Prop) {
+  const { R, P } = c;
+  box(R, P, p.x, p.y, 0, p.w, p.d, 7, K.woodD, { line: true, top: K.woodL });
+  box(R, P, p.x + 0.15, p.y + 0.2, 7, 0.3, 0.4, 2, '#e8dcc0'); // magazines
+  box(R, P, p.x + 0.2, p.y + 0.3, 9, 0.25, 0.3, 1, K.teal);
+  box(R, P, p.x + 0.55, p.y + 0.75, 7, 0.14, 0.14, 3, K.white, { line: K.metalD }); // mug
+  plantPot(c, p.x + 0.55, p.y + 0.3, 7, false);
+}
+
+function workBar(c: DrawCtx, p: Prop) {
+  const { R, P } = c;
+  box(R, P, p.x + 0.1, p.y + 0.1, 0, 0.1, p.d - 0.2, 14, K.woodD);
+  box(R, P, p.x + p.w - 0.2, p.y + 0.1, 0, 0.1, p.d - 0.2, 14, K.woodD);
+  box(R, P, p.x, p.y, 14, p.w, p.d, 2, K.woodL, { line: true, top: K.counterTop });
+  // Laptops open toward the stools on the front side.
+  for (const lx of [0.25, 1.2, 2.15]) {
+    box(R, P, p.x + lx, p.y + 0.2, 16, 0.5, 0.35, 1, K.metal);
+    box(R, P, p.x + lx, p.y + 0.18, 17, 0.5, 0.05, 7, K.metalD, { top: K.metal });
+    const g = P(p.x + lx + 0.1, p.y + 0.23, 22);
+    R.rect(g[0], g[1], 3, 2, K.screen, 1, true);
+  }
+  box(R, P, p.x + 2.75, p.y + 0.45, 16, 0.12, 0.12, 3, K.white);
+}
+
+function barStool(c: DrawCtx, x: number, y: number) {
+  const { R, P } = c;
+  box(R, P, x - 0.04, y - 0.04, 0, 0.08, 0.08, 11, K.ink);
+  disc(R, P, x, y, 0.2, 11, K.ink);
+  disc(R, P, x, y, 0.2, 12, '#c46b4e');
 }
 
 function cabinet(c: DrawCtx, p: Prop) {
@@ -371,6 +411,10 @@ export function drawProp(c: DrawCtx, p: Prop, z: number, ceiling: number): void 
     case 'coffeeStation': return coffeeStation(c, p.x, p.y, z);
     case 'floorLamp': return floorLamp(c, cx, cy, z);
     case 'stairwell': return stairwell(c, p, z);
+    case 'coffeeTable': return coffeeTable(c, p);
+    case 'workBar': return workBar(c, p);
+    case 'barStool': return barStool(c, cx, cy);
+    default: return drawOutdoor(c, p);
   }
 }
 
@@ -506,6 +550,24 @@ function bunting(c: DrawCtx, pl: Plane, a0: number, a1: number, v: number) {
   }
 }
 
+/** Cork board with pinned notes: where agents read and leave notes. */
+function noticeBoard(c: DrawCtx, pl: Plane, a0: number, a1: number, v0: number, v1: number) {
+  const { R, P } = c;
+  plane(R, P, pl, a0, a1, v0, v1, K.woodD);
+  plane(R, P, pl, a0 + 0.08, a1 - 0.08, v0 + 2, v1 - 2, '#c08b58');
+  const notes = ['#fbf6ec', '#f2c14e', '#f5a3c0', '#9ee6c9', '#fbf6ec', '#8fb8e8'];
+  let i = 0;
+  for (let u = a0 + 0.2; u < a1 - 0.25; u += 0.34) {
+    for (let v = v1 - 8; v > v0 + 3; v -= 8) {
+      const q = planePt(P, pl, u + (i % 2) * 0.05, v);
+      R.rect(q[0] - 2, q[1], 5, 5, notes[i % notes.length]!);
+      R.px(q[0], q[1], K.berry);
+      R.rect(q[0] - 1, q[1] + 2, 3, 1, '#9a8a74', 0.8);
+      i++;
+    }
+  }
+}
+
 export function drawDecor(c: DrawCtx, d: Decor): void {
   const { R, P } = c;
   const pl: Plane = d.wall === 'L' ? { x: 0 } : { y: 0 };
@@ -525,6 +587,7 @@ export function drawDecor(c: DrawCtx, d: Decor): void {
     case 'curtains': return curtains(c, pl, d.a0, d.a1, d.v0, d.v1);
     case 'bunting': return bunting(c, pl, d.a0, d.a1, d.v0);
     case 'wallPlant': { const q = planePt(P, pl, d.a0, d.v0); R.grid(PLANT_HANG, PLANT_PAL, q[0] - 3, q[1]); return; }
+    case 'noticeBoard': return noticeBoard(c, pl, d.a0, d.a1, d.v0, d.v1);
   }
 }
 
@@ -573,26 +636,6 @@ export function wallCap(c: DrawCtx, side: 'L' | 'R', a0: number, a1: number, z: 
   }
 }
 
-export function baseSlab(c: DrawCtx, W: number, D: number) {
-  const { R, P, theme } = c;
-  const TH = THEMES[theme];
-  R.poly([P(-0.6, -0.6, -16), P(W + 1.2, -0.6, -16), P(W + 1.2, D + 1.2, -16), P(-0.6, D + 1.2, -16)], TH.floorShadow, 0.55, true);
-  box(R, P, -0.28, -0.28, -10, W + 0.28, D + 0.28, 10, K.slab, { top: K.slabTop, line: '#2e1d14' });
-  if (theme === 'snow') {
-    const e1 = P(W, -0.28, 0), e2 = P(W, D, 0), e3 = P(-0.28, D, 0);
-    R.line(e1[0], e1[1], e2[0], e2[1], '#ffffff');
-    R.line(e2[0], e2[1], e3[0], e3[1], '#ffffff');
-  }
-  if (theme === 'rain') {
-    for (const [qx, qy] of [[W + 0.7, D * 0.55], [W * 0.4, D + 0.8]] as const) {
-      const pp = P(qx, qy, -16);
-      R.rect(pp[0] - 5, pp[1] - 1, 10, 1, '#9fb3c4', 0.5, true);
-      R.rect(pp[0] - 8, pp[1], 16, 1, '#9fb3c4', 0.5, true);
-      R.rect(pp[0] - 5, pp[1] + 1, 10, 1, '#9fb3c4', 0.5, true);
-    }
-  }
-}
-
 export function railing(c: DrawCtx, x0: number, y0: number, x1: number, y1: number, z: number) {
   const { R, P } = c;
   const len = Math.hypot(x1 - x0, y1 - y0), n = Math.max(1, Math.round(len / 0.7));
@@ -624,17 +667,6 @@ export function stringLights(c: DrawCtx, pts: Array<[number, number, number]>, p
       }
     }
   }
-}
-
-export function bladeSign(c: DrawCtx, x0: number, v: number, label: string) {
-  const { R, P } = c;
-  const pl: Plane = { y: 0 };
-  const a = planePt(P, pl, x0 - 0.1, v + 14), b = planePt(P, pl, x0 + 1.4, v + 14);
-  R.line(a[0], a[1], b[0], b[1], K.ink);
-  plane(R, P, pl, x0 + 0.1, x0 + 1.25, v, v + 12, K.woodD);
-  plane(R, P, pl, x0 + 0.16, x0 + 1.19, v + 1, v + 11, '#2f2622');
-  const s = planePt(P, pl, x0 + 0.3, v + 9);
-  text(R, label, s[0], s[1], K.amber, { slope: 0.5, em: true });
 }
 
 export function roofPlanter(c: DrawCtx, x0: number, w: number, z: number) {

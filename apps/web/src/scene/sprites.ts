@@ -2,74 +2,114 @@
  * Hand-authored pixel sprites as palette-indexed string grids ('.' = transparent).
  * Swapping in a real sprite sheet later only means replacing what these return.
  */
-import { HAIR, K, PANTS, SHIRT, SKIN, shade } from './palette';
+import { HAIR, K, SKIN, shade } from './palette';
 
 export type Grid = readonly string[];
 
-// ── Agents (12×20) ── o outline · h/H hair · s/S skin · e eyes · c/C shirt · p pants · b shoes
-const HEAD_F: Grid = ['...oooooo...', '..ohhhhhho..', '..ohhhhhho..', '..ohssssho..', '..osesseso..', '..osssssso..', '...oSSSSo...'];
-const HEAD_B: Grid = ['...oooooo...', '..ohhhhhho..', '..ohhhhhho..', '..ohhhhhho..', '..ohhhhhho..', '..oHhhhhHo..', '...oSSSSo...'];
-const HEAD_Z: Grid = ['...oooooo...', '..ohhhhhho..', '..ohhhhhho..', '..ohssssho..', '..osSssSso..', '..osssssso..', '...oSSSSo...'];
-const TORSO: Grid = ['..occsscco..', '.occcccccco.', 'oCccccccccCo', 'oCccccccccCo', 'oCccccccccCo', 'osCccccccCso', '.oCccccccCo.'];
-const TORSO_T: Grid = [...TORSO.slice(0, 5), 'oCsccccccsCo', TORSO[6]!];
-const LEGS: Grid = ['.oppppppppo.', '.opppoopppo.', '.opppoopppo.', '.opppoopppo.', '.obbboobbbo.', '.oooooooooo.'];
-const LEGS_A: Grid = ['.oppppppppo.', '.opppoopppo.', '.opppoopppo.', '.opppoobbbo.', '.obbbooooo..', '.ooooo......'];
-const LEGS_B: Grid = ['.oppppppppo.', '.opppoopppo.', '.opppoopppo.', '.obbboopppo.', '..ooooobbbo.', '......ooooo.'];
-const LEGS_SIT: Grid = ['.opppoopppo.', '.obbboobbbo.', '.oooooooooo.'];
-const BLANK3: Grid = ['............', '............', '............'];
+// ── Agents: chibi, 14×20 ─────────────────────────────────────────────────────
+// Big heads (10 rows), 2-pixel eyes, blush. Built from symmetric halves that are
+// mirrored, then layered: head (hairstyle) + body (outfit) + legs (pose) + accessory.
+//   o outline · h/H hair · s skin · E eyes · b blush · m mouth · w shirt · T tie
+//   c/C clothing · a/A apron · p pants · k shoes
+
+export const AGENT_W = 14;
+export const AGENT_H = 20;
+
+const sym = (half: string) => half + [...half].reverse().join('');
+const S = (halves: string[]) => halves.map(sym);
+
+const HEAD_TOP = S(['....ooo', '...ohhh', '..ohhhh', '.ohhhhh', '.ohHhhh']);
+
+export type HairStyle = 'short' | 'bob' | 'long' | 'ponytail';
+
+const FACE: Record<HairStyle, string[]> = {
+  short: S(['.ohhsss', '.ohsEEs', '.ohsEEs', '.ohsbsm', '..ossss']),
+  bob: S(['.ohhhss', '.ohsEEs', '.ohsEEs', '.ohsbsm', '.ohosss']),
+  long: S(['.ohhhss', '.ohsEEs', '.ohsEEs', '.ohsbsm', '.ohosss']),
+  ponytail: S(['.ohhsss', '.ohsEEs', '.ohsEEs', '.ohsbsm', '..ossss']),
+};
+const HEAD_BACK = [...HEAD_TOP, ...S(['.ohhhhh', '.ohhhhh', '.ohHhhh', '.ohhhhh', '..ohhhh'])];
+
+export type Outfit = 'barista' | 'office';
+
+const BODY: Record<Outfit, { front: string[]; typing: string[]; back: string[] }> = {
+  office: {
+    front: S(['...oCcw', '..oCccT', '.oCcccT', '.oCcccc', '.osCccc', '..oCccc', '..oCCCC']),
+    typing: S(['...oCcw', '..oCccT', '.oCcccT', '.oCcccc', '.oCcssc', '..oCccc', '..oCCCC']),
+    back: S(['...oCcc', '..oCccc', '.oCcccc', '.oCcccc', '.osCccc', '..oCccc', '..oCCCC']),
+  },
+  barista: {
+    front: S(['...oCcw', '..oCcaa', '.oCccaa', '.oCcaaa', '.osCaaa', '..oaaaa', '..oAAAA']),
+    typing: S(['...oCcw', '..oCcaa', '.oCccaa', '.oCcaaa', '.oCcsaa', '..oaaaa', '..oAAAA']),
+    back: S(['...oCcc', '..oCccc', '.oCcccc', '.oCaaaa', '.osCccc', '..oCccc', '..oCCCC']),
+  },
+};
+
+const LEGS = {
+  stand: S(['...oppo', '...okko', '...oooo']),
+  walkA: ['...oppooppo...', '...okko.oppo..', '...oooo.okko..'],
+  walkB: ['...oppooppo...', '..oppo.okko...', '..okko.oooo...'],
+  sit: S(['...okko']),
+};
+const BLANK2 = ['..............', '..............'];
 
 export type AgentFrame = 'stand' | 'walkA' | 'walkB' | 'sit' | 'typeA' | 'typeB' | 'sleep' | 'backStand' | 'backWalkA' | 'backWalkB';
+export const AGENT_FRAMES: AgentFrame[] = ['stand', 'walkA', 'walkB', 'sit', 'typeA', 'typeB', 'sleep', 'backStand', 'backWalkA', 'backWalkB'];
 
-export const AGENT: Record<AgentFrame, Grid> = {
-  stand: [...HEAD_F, ...TORSO, ...LEGS],
-  walkA: [...HEAD_F, ...TORSO, ...LEGS_A],
-  walkB: [...HEAD_F, ...TORSO, ...LEGS_B],
-  sit: [...BLANK3, ...HEAD_F, ...TORSO, ...LEGS_SIT],
-  typeA: [...BLANK3, ...HEAD_F, ...TORSO, ...LEGS_SIT],
-  typeB: [...BLANK3, ...HEAD_F, ...TORSO_T, ...LEGS_SIT],
-  sleep: [...BLANK3, ...HEAD_Z, ...TORSO, ...LEGS_SIT],
-  backStand: [...HEAD_B, ...TORSO, ...LEGS],
-  backWalkA: [...HEAD_B, ...TORSO, ...LEGS_A],
-  backWalkB: [...HEAD_B, ...TORSO, ...LEGS_B],
-};
-export const AGENT_W = 12;
-export const AGENT_H = 20;
 export const isSeatedFrame = (f: AgentFrame) => f === 'sit' || f === 'typeA' || f === 'typeB' || f === 'sleep';
 export const isBackFrame = (f: AgentFrame) => f.startsWith('back');
 
-export type Accessory = 'none' | 'glasses' | 'phones' | 'beanie';
+export type Accessory = 'none' | 'glasses' | 'phones' | 'visor' | 'beanie';
 
-/** Glasses, headphones or a beanie: small touches that make agents easy to tell apart. */
-export function accessorize(g: Grid, acc: Accessory, frame: AgentFrame): Grid {
-  if (acc === 'none') return g;
-  const off = isSeatedFrame(frame) ? 3 : 0;
-  const back = isBackFrame(frame);
-  const rows = g.slice();
-  const set = (r: number, c: number, ch: string) => {
-    const row = rows[r + off]!;
-    rows[r + off] = row.slice(0, c) + ch + row.slice(c + 1);
-  };
-  if (acc === 'glasses' && !back) { set(4, 3, 'G'); set(4, 5, 'G'); set(4, 6, 'G'); set(4, 8, 'G'); }
-  if (acc === 'phones') {
-    for (let c = 3; c <= 8; c++) set(0, c, 'Q');
-    set(1, 2, 'Q'); set(1, 9, 'Q');
-    for (const r of [2, 3, 4]) { set(r, 1, 'Q'); set(r, 10, 'Q'); }
-  }
-  if (acc === 'beanie') { rows[off] = '...oBBBBo...'; rows[off + 1] = '..oBBBBBBo..'; rows[off + 2] = '..oWWWWWWo..'; }
-  return rows;
+export interface AgentLook {
+  hair: HairStyle;
+  outfit: Outfit;
+  accessory: Accessory;
+  palette: Record<string, string>;
 }
 
-/** The cream DEMO apron worn by agents on a mock-mode floor (front views only). */
-export function withApron(g: Grid, frame: AgentFrame): Grid {
-  if (isBackFrame(frame)) return g;
-  const off = isSeatedFrame(frame) ? 3 : 0;
-  return g.map((row, r) => {
-    const tr = r - off - HEAD_F.length;
-    const chars = row.split('');
-    if (tr === 1 || tr === 2) { chars[4] = 'a'; chars[7] = 'a'; }
-    if (tr >= 3 && tr <= 6) for (let c = 4; c <= 7; c++) chars[c] = tr === 6 ? 'A' : 'a';
-    return chars.join('');
-  });
+function setPx(rows: string[], r: number, c: number, ch: string) {
+  const row = rows[r];
+  if (row === undefined || c < 0 || c >= row.length) return;
+  rows[r] = row.slice(0, c) + ch + row.slice(c + 1);
+}
+
+/** Compose one animation frame for a look. */
+export function agentGrid(frame: AgentFrame, look: Pick<AgentLook, 'hair' | 'outfit' | 'accessory'>): Grid {
+  const back = isBackFrame(frame);
+  const seated = isSeatedFrame(frame);
+  let head = back ? [...HEAD_BACK] : [...HEAD_TOP, ...FACE[look.hair]];
+  if (frame === 'sleep') head = head.map((r, i) => (i === 6 ? r.replaceAll('E', 's') : i === 7 ? r.replaceAll('E', 'o') : r));
+  const b = BODY[look.outfit];
+  const body = back ? b.back : frame === 'typeB' ? b.typing : b.front;
+  const legs = seated ? LEGS.sit : frame === 'walkA' || frame === 'backWalkA' ? LEGS.walkA : frame === 'walkB' || frame === 'backWalkB' ? LEGS.walkB : LEGS.stand;
+  const rows = [...head, ...body, ...legs];
+
+  // Hair that reaches past the head.
+  if (look.hair === 'long') {
+    if (back) for (let r = 10; r <= 13; r++) for (let c = 3; c <= 10; c++) setPx(rows, r, c, 'h');
+    else for (let r = 10; r <= 12; r++) { setPx(rows, r, 2, 'h'); setPx(rows, r, 11, 'h'); }
+  }
+  if (look.hair === 'ponytail') {
+    if (back) for (let r = 8; r <= 12; r++) { setPx(rows, r, 6, 'h'); setPx(rows, r, 7, 'H'); }
+    else { for (let r = 3; r <= 8; r++) setPx(rows, r, 13, r % 2 ? 'h' : 'H'); setPx(rows, 9, 13, 'o'); }
+  }
+  // Accessories.
+  if (look.accessory === 'glasses' && !back) {
+    // Light frames around the eyes (a solid dark bar reads as sunglasses).
+    for (const c of [4, 5, 8, 9]) setPx(rows, 5, c, 'G');
+    for (const r of [6, 7]) for (const c of [3, 6, 7, 10]) setPx(rows, r, c, 'G');
+  }
+  if (look.accessory === 'phones') {
+    for (let c = 4; c <= 9; c++) setPx(rows, 0, c, 'Q');
+    for (const r of [5, 6, 7]) { setPx(rows, r, 0, 'Q'); setPx(rows, r, 13, 'Q'); }
+    setPx(rows, 1, 3, 'Q'); setPx(rows, 1, 10, 'Q');
+  }
+  if (look.accessory === 'visor') for (let c = 1; c <= 12; c++) { setPx(rows, 3, c, 'V'); if (!back && c >= 3 && c <= 10) setPx(rows, 4, c, 'v'); }
+  if (look.accessory === 'beanie') {
+    rows[1] = sym('...oBBB'); rows[2] = sym('..oBBBB'); rows[3] = sym('.oBBBBB'); rows[4] = sym('.oWWWWW');
+  }
+  return seated ? [...BLANK2, ...rows] : rows;
 }
 
 function seeded(seed: number) {
@@ -82,22 +122,32 @@ function seeded(seed: number) {
   };
 }
 
-export interface AgentLook {
-  palette: Record<string, string>;
-  accessory: Accessory;
-}
+const JACKETS = ['#34405a', '#4a3a57', '#5b4a3c', '#2f4f4f', '#6b3f3f', '#3d4a3a'];
+const TIES = [K.berry, K.teal, K.amber, '#8a6fb8', '#e76f51'];
+const BARISTA_SHIRTS = ['#f3e6cc', '#e8b4b8', '#9fc4d6', '#f2d88a', '#c7d9b0'];
 
-/** Deterministic look from an agent's spriteSeed: an agent always looks the same. */
-export function agentLook(seed: number): AgentLook {
+/**
+ * Deterministic look from an agent's spriteSeed (an agent always looks the
+ * same). The outfit comes from the floor: café aprons downstairs (OpenAI),
+ * office wear upstairs (Anthropic).
+ */
+export function agentLook(seed: number, outfit: Outfit): AgentLook {
   const rnd = seeded(seed);
   const pick = <T,>(xs: readonly T[]) => xs[Math.floor(rnd() * xs.length)]!;
-  const hair = pick(HAIR), skin = pick(SKIN), shirt = pick(SHIRT), pants = pick(PANTS);
-  const accessory = pick(['none', 'glasses', 'phones', 'beanie'] as const);
+  const hair = pick(['short', 'bob', 'long', 'ponytail'] as const);
+  const hairCol = pick(HAIR);
+  const skin = pick(SKIN);
+  const accessory = outfit === 'barista' ? pick(['none', 'glasses', 'visor', 'none'] as const) : pick(['none', 'glasses', 'phones', 'beanie'] as const);
+  const cloth = outfit === 'office' ? pick(JACKETS) : pick(BARISTA_SHIRTS);
   return {
+    hair,
+    outfit,
     accessory,
     palette: {
-      o: K.ink, e: K.ink, b: '#3a2a22', G: '#2b1d17', Q: '#3a3f47', B: '#5d7fb8', W: '#dfe7ee', a: K.cream, A: K.creamShade,
-      h: hair, H: shade(hair, -0.25), s: skin, S: shade(skin, -0.18), c: shirt, C: shade(shirt, -0.22), p: pants,
+      o: K.ink, E: '#1e1512', G: '#a08672', Q: '#3a3f47', V: '#4a6b52', v: '#5f8568', B: pick(['#5d7fb8', '#b5536a', '#e0a84a']), W: '#efe7da',
+      h: hairCol, H: shade(hairCol, 0.22), s: skin, b: '#f09a8f', m: shade(skin, -0.35),
+      w: '#fbf6ec', T: pick(TIES), c: cloth, C: shade(cloth, -0.25),
+      a: '#4a6b52', A: '#3a5541', p: '#2e2c3a', k: '#3a2a22',
     },
   };
 }
@@ -124,3 +174,19 @@ export const PLANT_HANG: Grid = ['.lLlLl.', 'lLlLlLl', 'l.L.l.L', 'L.l...l', 'l.
 export const PLANT_PAL = { l: K.leaf, L: K.leafD };
 export const CLOCK: Grid = ['..kkkkk..', '.kwwwwwk.', 'kwwwkwwwk', 'kwwwkwwwk', 'kwwwkkwwk', 'kwwwwwwwk', '.kwwwwwk.', '..kkkkk..'];
 export const CLOCK_PAL = { k: K.ink, w: '#fbf6e8' };
+/** Tree canopy (15×13): L dark leaf · l leaf · g highlight. */
+export const TREE: Grid = [
+  '.....LLlL......',
+  '...LlllglLL....',
+  '..LlgllllllL...',
+  '.LllllglllllL..',
+  'LlglllllllgllL.',
+  'LllllLllllllllL',
+  '.LlllllllgllllL',
+  'LllglllllllLlL.',
+  '.LlllLlllllllL.',
+  '..LLlllllglLL..',
+  '...LLllllLL....',
+  '.....LLLLL.....',
+  '.......o.......',
+];

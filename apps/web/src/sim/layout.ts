@@ -27,6 +27,11 @@ export const BUILDING = {
   UD: 6,
   /** Upper story wall height (px). */
   H2: 48,
+  /** The street plot the building stands on (sidewalk, patio, road). */
+  PW: 20,
+  PD: 17,
+  /** The road runs along the front edge, from this y to PD. */
+  ROAD_Y: 14.2,
 } as const;
 
 export type Dir = 'x+' | 'x-' | 'y+' | 'y-';
@@ -68,7 +73,19 @@ export type PropKind =
   | 'desk'
   | 'coffeeStation'
   | 'floorLamp'
-  | 'stairwell';
+  | 'stairwell'
+  | 'coffeeTable'
+  | 'workBar'
+  | 'barStool'
+  // Outside
+  | 'lamppost'
+  | 'tree'
+  | 'bench'
+  | 'parasolTable'
+  | 'planterBox'
+  | 'bikeRack'
+  | 'hydrant'
+  | 'car';
 
 export interface Prop {
   kind: PropKind;
@@ -96,7 +113,8 @@ export type DecorKind =
   | 'kanban'
   | 'curtains'
   | 'bunting'
-  | 'wallPlant';
+  | 'wallPlant'
+  | 'noticeBoard';
 
 /** Something mounted on a wall: `a` runs along the wall in tiles, `v` is height in px. */
 export interface Decor {
@@ -135,7 +153,14 @@ const table = (x: number, y: number) => P('roundTable', x - 0.5, y - 0.5, 1, 1, 
 
 const { H1, UW, UD } = BUILDING;
 
-/** Ground floor (OpenAI): the café. A cosy nook under the upper floor, the counter in the open. */
+/**
+ * Ground floor (OpenAI): the café. Every piece has a job:
+ *  - counter + back bar (open-air, right): orders, register, pickup
+ *  - lounge under the upper floor (left): sofa, coffee table, two armchairs facing it
+ *  - laptop work bar under the pendant lamps (middle of the nook)
+ *  - bookshelf + notice board + clock on the left wall (files / notes / time)
+ *  - café tables out front, opening onto the sidewalk (no back door)
+ */
 export const GROUND: FloorLayout = {
   id: 'openai',
   title: 'GROUND FLOOR · OPENAI',
@@ -144,38 +169,36 @@ export const GROUND: FloorLayout = {
   d: BUILDING.D,
   floor: 'checker',
   props: [
-    // Café counter in the open-air part.
+    // Counter and back bar.
     P('backbar', 9.4, 0, 4.6, 0.6, true),
     P('cafeCounter', 9.6, 2.2, 4.2, 0.8, true),
-    // Left wall, front part.
+    P('bigPlant', 13.35, 4.1, 0.4, 0.4, true),
+    // Lounge.
+    P('rug', 0.7, 1.4, 4.4, 3.8, false),
+    P('sofa', 0, 1.7, 0.6, 3.2, false), // seats are on it; against the wall it never blocks a route
+    P('coffeeTable', 1.5, 2.6, 0.9, 1.3, true),
+    P('armchair', 3.3, 1.9, 0.8, 0.8, true, { face: 'x-' }),
+    P('armchair', 3.3, 3.9, 0.8, 0.8, true, { face: 'x-' }),
+    P('sideLamp', 0.15, 5.1, 0.4, 0.4, true),
+    // Laptop work bar with stools on the front side.
+    P('workBar', 5.7, 3.9, 3.0, 0.7, true),
+    P('barStool', 6.1, 4.9, 0.3, 0.3, false),
+    P('barStool', 7.05, 4.9, 0.3, 0.3, false),
+    P('barStool', 8.0, 4.9, 0.3, 0.3, false),
+    P('pendant', 6.2, 4.25, 0, 0, false),
+    P('pendant', 8.2, 4.25, 0, 0, false),
+    P('hangingPlant', 2.2, UD - 0.1, 0, 0, false),
+    P('hangingPlant', 4.8, UD - 0.1, 0, 0, false),
+    // Left wall, front: files and notes corner.
     P('bookshelf', 0, 6.2, 0.45, 1.3, true, { face: 'x+', opts: { h: 44, plantOnTop: true } }),
-    P('windowBar', 0, 7.8, 0.55, 1.4, true),
-    P('stool', 0.85, 7.85, 0.3, 0.3, false),
-    P('stool', 0.85, 8.85, 0.3, 0.3, false),
-    P('coatRack', 0.3, 9.3, 0.3, 0.3, true),
-    P('umbrellas', 0.36, 10.46, 0.28, 0.28, true),
-    P('doormat', 0.05, 9.75, 0.9, 1.0, false),
-    P('aframe', 2.9, 10.0, 0.1, 0.7, true),
-    // Seating out front.
-    table(4.1, 9.0), chair(3.2, 9.0, 'x+'), chair(5.0, 9.0, 'x-'),
-    table(8.0, 7.6), chair(7.1, 7.6, 'x+'), chair(8.9, 7.6, 'x-'),
-    table(11.6, 8.2), chair(10.7, 8.2, 'x+'), chair(12.5, 8.2, 'x-'),
-    P('bigPlant', 13.2, 10.2, 0.4, 0.4, true),
-    P('bigPlant', 13.3, 6.1, 0.4, 0.4, true),
-    P('fan', 13.15, 9.15, 0.3, 0.3, true),
-    // The nook under the upper floor: low things only.
-    P('rug', 1.0, 1.2, 5.6, 3.8, false),
-    P('sofa', 0, 1.4, 0.6, 3.6, false), // seats are on it; against the wall it never blocks a route
-    P('sideLamp', 0.15, 5.25, 0.4, 0.4, true),
-    table(1.6, 2.4),
-    table(1.6, 4.2),
-    P('armchair', 3.9, 2.8, 0.8, 0.8, true),
-    P('cabinet', 7.8, 4.9, 0.8, 0.7, true),
-    P('pendant', 2.4, 3.2, 0, 0, false),
-    P('pendant', 5.4, 3.2, 0, 0, false),
-    P('hangingPlant', 1.2, UD - 0.1, 0, 0, false),
-    P('hangingPlant', 4.0, UD - 0.1, 0, 0, false),
-    P('hangingPlant', 6.8, UD - 0.1, 0, 0, false),
+    P('coatRack', 0.3, 10.2, 0.3, 0.3, true),
+    P('umbrellas', 0.36, 9.6, 0.28, 0.28, true),
+    // Café tables out front.
+    table(3.6, 8.7), chair(2.7, 8.7, 'x+'), chair(4.5, 8.7, 'x-'),
+    table(7.4, 8.9), chair(6.5, 8.9, 'x+'), chair(8.3, 8.9, 'x-'),
+    table(11.3, 8.1), chair(10.4, 8.1, 'x+'), chair(12.2, 8.1, 'x-'),
+    P('bigPlant', 13.35, 10.35, 0.4, 0.4, true),
+    P('fan', 12.9, 5.8, 0.3, 0.3, true),
   ],
   decor: [
     { kind: 'menu', wall: 'R', a0: 9.6, a1: 12.2, v0: 26, v1: 50 },
@@ -183,29 +206,54 @@ export const GROUND: FloorLayout = {
     { kind: 'mugShelf', wall: 'R', a0: 12.4, a1: 13.9, v0: 30, v1: 30 },
     { kind: 'sconce', wall: 'R', a0: 13.2, a1: 13.2, v0: 52, v1: 52 },
     { kind: 'window', wall: 'R', a0: 1.2, a1: 4.6, v0: 24, v1: 50 },
-    { kind: 'window', wall: 'L', a0: 7.7, a1: 9.3, v0: 18, v1: 46 },
-    { kind: 'door', wall: 'L', a0: 9.7, a1: 10.8, v0: 0, v1: 38 },
-    { kind: 'framed', wall: 'L', a0: 7.9, a1: 8.5, v0: 50, v1: 58, color: '#4f9aa5' },
-    { kind: 'framed', wall: 'L', a0: 8.7, a1: 9.2, v0: 51, v1: 57, color: '#f2c14e' },
-    { kind: 'sconce', wall: 'L', a0: 9.5, a1: 9.5, v0: 44, v1: 44 },
-    { kind: 'clock', wall: 'L', a0: 6.9, a1: 6.9, v0: 54, v1: 54 },
-    { kind: 'framed', wall: 'L', a0: 2.0, a1: 2.8, v0: 20, v1: 32, color: '#e76f51' },
-    { kind: 'framed', wall: 'L', a0: 3.1, a1: 3.7, v0: 22, v1: 30, color: '#4f9aa5' },
+    { kind: 'framed', wall: 'R', a0: 5.6, a1: 6.6, v0: 30, v1: 44, color: '#e76f51' },
+    { kind: 'framed', wall: 'R', a0: 7.0, a1: 7.7, v0: 32, v1: 42, color: '#4f9aa5' },
+    { kind: 'framed', wall: 'L', a0: 2.0, a1: 2.8, v0: 22, v1: 34, color: '#f2c14e' },
+    { kind: 'framed', wall: 'L', a0: 3.1, a1: 3.7, v0: 24, v1: 32, color: '#4f9aa5' },
+    { kind: 'clock', wall: 'L', a0: 6.85, a1: 6.85, v0: 54, v1: 54 },
+    { kind: 'noticeBoard', wall: 'L', a0: 7.8, a1: 9.3, v0: 24, v1: 46 },
+    { kind: 'window', wall: 'L', a0: 9.6, a1: 10.8, v0: 20, v1: 48 },
+    { kind: 'sconce', wall: 'L', a0: 5.6, a1: 5.6, v0: 44, v1: 44 },
   ],
   stations: {
-    register: [S(13.0, 3.6, 'y-'), S(12.4, 3.6, 'y-')],
-    pickup: [S(10.2, 3.6, 'y-'), S(10.8, 3.6, 'y-')],
-    clock: [S(1.1, 6.35, 'x-'), S(1.6, 6.6, 'x-')],
-    bookcase: [S(1.0, 6.9, 'x-'), S(1.1, 7.4, 'x-')],
-    archive: [S(8.2, 6.2, 'y-'), S(7.6, 6.2, 'y-')],
+    register: [S(13.0, 3.65, 'y-'), S(12.4, 3.65, 'y-')],
+    pickup: [S(10.3, 3.65, 'y-'), S(10.9, 3.65, 'y-')],
+    clock: [S(1.1, 6.35, 'x-'), S(1.5, 6.9, 'x-')],
+    bookcase: [S(1.0, 6.9, 'x-'), S(1.05, 7.35, 'x-')],
+    archive: [S(1.0, 8.5, 'x-'), S(1.05, 9.0, 'x-')],
   },
   seats: [
-    S(3.2, 9.0, 'x+'), S(7.1, 7.6, 'x+'), S(10.7, 8.2, 'x+'),
-    S(5.0, 9.0, 'x-'), S(8.9, 7.6, 'x-'), S(12.5, 8.2, 'x-'),
-    S(0.35, 2.1, 'x+'), S(0.35, 4.3, 'x+'),
+    S(2.7, 8.7, 'x+'), S(6.5, 8.9, 'x+'), S(10.4, 8.1, 'x+'),
+    S(4.5, 8.7, 'x-'), S(8.3, 8.9, 'x-'), S(12.2, 8.1, 'x-'),
+    S(0.35, 2.4, 'x+'), S(0.35, 4.2, 'x+'),
+    S(6.25, 5.05, 'y-'), S(7.2, 5.05, 'y-'),
   ],
-  entrance: S(1.2, 10.2, 'x+'),
+  entrance: S(5.0, 10.6, 'y-'),
 };
+
+/**
+ * The street around the building: sidewalk, a patio on the right, the road in front.
+ * Decoration only (agents stay indoors). Tall things stay off the sight lines into
+ * the café: along the patio's far side and the plot's outer corners.
+ */
+export const OUTDOOR: Prop[] = [
+  P('lamppost', 0.55, 13.55, 0.2, 0.2, true),
+  P('lamppost', 9.9, 13.75, 0.2, 0.2, true),
+  P('lamppost', 19.45, 13.75, 0.2, 0.2, true),
+  P('lamppost', 19.45, 3.0, 0.2, 0.2, true),
+  P('tree', 18.9, 0.5, 0.6, 0.6, true),
+  P('tree', 1.9, 13.1, 0.6, 0.6, true),
+  P('bench', 5.6, 12.9, 1.6, 0.5, true),
+  P('aframe', 13.2, 11.7, 0.1, 0.7, true),
+  P('planterBox', 11.2, 12.9, 1.4, 0.5, true),
+  P('planterBox', 7.6, 12.9, 1.4, 0.5, true),
+  P('parasolTable', 16.4, 2.6, 1, 1, true),
+  P('parasolTable', 16.4, 6.4, 1, 1, true),
+  P('planterBox', 14.9, 10.2, 0.5, 1.4, true),
+  P('bikeRack', 16.4, 12.7, 1.6, 0.4, true),
+  P('hydrant', 18.6, 13.55, 0.3, 0.3, true),
+  P('car', 2.6, 14.9, 2.6, 1.3, true),
+];
 
 /** Upper floor (Anthropic): the loft office. Stairwell opening at the back-left. */
 export const UPSTAIRS: FloorLayout = {

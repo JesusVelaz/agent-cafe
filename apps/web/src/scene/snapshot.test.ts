@@ -54,3 +54,22 @@ describe('scene snapshot', () => {
     frames.forEach((buf, i) => writeFileSync(process.env.SNAP!.replace('.png', `-${themes[i]}.png`), buf));
   });
 });
+
+describe('character sheet', () => {
+  it.skipIf(!process.env.SHEET)('renders every look', async () => {
+    const { agentGrid, agentLook, AGENT_W, AGENT_H } = await import('./sprites');
+    const frames = ['stand', 'walkA', 'sit', 'typeB', 'sleep', 'backStand'] as const;
+    const seeds = [11, 23, 37, 41, 53, 67, 5, 99];
+    const R = new Raster((AGENT_W + 4) * frames.length * 2, (AGENT_H + 4) * seeds.length / 2);
+    R.rect(0, 0, R.w, R.h, '#efe3cf');
+    seeds.forEach((seed, i) => {
+      const outfit = i % 2 ? 'office' : 'barista';
+      const look = agentLook(seed, outfit);
+      frames.forEach((f, j) => {
+        const col = (i % 2) * frames.length + j, row = Math.floor(i / 2);
+        R.grid(agentGrid(f, look), look.palette, 2 + col * (AGENT_W + 4), 2 + row * (AGENT_H + 4));
+      });
+    });
+    writeFileSync(process.env.SHEET!, png(R, 6));
+  });
+});

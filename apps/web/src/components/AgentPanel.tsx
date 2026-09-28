@@ -56,7 +56,7 @@ export function AgentDetail({ agentId, onClose }: { agentId: string; onClose: ()
   return (
     <div className="flex flex-col">
       <header className="flex items-start gap-3 border-b-2 border-slate-line p-4">
-        <Avatar seed={agent.spriteSeed} demo={(task ?? active)?.isMock ?? state.providers[agent.providerId]?.mode === 'mock'} scale={3} />
+        <Avatar seed={agent.spriteSeed} providerId={agent.providerId} scale={3} />
         <div className="min-w-0 flex-1">
           <h2 className="font-display text-3xl leading-none">{agent.name}</h2>
           <p className="mt-1 truncate text-xs text-chalk-dim">
