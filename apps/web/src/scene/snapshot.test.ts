@@ -5,12 +5,24 @@
 import { writeFileSync } from 'node:fs';
 import zlib from 'node:zlib';
 import { describe, expect, it } from 'vitest';
+import type { CatView } from '@/sim/cats';
 import { FLOORS } from '@/sim/layout';
 import type { ThemeId } from './atmosphere';
 import { renderScene, SCENE_H, SCENE_W, type SceneAgent } from './building';
 import { Raster } from './raster';
 
+/** CROP=x,y,w,h (scene px) cuts a region out before scaling up. */
+function crop(R: Raster): Raster {
+  const c = process.env.CROP?.split(',').map(Number);
+  if (!c || c.length !== 4) return R;
+  const [x0, y0, w, h] = c as [number, number, number, number];
+  const out = new Raster(w, h);
+  for (let y = 0; y < h; y++) out.d.set(R.d.subarray(((y0 + y) * R.w + x0) * 4, ((y0 + y) * R.w + x0 + w) * 4), y * w * 4);
+  return out;
+}
+
 function png(R: Raster, scale: number): Buffer {
+  R = crop(R);
   const W = R.w * scale, H = R.h * scale;
   const raw = Buffer.alloc((W * 4 + 1) * H);
   for (let y = 0; y < H; y++) {
@@ -42,12 +54,18 @@ const crew: SceneAgent[] = [
   { id: 'scone', name: 'Scone', providerId: 'anthropic', ...U.stations.archive[0]!, pose: 'work', t: 1, bubble: { kind: 'zzz' }, spriteSeed: 67, demo: false },
 ];
 
+const cats: CatView[] = [
+  { id: 'ink', floor: 'openai', fur: 0, ...G.catSpots[0]!, z: 7, face: 'y+', pose: 'sleep', t: 1 },
+  { id: 'marmalade', floor: 'openai', fur: 1, x: 7.8, y: 7.2, z: 0, face: 'x+', pose: 'walk', t: 0.1 },
+  { id: 'pebble', floor: 'anthropic', fur: 2, ...U.catSpots[0]!, z: 0, face: 'x+', pose: 'loaf', t: 1 },
+];
+
 describe('scene snapshot', () => {
   it.skipIf(!process.env.SNAP)('renders the café', () => {
     const themes = (process.env.THEME ?? 'day').split(',') as ThemeId[];
     const R = new Raster(SCENE_W, SCENE_H);
     const frames = themes.map((theme) => {
-      const hits = renderScene(R, crew, { theme, t: 3, selectedId: 'earl', floors: { openai: { mode: 'mock', closed: false }, anthropic: { mode: 'live', closed: false } } });
+      const hits = renderScene(R, crew, { theme, t: 3, selectedId: 'earl', floors: { openai: { mode: 'mock', closed: false }, anthropic: { mode: 'live', closed: false } }, cats });
       expect(hits).toHaveLength(crew.length);
       return png(R, 2);
     });
@@ -71,5 +89,16 @@ describe('character sheet', () => {
       });
     });
     writeFileSync(process.env.SHEET!, png(R, 6));
+  });
+});
+
+describe('cat sheet', () => {
+  it.skipIf(!process.env.CATS)('renders every cat frame', async () => {
+    const { CAT, CAT_FURS } = await import('./sprites');
+    const frames = Object.keys(CAT) as Array<keyof typeof CAT>;
+    const R = new Raster(16 * frames.length, 14 * CAT_FURS.length);
+    R.rect(0, 0, R.w, R.h, '#efe3cf');
+    CAT_FURS.forEach((pal, i) => frames.forEach((f, j) => R.grid(CAT[f], pal, 1 + j * 16, 2 + i * 14)));
+    writeFileSync(process.env.CATS!, png(R, 8));
   });
 });

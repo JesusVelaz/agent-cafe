@@ -167,8 +167,23 @@ export type IconName = keyof typeof ICONS;
 export const ICON_PAL = { k: K.ink, w: '#ffffff', b: '#5d7fb8', y: K.amber, g: '#2f9e5f', r: '#d9443a' };
 
 // ── Props ──
-export const CAT_LOAF: Grid = ['..o....o..', '.oko..oko.', 'okkkkkkkko', 'okykkkykkoo', 'okkkkkkkkko', '.ooooooooo.'];
-export const CAT_PAL = { o: K.ink, k: '#2a2a33', y: '#f2c14e' };
+// ── Cats: side-on, facing screen-right (flip for left) ──
+//   o outline · k fur · d darker fur (stripes, tail) · w white · y eyes · n nose
+export const CAT = {
+  walkA: ['..o......o.o.', '.oko....okkko', '.oko....okkyo', '..oooooookkwo', '..okdkdkkkwo.', '..okkkkkkkko.', '...d.d..d.d..', '...o.o..o.o..'],
+  walkB: ['.o.......o.o.', 'oko.....okkko', '.oko....okkyo', '..oooooookkwo', '..okdkdkkkwo.', '..okkkkkkkko.', '...dd....dd..', '...oo....oo..'],
+  sit: ['.....o..o.', '....okkkko', '....okykyo', '....okknko', '...ookwwo.', '...okkwwo.', '..okkkkwo.', '.okdkkkko.', 'okddkwkwo.', '.oooooooo.'],
+  loaf: ['.......o..o.', '..oooookkkko', '.okdkdkkykyo', 'okkkkkkkknko', 'okkkkkkkwwwo', '.oooooooooo.'],
+  sleep: ['..oooo.o.o.', '.okkdkokkko', 'okkkdkkdkwo', 'okddddddkko', '.ooooooooo.'],
+} as const satisfies Record<string, Grid>;
+export type CatFrame = keyof typeof CAT;
+
+/** Ink (tuxedo), Marmalade (ginger tabby), Pebble (grey). */
+export const CAT_FURS: ReadonlyArray<Record<string, string>> = [
+  { o: K.ink, k: '#3a3a46', d: '#26262f', w: '#ece6da', y: '#f2c14e', n: '#d98a8a' },
+  { o: K.ink, k: '#e3924a', d: '#bf6d2e', w: '#f7e6c8', y: '#6aa35a', n: '#d9706a' },
+  { o: K.ink, k: '#9aa0aa', d: '#767c87', w: '#e8eaee', y: '#f2c14e', n: '#d98a8a' },
+];
 export const PLANT_BIG: Grid = ['....L.l....', '..lLl.lLl..', '.lLllLllLl.', 'lLl.lLl.lLl', '.lLlllLllL.', 'lLllL.lLlLl', '.llLlLllLl.', '..lLlllLl..', '...lLlLl...', '....lLl....', '.....L.....'];
 export const PLANT_SMALL: Grid = ['.l.L.', 'lLlLl', '.lLl.', '..L..'];
 export const PLANT_HANG: Grid = ['.lLlLl.', 'lLlLlLl', 'l.L.l.L', 'L.l...l', 'l.....L', 'L......', 'l......'];

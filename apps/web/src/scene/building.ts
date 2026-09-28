@@ -10,6 +10,7 @@
  */
 import type { ProviderId, ProviderMode } from '@agent-cafe/shared';
 import { BUILDING, FLOORS, GROUND, OUTDOOR, UPSTAIRS, underUpperFloor, type Dir, type Prop } from '@/sim/layout';
+import type { CatView } from '@/sim/cats';
 import type { Bubble, Pose } from '@/sim/world';
 import { backdrop, frontWeather, grade, type ThemeId } from './atmosphere';
 import { text, textW } from './font';
@@ -22,7 +23,7 @@ import {
 } from './props';
 import type { Raster } from './raster';
 import { outfitFor } from './avatar';
-import { agentGrid, agentLook, ICON_PAL, ICONS, type AgentFrame, type IconName } from './sprites';
+import { agentGrid, agentLook, CAT, CAT_FURS, ICON_PAL, ICONS, type AgentFrame, type CatFrame, type IconName } from './sprites';
 
 export const SCENE_W = 480;
 export const SCENE_H = 400;
@@ -52,6 +53,8 @@ export interface SceneOptions {
   labels?: boolean;
   selectedId?: string | null;
   floors?: Partial<Record<ProviderId, { mode: ProviderMode; closed: boolean }>>;
+  /** The café cats (ambience only; not hit-tested). */
+  cats?: CatView[];
 }
 
 export interface AgentHit {
@@ -142,6 +145,12 @@ export function renderScene(R: Raster, agents: SceneAgent[], o: SceneOptions): A
     });
   }
 
+  for (const cat of o.cats ?? []) {
+    const z = FLOORS[cat.floor].z;
+    const list = z > 0 ? up : underUpperFloor(cat) ? under : front;
+    list.push({ d: cat.x + cat.y + 0.3, f: () => drawCat(c, cat, z) });
+  }
+
   for (const L of [under, up, front]) {
     L.sort((p, q) => p.d - q.d);
     for (const it of L) it.f();
@@ -215,6 +224,22 @@ function drawAgent(c: DrawCtx, a: SceneAgent, z: number, selected: boolean): Age
   R.grid(g, look.palette, feet[0] - 7, top, a.face === 'y+' || a.face === 'x-');
   const headY = top + (seated ? 3 : 0);
   return { id: a.id, x0: feet[0] - 7, y0: headY - 2, x1: feet[0] + 7, y1: feet[1] + 2, headX: feet[0], headY };
+}
+
+function drawCat(c: DrawCtx, cat: CatView, z: number) {
+  const { R, P } = c;
+  const feet = P(cat.x, cat.y, z + cat.z);
+  const step = Math.floor(cat.t * 6) % 2;
+  const frame: CatFrame = cat.pose === 'walk' ? (step ? 'walkB' : 'walkA') : cat.pose;
+  const bob = cat.pose === 'walk' && !step ? -1 : 0;
+  const g = CAT[frame];
+  // Slow blinks while awake and still.
+  const blink = cat.pose !== 'walk' && cat.pose !== 'sleep' && cat.t % 4 > 3.75;
+  const fur = CAT_FURS[cat.fur % CAT_FURS.length]!;
+  const pal = blink ? { ...fur, y: fur.k! } : fur;
+  const w = g[0]!.length;
+  R.rect(feet[0] - Math.floor(w / 2), feet[1], w, 1, '#000000', 0.18);
+  R.grid(g, pal, feet[0] - Math.floor(w / 2), feet[1] - g.length + 1 + bob, cat.face === 'x-' || cat.face === 'y+');
 }
 
 function drawBubble(R: Raster, hit: AgentHit, a: SceneAgent, t: number) {

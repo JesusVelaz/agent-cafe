@@ -7,6 +7,7 @@
  * embedded previews; it skips frames while the tab is hidden.
  */
 import type { ProviderId, ProviderMode } from '@agent-cafe/shared';
+import { Cats } from '@/sim/cats';
 import { World } from '@/sim/world';
 import type { CafeData } from '@/store/reduce';
 import type { ThemeId } from './atmosphere';
@@ -39,6 +40,7 @@ export class CafeRenderer {
   private ctx: CanvasRenderingContext2D | null = null;
   private readonly raster = new Raster(SCENE_W, SCENE_H);
   private readonly world = new World();
+  private readonly cats = new Cats();
   private timer: ReturnType<typeof setTimeout> | null = null;
   private last = 0;
   private readonly t0 = Date.now();
@@ -90,6 +92,7 @@ export class CafeRenderer {
     this.last = now;
     const s = this.hooks.read();
     this.world.update(dt, s.data, Date.now());
+    this.cats.update(dt);
 
     const agents: SceneAgent[] = this.world.agents.map((v) => ({
       id: v.id, name: v.name, providerId: v.providerId, x: v.x, y: v.y, face: v.face,
@@ -105,6 +108,7 @@ export class CafeRenderer {
       labels: s.labels,
       selectedId: s.selectedAgentId,
       floors,
+      cats: this.cats.views,
     });
     this.ctx?.putImageData(new ImageData(this.raster.d, SCENE_W, SCENE_H), 0, 0);
     this.hooks.frame?.(this.hits);

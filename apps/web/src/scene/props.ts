@@ -10,7 +10,7 @@ import { box, disc, plane, planePt, quad, type Plane, type Proj } from './iso';
 import { hash, K, mix, shade } from './palette';
 import type { Raster } from './raster';
 import { drawOutdoor } from './outdoor';
-import { CAT_LOAF, CAT_PAL, CLOCK, CLOCK_PAL, PLANT_BIG, PLANT_HANG, PLANT_PAL, PLANT_SMALL } from './sprites';
+import { CLOCK, CLOCK_PAL, PLANT_BIG, PLANT_HANG, PLANT_PAL, PLANT_SMALL } from './sprites';
 
 export interface DrawCtx {
   R: Raster;
@@ -231,16 +231,6 @@ function umbrellas(c: DrawCtx, x: number, y: number) {
   R.poly([[b[0] + 1, b[1] - 10], [b[0] + 5, b[1] - 14], [b[0] + 5, b[1] - 6]], K.teal);
 }
 
-function standFan(c: DrawCtx, x: number, y: number) {
-  const { R, P, t } = c;
-  box(R, P, x - 0.15, y - 0.15, 0, 0.3, 0.3, 1, K.metalD);
-  box(R, P, x - 0.03, y - 0.03, 0, 0.06, 0.06, 20, K.metalD);
-  const q = P(x, y, 26);
-  R.rect(q[0] - 4, q[1] - 4, 9, 9, K.metal);
-  R.rect(q[0] - 3, q[1] - 3, 7, 7, '#dfe4e8');
-  if (Math.floor(t * 12) % 2) { R.line(q[0] - 3, q[1], q[0] + 3, q[1], K.metalD); R.line(q[0], q[1] - 3, q[0], q[1] + 3, K.metalD); }
-  else { R.line(q[0] - 2, q[1] - 2, q[0] + 2, q[1] + 2, K.metalD); R.line(q[0] - 2, q[1] + 2, q[0] + 2, q[1] - 2, K.metalD); }
-}
 
 function aframe(c: DrawCtx, x: number, y: number) {
   const { R, P } = c;
@@ -320,8 +310,6 @@ function sofa(c: DrawCtx, p: Prop) {
   box(R, P, p.x, p.y, 7, 0.2, p.d, 8, shade(K.teal, -0.1), { line: true });
   box(R, P, p.x + 0.2, p.y + 0.3, 7, 0.3, 0.45, 4, K.amber, { line: true });
   box(R, P, p.x + 0.2, p.y + p.d - 0.75, 7, 0.3, 0.45, 4, K.berry, { line: true });
-  const cat = P(p.x + 0.4, p.y + p.d / 2 + 0.1, 7);
-  R.grid(CAT_LOAF, CAT_PAL, cat[0] - 5, cat[1] - 6);
 }
 
 function armchair(c: DrawCtx, p: Prop, z: number) {
@@ -399,7 +387,6 @@ export function drawProp(c: DrawCtx, p: Prop, z: number, ceiling: number): void 
     case 'chair': return chairSeat(c, cx, cy, z, p.face ?? 'x+');
     case 'plant': return plantPot(c, cx, cy, z, false);
     case 'bigPlant': return plantPot(c, cx, cy, z, true);
-    case 'fan': if (c.theme === 'summer') standFan(c, cx, cy); return;
     case 'rug': return rugRect(c, p.x, p.y, p.w, p.d, z);
     case 'sofa': return sofa(c, p);
     case 'sideLamp': return sideLamp(c, cx, cy, z);

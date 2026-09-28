@@ -2,6 +2,7 @@ import type { TaskDTO, TaskEventDTO } from '@agent-cafe/shared';
 import { describe, expect, it } from 'vitest';
 import { deriveActivity } from './activity';
 import { FLOORS, cellOf, isBlockedCell } from './layout';
+import { Cats } from './cats';
 import { findPath } from './pathfinding';
 
 const task = (over: Partial<TaskDTO> = {}): TaskDTO => ({
@@ -90,5 +91,31 @@ describe('World', () => {
     data = reduce(data, { type: 'task.event', taskId: 't', agentId: 'a', event: { kind: 'tool.end', step: 1, callId: 'c', tool: 'read_file', ok: true, output: '', seq: 2, at: '2026-09-27T10:00:02Z' } }, now);
     for (let i = 0; i < 200; i++) world.update(0.05, data, now + 6000 + i * 50);
     expect({ x: world.agents[0]!.x, y: world.agents[0]!.y }).toEqual(home);
+  });
+});
+
+describe('cats', () => {
+  it.each(Object.values(FLOORS))('cat spots on $id are free and reachable from the entrance', (floor) => {
+    for (const spot of floor.catSpots) {
+      const c = cellOf(spot);
+      expect(isBlockedCell(floor, c.i, c.j), JSON.stringify([floor.id, spot])).toBe(false);
+      expect(findPath(floor, floor.entrance, spot), JSON.stringify([floor.id, spot])).not.toBeNull();
+    }
+  });
+
+  it('roam for ten minutes without walking through furniture', () => {
+    const cats = new Cats();
+    const moved = new Set<string>();
+    const start = new Map(cats.views.map((v) => [v.id, `${v.x},${v.y}`]));
+    for (let i = 0; i < 6000; i++) {
+      cats.update(0.1);
+      for (const v of cats.views) {
+        const c = cellOf(v);
+        const onSpot = FLOORS[v.floor].catSpots.some((s) => Math.hypot(s.x - v.x, s.y - v.y) < 0.01);
+        if (!onSpot) expect(isBlockedCell(FLOORS[v.floor], c.i, c.j), JSON.stringify(v)).toBe(false);
+        if (`${v.x},${v.y}` !== start.get(v.id)) moved.add(v.id);
+      }
+    }
+    expect(moved.size).toBe(cats.views.length);
   });
 });

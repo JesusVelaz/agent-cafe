@@ -63,7 +63,6 @@ export type PropKind =
   | 'chair'
   | 'plant'
   | 'bigPlant'
-  | 'fan'
   | 'rug'
   | 'sofa'
   | 'sideLamp'
@@ -141,6 +140,15 @@ export interface FloorLayout {
   seats: Spot[];
   /** Where newly hired agents appear. */
   entrance: Spot;
+  /** Favourite spots of the café cats. */
+  catSpots: CatSpot[];
+}
+
+export interface CatSpot extends Pt {
+  /** Px above the floor (on the sofa, say). */
+  z?: number;
+  /** A napping spot: cats curl up here rather than sit. */
+  nap?: boolean;
 }
 
 const P = (kind: PropKind, x: number, y: number, w: number, d: number, solid: boolean, extra: Partial<Prop> = {}): Prop => ({
@@ -197,7 +205,6 @@ export const GROUND: FloorLayout = {
     table(7.4, 8.9), chair(6.5, 8.9, 'x+'), chair(8.3, 8.9, 'x-'),
     table(11.3, 8.1), chair(10.4, 8.1, 'x+'), chair(12.2, 8.1, 'x-'),
     P('bigPlant', 13.35, 10.35, 0.4, 0.4, true),
-    P('fan', 12.9, 5.8, 0.3, 0.3, true),
   ],
   decor: [
     { kind: 'menu', wall: 'R', a0: 9.6, a1: 12.2, v0: 26, v1: 50 },
@@ -228,6 +235,15 @@ export const GROUND: FloorLayout = {
     S(6.25, 5.05, 'y-'), S(7.2, 5.05, 'y-'),
   ],
   entrance: S(5.0, 10.6, 'y-'),
+  catSpots: [
+    { x: 0.3, y: 3.3, z: 7, nap: true }, // sofa, between the two seats
+    { x: 2.8, y: 4.8, nap: true }, // lounge rug
+    { x: 3.0, y: 0.45 }, // under the window
+    { x: 9.2, y: 2.6 }, // end of the counter
+    { x: 6.2, y: 10.3 }, // the doorway
+    { x: 12.6, y: 9.9 }, // by the big plant
+    { x: 4.8, y: 6.6 },
+  ],
 };
 
 /**
@@ -292,6 +308,12 @@ export const UPSTAIRS: FloorLayout = {
   },
   seats: [S(2.2, 2.4, 'y+'), S(4.9, 2.4, 'y+'), S(7.6, 2.4, 'y+'), S(4.2, 5.2, 'x+'), S(5.8, 5.2, 'x-')],
   entrance: S(2.3, 1.05, 'y+'),
+  catSpots: [
+    { x: 6.3, y: 4.4, nap: true }, // rug, between the desks and the table
+    { x: 6.5, y: 0.5 }, // under the window
+    { x: 7.3, y: 5.6 }, // by the coffee station
+    { x: 6.2, y: 2.0 },
+  ],
 };
 
 export const FLOORS: Record<ProviderId, FloorLayout> = { openai: GROUND, anthropic: UPSTAIRS };
