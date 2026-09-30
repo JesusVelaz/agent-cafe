@@ -6,6 +6,7 @@ import { api } from '@/lib/api';
 import { FLOOR_NAME } from '@/lib/format';
 import { modelLabel, useModels } from '@/lib/models';
 import { useCafe } from '@/store/cafe';
+import { AddProjectDialog } from './AddProjectDialog';
 import { Avatar } from './Avatar';
 import { Caret, Chip, FolderIcon, HarnessIcon, Popover } from './ui';
 
@@ -128,102 +129,70 @@ export function ProjectPicker({ projectId, onPick, required }: { projectId: stri
   const projects = useCafe((s) => s.projects);
   const current = projectId ? projects[projectId] : undefined;
   const list = Object.values(projects).sort((a, b) => a.name.localeCompare(b.name));
+  const [adding, setAdding] = useState(false);
   return (
-    <Popover
-      label="Choose a project"
-      className="w-[320px]"
-      trigger={({ open, toggle }) => (
-        <Chip onClick={toggle} active={open} label={`Project: ${current?.name ?? 'none'}`} title={current?.path}>
-          <FolderIcon size={13} />
-          <span className={`truncate ${!current && required ? 'text-amber' : ''}`}>{current?.name ?? (required ? 'Pick a project' : 'No project')}</span>
-          <Caret />
-        </Chip>
-      )}
-    >
-      {(close) => (
-        <div className="flex flex-col p-1.5">
-          {list.length === 0 && <p className="px-2.5 pb-1 pt-2 text-[12px] text-chalk-faint">No projects yet. Add the folder you want agents to work in.</p>}
-          {list.map((p) => (
-            <div key={p.id} className={`group flex items-center rounded-lg ${p.id === projectId ? 'bg-slate-2' : 'hover:bg-slate-2'}`}>
-              <button type="button" onClick={() => (onPick(p.id), close())} className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-1.5 text-left">
-                <FolderIcon />
-                <span className="min-w-0">
-                  <span className="block truncate text-[13px] font-medium text-chalk">{p.name}</span>
-                  <span className="block truncate font-mono text-[11px] text-chalk-faint">{p.path}</span>
-                </span>
+    <>
+      <Popover
+        label="Choose a project"
+        className="w-[320px]"
+        trigger={({ open, toggle }) => (
+          <Chip onClick={toggle} active={open} label={`Project: ${current?.name ?? 'none'}`} title={current?.path}>
+            <FolderIcon size={13} />
+            <span className={`truncate ${!current && required ? 'text-amber' : ''}`}>{current?.name ?? (required ? 'Pick a project' : 'No project')}</span>
+            <Caret />
+          </Chip>
+        )}
+      >
+        {(close) => (
+          <div className="flex flex-col p-1.5">
+            {list.length === 0 && <p className="px-2.5 pb-1 pt-2 text-[12px] text-chalk-faint">No projects yet. Add a folder, or clone a repository.</p>}
+            {list.map((p) => (
+              <div key={p.id} className={`group flex items-center rounded-lg ${p.id === projectId ? 'bg-slate-2' : 'hover:bg-slate-2'}`}>
+                <button type="button" onClick={() => (onPick(p.id), close())} className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-1.5 text-left">
+                  <FolderIcon />
+                  <span className="min-w-0">
+                    <span className="block truncate text-[13px] font-medium text-chalk">{p.name}</span>
+                    <span className="block truncate font-mono text-[11px] text-chalk-faint">{p.path}</span>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Remove ${p.name} from the list`}
+                  title="Remove from the list (the folder is untouched)"
+                  onClick={() => {
+                    if (p.id === projectId) onPick(null);
+                    void api.removeProject(p.id);
+                  }}
+                  className="mr-1 grid size-7 shrink-0 place-items-center rounded-md text-chalk-faint opacity-0 hover:bg-slate-line hover:text-chalk focus:opacity-100 group-hover:opacity-100"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+            {!required && projectId && (
+              <button type="button" onClick={() => (onPick(null), close())} className="rounded-lg px-2.5 py-1.5 text-left text-[12px] text-chalk-dim hover:bg-slate-2">
+                No project (demo runs only)
               </button>
-              <button
-                type="button"
-                aria-label={`Remove ${p.name} from the list`}
-                title="Remove from the list (the folder is untouched)"
-                onClick={() => {
-                  if (p.id === projectId) onPick(null);
-                  void api.removeProject(p.id);
-                }}
-                className="mr-1 grid size-7 shrink-0 place-items-center rounded-md text-chalk-faint opacity-0 hover:bg-slate-line hover:text-chalk focus:opacity-100 group-hover:opacity-100"
-              >
-                ×
-              </button>
-            </div>
-          ))}
-          {!required && projectId && (
-            <button type="button" onClick={() => (onPick(null), close())} className="rounded-lg px-2.5 py-1.5 text-left text-[12px] text-chalk-dim hover:bg-slate-2">
-              No project (demo runs only)
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                close();
+                setAdding(true);
+              }}
+              className="mt-1 flex items-center gap-2 rounded-lg border-t border-slate-line px-2.5 pb-1.5 pt-2 text-left text-[13px] text-chalk-dim hover:bg-slate-2 hover:text-chalk"
+            >
+              <span aria-hidden className="grid size-4 place-items-center text-[15px] leading-none">+</span>
+              Add project…
             </button>
-          )}
-          <AddProject onAdded={(id) => (onPick(id), close())} />
-        </div>
-      )}
-    </Popover>
+          </div>
+        )}
+      </Popover>
+      <AddProjectDialog open={adding} onClose={() => setAdding(false)} onAdded={(p) => onPick(p.id)} />
+    </>
   );
 }
 
-function AddProject({ onAdded }: { onAdded: (id: string) => void }) {
-  const [path, setPath] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const id = useId();
-  const add = async () => {
-    if (!path.trim() || busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const p = await api.addProject({ path: path.trim() });
-      useCafe.getState().apply({ type: 'project.upserted', project: p });
-      setPath('');
-      onAdded(p.id);
-    } catch (e) {
-      setError((e as Error).message.replace(/^path: /, ''));
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <div className="mt-1 border-t border-slate-line px-1 pt-2">
-      <label htmlFor={id} className="mb-1 block px-1.5 text-[11px] text-chalk-faint">Add a project folder</label>
-      <div className="flex gap-1.5">
-        <input
-          id={id}
-          value={path}
-          onChange={(e) => setPath(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              void add();
-            }
-          }}
-          placeholder="C:\Users\you\projects\my-app"
-          spellCheck={false}
-          className="h-8 min-w-0 flex-1 rounded-lg border border-slate-line bg-night-2 px-2 font-mono text-[11px] text-chalk placeholder:text-chalk-faint"
-        />
-        <button type="button" onClick={() => void add()} disabled={!path.trim() || busy} className="h-8 rounded-lg bg-accent px-3 text-[12px] font-medium text-white disabled:opacity-40">
-          Add
-        </button>
-      </div>
-      {error && <p role="alert" className="px-1.5 pt-1 text-[11px] text-coral">{error}</p>}
-    </div>
-  );
-}
 
 const PERMISSIONS: Array<{ value: AgentPermission; label: string; hint: string }> = [
   { value: 'ask', label: 'Ask first', hint: 'Asks before editing files or running commands' },

@@ -5,6 +5,7 @@ import { ZodError } from 'zod';
 import { OrchestratorError } from './orchestrator/orchestrator.js';
 import { ConfigError } from './providers/config.js';
 import { agentRoutes } from './routes/agents.js';
+import { folderRoutes } from './routes/folders.js';
 import { projectRoutes } from './routes/projects.js';
 import { providerRoutes } from './routes/providers.js';
 import { streamRoutes } from './routes/stream.js';
@@ -46,6 +47,7 @@ export async function buildApp(services?: Services): Promise<FastifyInstance> {
     await app.register(taskRoutes(services));
     await app.register(providerRoutes(services));
     await app.register(projectRoutes(services));
+    await app.register(folderRoutes());
     await app.register(streamRoutes(services));
   }
   return app;

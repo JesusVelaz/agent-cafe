@@ -42,6 +42,15 @@ const post = <T>(path: string, body?: unknown) =>
   request<T>(path, { method: 'POST', ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
 const patch = <T>(path: string, body: unknown) => request<T>(path, { method: 'PATCH', body: JSON.stringify(body) });
 
+/** One level of the folder browser (directories only). */
+export interface FolderListing {
+  path: string;
+  display: string;
+  parent: string | null;
+  parentDisplay: string | null;
+  entries: Array<{ name: string; path: string }>;
+}
+
 export interface CreateTaskInput {
   prompt: string;
   agentId?: string;
@@ -83,4 +92,7 @@ export const api = {
   addProject: (p: { path: string; name?: string }) => post<ProjectDTO>('/api/projects', p),
   renameProject: (id: string, name: string) => patch<ProjectDTO>(`/api/projects/${id}`, { name }),
   removeProject: (id: string) => request<void>(`/api/projects/${id}`, { method: 'DELETE' }),
+  cloneProject: (b: { url: string; parent: string; name?: string }) => post<ProjectDTO>('/api/projects/clone', b),
+  folders: (path: string) => request<FolderListing>(`/api/folders?path=${encodeURIComponent(path)}`),
+  revealFolder: (path: string) => post<{ ok: true }>('/api/folders/reveal', { path }),
 };

@@ -1,12 +1,13 @@
 'use client';
 
 import { HARNESS, type ProviderId, type ProviderMode, type ProviderStatusDTO } from '@agent-cafe/shared';
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { api } from '@/lib/api';
 import { FLOOR_NAME } from '@/lib/format';
 import type { ThemeChoice } from '@/lib/theme';
 import type { ThemeId } from '@/scene/atmosphere';
 import { useCafe } from '@/store/cafe';
+import { AddProjectDialog } from './AddProjectDialog';
 import { THEME_LABELS, ThemeIcon } from './ThemePicker';
 import { FolderIcon, HarnessIcon } from './ui';
 
@@ -384,20 +385,7 @@ function Modes({ id, p }: { id: ProviderId; p: ProviderStatusDTO | undefined }) 
 function Projects() {
   const projects = useCafe((s) => s.projects);
   const list = Object.values(projects).sort((a, b) => a.name.localeCompare(b.name));
-  const [path, setPath] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const pathId = useId();
-  const add = async () => {
-    if (!path.trim()) return;
-    setError(null);
-    try {
-      const p = await api.addProject({ path: path.trim() });
-      useCafe.getState().apply({ type: 'project.upserted', project: p });
-      setPath('');
-    } catch (e) {
-      setError((e as Error).message.replace(/^path: /, ''));
-    }
-  };
+  const [adding, setAdding] = useState(false);
   return (
     <>
       <Heading title="Projects">Folders your agents work in. Add one once, then pick it by name under the message box.</Heading>
@@ -407,25 +395,11 @@ function Projects() {
           <ProjectRow key={p.id} id={p.id} name={p.name} path={p.path} />
         ))}
       </div>
-      <div className="mt-5">
-        <label htmlFor={pathId} className="text-[13px] font-medium">Add a project</label>
-        <div className="mt-1.5 flex gap-2">
-          <input
-            id={pathId}
-            value={path}
-            onChange={(e) => setPath(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && void add()}
-            placeholder="C:\Users\you\projects\my-app"
-            spellCheck={false}
-            className="h-9 min-w-0 flex-1 rounded-lg border border-slate-line bg-slate px-3 font-mono text-[12px] text-chalk outline-none placeholder:text-chalk-faint focus:border-accent"
-          />
-          <button type="button" onClick={() => void add()} disabled={!path.trim()} className="h-9 rounded-lg bg-accent px-4 text-[13px] font-medium text-white disabled:opacity-40">
-            Add
-          </button>
-        </div>
-        <p className="mt-1.5 text-[12px] text-chalk-faint">Paste the folder’s full path. Tip: in Explorer, Shift + right-click the folder, then “Copy as path”.</p>
-        {error && <p role="alert" className="mt-1 text-[12px] text-coral">{error}</p>}
-      </div>
+      <button type="button" onClick={() => setAdding(true)} className="mt-4 h-9 rounded-lg bg-accent px-4 text-[13px] font-medium text-white hover:bg-[#7f9bff]">
+        Add project…
+      </button>
+      <p className="mt-1.5 text-[12px] text-chalk-faint">Browse to a folder on this computer, or clone a Git or GitHub repository.</p>
+      <AddProjectDialog open={adding} onClose={() => setAdding(false)} />
     </>
   );
 }
