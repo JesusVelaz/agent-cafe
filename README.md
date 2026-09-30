@@ -32,10 +32,11 @@ agents (Mocha, Chai and Biscotti downstairs; Earl, Matcha and Scone upstairs), a
 
 ### Going live with your Claude subscription
 
-1. Install [Claude Code](https://code.claude.com) and sign in once in a terminal:
-   `claude auth login`. (The Claude desktop app's sign-in is separate; the `claude` command needs its own.)
-2. In the top bar, the Anthropic floor shows your account. If it says *Signed out*, press **Check again**.
-3. Open the floor chip and switch it to **Live**.
+1. Install [Claude Code](https://code.claude.com).
+2. Open **Settings → Providers** and press **Connect** on Claude. Claude Code's own sign-in opens in a
+   terminal window (and your browser); the card turns *Connected* when you're done. (The Claude desktop
+   app's sign-in is separate; the `claude` command needs its own.)
+3. On the same card, switch the upstairs floor to **Live**.
 4. Under the message box, open the project chip and **add a project**: paste the full path of a
    folder once, then pick it by name from then on (like a checkout).
 5. Send a task. In the box, pick the model (every model Claude Code offers) and a permission:
@@ -63,7 +64,7 @@ Live runs count against your plan's normal usage limits; the top bar shows the c
 | "Usage limit reached" sign | That floor's plan limit is used up for now |
 
 The top bar answers the at-a-glance questions: how many are working, need you and are queued,
-plus each floor's harness, sign-in, plan usage and mode (open the floor chip). **Needs you** lists
+plus **Settings** (general, providers, projects); its gear shows a dot when a live floor can't run. **Needs you** lists
 approvals first, then stuck agents and failures; allow, deny, retry, stop or dismiss them there.
 
 **Café view:** fold the side panel away (» at its top) and the café fills the screen. Agents that

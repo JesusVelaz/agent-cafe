@@ -127,7 +127,7 @@ export function Composer({ variant }: { variant: 'panel' | 'bar' }) {
         <textarea
           id={promptId}
           ref={box}
-          rows={2}
+          rows={variant === 'bar' ? 1 : 2}
           value={prompt}
           onChange={(e) => {
             setPrompt(e.target.value);

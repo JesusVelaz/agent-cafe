@@ -1,6 +1,7 @@
 import { CATALOG_AS_OF, MODEL_CATALOG, PROVIDER_IDS, modelsFor, type HarnessModelDTO } from '@agent-cafe/shared';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
+import { ConfigError } from '../providers/config.js';
 import type { Services } from '../services.js';
 
 const idParam = z.object({ id: z.enum(PROVIDER_IDS) });
@@ -30,6 +31,25 @@ export const providerRoutes =
     app.post('/api/providers/:id/check', async (req) => {
       const { id } = idParam.parse(req.params);
       await providers.harnesses.check(id);
+      const provider = await providers.status(id);
+      bus.publish({ type: 'provider.updated', provider });
+      return provider;
+    });
+
+    /** Opens the vendor's own sign-in in a terminal window; poll /check afterwards. */
+    app.post('/api/providers/:id/connect', async (req) => {
+      const { id } = idParam.parse(req.params);
+      try {
+        await providers.harnesses.connect(id);
+      } catch (err) {
+        throw new ConfigError((err as Error).message);
+      }
+      return { ok: true };
+    });
+
+    app.post('/api/providers/:id/disconnect', async (req) => {
+      const { id } = idParam.parse(req.params);
+      await providers.harnesses.disconnect(id);
       const provider = await providers.status(id);
       bus.publish({ type: 'provider.updated', provider });
       return provider;

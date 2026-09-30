@@ -244,6 +244,7 @@ export class Orchestrator {
 
   private async assertLiveReady(agent: { providerId: string }, projectId: string | null) {
     const providerId = agent.providerId as ProviderId;
+    if (!HARNESS[providerId].live) throw new OrchestratorError(`Live ${HARNESS[providerId].name} runs are coming next.`, 'conflict');
     const c = await this.deps.providers.harnesses.ensure(providerId);
     if (c.state !== 'ready') {
       throw new OrchestratorError(c.message ?? `${HARNESS[providerId].name} isn't ready.`, 'conflict');

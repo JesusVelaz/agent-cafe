@@ -38,12 +38,14 @@ export class ProviderConfigService {
       harness: HARNESS[id].id,
       connection: this.harnesses.connection(id),
       usage,
+      liveAvailable: HARNESS[id].live && this.harnesses.connection(id).state === 'ready',
       closed: row.mode === 'live' && usage?.status === 'rejected',
     };
   }
 
   async update(id: ProviderId, patch: ProviderPatch): Promise<ProviderStatusDTO> {
     if (patch.mode === 'live') {
+      if (!HARNESS[id].live) throw new ConfigError(`Live ${HARNESS[id].name} runs are coming next. Use Demo for now.`);
       const c = await this.harnesses.check(id);
       if (c.state !== 'ready') throw new ConfigError(c.message ?? `${HARNESS[id].name} isn't ready.`);
     }

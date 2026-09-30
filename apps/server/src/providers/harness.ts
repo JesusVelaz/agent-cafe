@@ -1,9 +1,10 @@
 /**
  * Harness connections: is each floor's vendor agent installed and signed in, and
- * which models does it offer? Agent Café never handles credentials; it only asks
- * the installed CLI (`claude auth status`) and reads what it reports.
+ * which models does it offer? Agent Café never handles credentials: it asks the
+ * installed CLI for its status, and "Connect" opens the vendor's own sign-in in a
+ * terminal window, which completes entirely between the CLI and the vendor.
  */
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { query, type SDKRateLimitInfo } from '@anthropic-ai/claude-agent-sdk';
 import {
@@ -20,7 +21,13 @@ export interface HarnessProbe {
   /** Connection state plus the resolved executable path when installed. */
   check(): Promise<HarnessConnectionDTO & { executable: string | null }>;
   models(executable: string): Promise<HarnessModelDTO[]>;
+  /** CLI arguments that sign in (interactive, run in a terminal) and sign out. */
+  loginArgs: string[];
+  logoutArgs: string[];
 }
+
+/** Opens a terminal window running `exe args…` for the user to finish in. */
+export type TerminalOpener = (title: string, exe: string, args: string[]) => Promise<void>;
 
 const conn = (state: HarnessConnectionDTO['state'], extra: Partial<HarnessConnectionDTO> = {}): HarnessConnectionDTO => ({
   state, version: null, account: null, plan: null, message: null, checkedAt: new Date().toISOString(), ...extra,
@@ -37,13 +44,55 @@ export function harnessEnv(): Record<string, string | undefined> {
 async function which(cmd: string): Promise<string | null> {
   try {
     const { stdout } = await run(process.platform === 'win32' ? 'where' : 'which', [cmd], { timeout: 5000 });
-    return stdout.split(/\r?\n/).map((l) => l.trim()).find(Boolean) ?? null;
+    const hits = stdout.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    // On Windows prefer the real binary: .cmd shims can't be run without a shell.
+    return (process.platform === 'win32' ? hits.find((h) => /\.exe$/i.test(h)) : undefined) ?? hits[0] ?? null;
   } catch {
     return null;
   }
 }
 
+/** Runs a status command; many CLIs exit non-zero when signed out but still print their answer. */
+async function output(exe: string, args: string[]): Promise<string> {
+  try {
+    const r = await run(exe, args, { timeout: 15_000, env: harnessEnv() });
+    return `${r.stdout}\n${r.stderr}`;
+  } catch (err) {
+    const e = err as { stdout?: string; stderr?: string; code?: unknown };
+    if (e.stdout || e.stderr) return `${e.stdout ?? ''}\n${e.stderr ?? ''}`;
+    throw err;
+  }
+}
+
+const quoteSh = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
+
+/** The default opener: a real terminal window, so any prompt the sign-in shows works as usual. */
+export const openTerminal: TerminalOpener = (title, exe, args) =>
+  new Promise((resolve, reject) => {
+    let child;
+    if (process.platform === 'win32') {
+      // start "<title>" cmd /k ""C:\path\exe" args"  (cmd strips the outer quotes)
+      const line = `start "${title}" cmd /k ""${exe}" ${args.join(' ')}"`;
+      child = spawn('cmd.exe', ['/d', '/s', '/c', line], { windowsVerbatimArguments: true, detached: true, stdio: 'ignore' });
+    } else if (process.platform === 'darwin') {
+      const cmd = [exe, ...args].map(quoteSh).join(' ');
+      child = spawn('osascript', ['-e', `tell application "Terminal" to do script "${cmd.replace(/"/g, '\\"')}"`, '-e', 'tell application "Terminal" to activate'], {
+        detached: true,
+        stdio: 'ignore',
+      });
+    } else {
+      child = spawn('x-terminal-emulator', ['-T', title, '-e', exe, ...args], { detached: true, stdio: 'ignore' });
+    }
+    child.once('error', reject);
+    child.once('spawn', () => {
+      child.unref();
+      resolve();
+    });
+  });
+
 export const claudeCodeProbe: HarnessProbe = {
+  loginArgs: ['auth', 'login', '--claudeai'],
+  logoutArgs: ['auth', 'logout'],
   async check() {
     const executable = await which('claude');
     if (!executable) {
@@ -97,10 +146,29 @@ export const claudeCodeProbe: HarnessProbe = {
   },
 };
 
-const unsupported = (id: ProviderId): HarnessProbe => ({
-  check: async () => ({ ...conn('unsupported', { message: `${HARNESS[id].name} support is coming next. Use Demo for now.` }), executable: null }),
+/** Codex, signed in with ChatGPT (`codex login`). Only its connection is used so far. */
+export const codexProbe: HarnessProbe = {
+  loginArgs: ['login'],
+  logoutArgs: ['logout'],
+  async check() {
+    const executable = await which('codex');
+    if (!executable) return { ...conn('not_installed', { message: 'Install Codex, then connect your ChatGPT account.' }), executable: null };
+    try {
+      const [version, status] = await Promise.all([
+        output(executable, ['--version']).then((o) => o.trim().split(/\s+/).find((w) => /^\d+\.\d+/.test(w)) ?? null),
+        output(executable, ['login', 'status']),
+      ]);
+      if (/not logged in|logged out/i.test(status) || !/logged in/i.test(status)) {
+        return { ...conn('signed_out', { version, message: 'Connect your ChatGPT account (`codex login`).' }), executable };
+      }
+      const via = status.match(/logged in using ([^\r\n.]+)/i)?.[1]?.trim() ?? null;
+      return { ...conn('ready', { version, plan: via }), executable };
+    } catch (err) {
+      return { ...conn('error', { message: `Couldn't ask Codex: ${(err as Error).message}` }), executable };
+    }
+  },
   models: async () => [],
-});
+};
 
 export class HarnessService {
   private readonly probes: Record<ProviderId, HarnessProbe>;
@@ -109,8 +177,27 @@ export class HarnessService {
   private readonly modelCache = new Map<ProviderId, HarnessModelDTO[]>();
   private readonly inflight = new Map<ProviderId, Promise<HarnessConnectionDTO>>();
 
-  constructor(probes: Partial<Record<ProviderId, HarnessProbe>> = {}) {
-    this.probes = { anthropic: claudeCodeProbe, openai: unsupported('openai'), ...probes };
+  constructor(
+    probes: Partial<Record<ProviderId, HarnessProbe>> = {},
+    private readonly opener: TerminalOpener = openTerminal,
+  ) {
+    this.probes = { anthropic: claudeCodeProbe, openai: codexProbe, ...probes };
+  }
+
+  /** Opens the vendor's sign-in in a terminal window. The UI then re-checks until connected. */
+  async connect(id: ProviderId): Promise<void> {
+    const c = await this.check(id);
+    const exe = this.executable(id);
+    if (!exe) throw new Error(c.message ?? `${HARNESS[id].name} isn't installed.`);
+    await this.opener(`Connect ${HARNESS[id].account}`, exe, this.probes[id].loginArgs);
+  }
+
+  /** Signs the CLI out (for every use of it on this computer, not just Agent Café). */
+  async disconnect(id: ProviderId): Promise<HarnessConnectionDTO> {
+    await this.ensure(id);
+    const exe = this.executable(id);
+    if (exe) await output(exe, this.probes[id].logoutArgs).catch(() => '');
+    return this.check(id);
   }
 
   connection(id: ProviderId): HarnessConnectionDTO {

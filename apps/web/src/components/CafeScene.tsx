@@ -17,13 +17,15 @@ interface Props {
   onFrame?: (hits: Array<AgentHit & { cssX: number; cssY: number }>) => void;
   /** Absolutely positioned layer over the scene, in the same px space as onFrame. */
   overlay?: ReactNode;
+  /** Shift the café up by this many CSS px (animated), e.g. to clear a bar at the bottom. */
+  lift?: number;
 }
 
 /**
  * The café canvas. Rendered at 400×360 and scaled up by a whole number when it
  * fits (crisp pixels), fractionally only on small screens.
  */
-export function CafeScene({ theme, labels = true, reserveBottom = 0, onFrame, overlay }: Props) {
+export function CafeScene({ theme, labels = true, reserveBottom = 0, onFrame, overlay, lift = 0 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const tipRef = useRef<HTMLDivElement>(null);
@@ -80,7 +82,11 @@ export function CafeScene({ theme, labels = true, reserveBottom = 0, onFrame, ov
       className="relative flex min-h-[320px] min-w-0 items-center justify-center overflow-hidden"
       style={{ background: `linear-gradient(${bg0}, ${bg1})`, paddingBottom: reserveBottom }}
     >
-      <div className="relative" style={{ width: SCENE_W * scale, height: SCENE_H * scale }} data-scene-stage>
+      <div
+        className="relative transition-transform duration-300 ease-[cubic-bezier(.2,.8,.2,1)]"
+        style={{ width: SCENE_W * scale, height: SCENE_H * scale, transform: `translateY(${-lift}px)` }}
+        data-scene-stage
+      >
         <div ref={hostRef} className="absolute inset-0" />
         <div ref={tipRef} className="pointer-events-none absolute left-0 top-0 z-10" hidden={!hoverId}>
           {hoverId && <AgentTooltip id={hoverId} />}

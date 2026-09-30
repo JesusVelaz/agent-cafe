@@ -1,9 +1,11 @@
 import type { HarnessState } from '@agent-cafe/shared';
-import { HarnessService, type HarnessProbe } from '../providers/harness.js';
+import { HarnessService, type HarnessProbe, type TerminalOpener } from '../providers/harness.js';
 
 /** A Claude Code probe that reports a fixed state, without touching the real CLI. */
 export function fakeProbe(state: HarnessState = 'ready'): HarnessProbe {
   return {
+    loginArgs: ['auth', 'login'],
+    logoutArgs: ['auth', 'logout'],
     check: async () => ({
       state,
       version: '9.9.9',
@@ -20,4 +22,5 @@ export function fakeProbe(state: HarnessState = 'ready'): HarnessProbe {
   };
 }
 
-export const fakeHarnesses = (state: HarnessState = 'ready') => new HarnessService({ anthropic: fakeProbe(state) });
+export const fakeHarnesses = (state: HarnessState = 'ready', opener: TerminalOpener = async () => {}) =>
+  new HarnessService({ anthropic: fakeProbe(state), openai: { ...fakeProbe('ready'), models: async () => [] } }, opener);

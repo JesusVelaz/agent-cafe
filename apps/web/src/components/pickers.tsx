@@ -273,11 +273,12 @@ export function TargetPicker({ target, onPick }: { target: Target; onPick: (t: T
   const agents = useCafe((s) => s.agents);
   const crew = Object.values(agents).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   const label = target.kind === 'any' ? `Anyone ${target.provider === 'anthropic' ? 'upstairs' : 'downstairs'}` : agents[target.agentId]?.name ?? 'Agent';
+  const models = { anthropic: useModels('anthropic'), openai: useModels('openai') };
   const floors: ProviderId[] = ['anthropic', 'openai'];
   return (
     <Popover
       label="Send to"
-      className="w-[240px]"
+      className="w-[260px]"
       trigger={({ open, toggle }) => (
         <Chip onClick={toggle} active={open} label={`Send to: ${label}`}>
           <span aria-hidden className="size-2 shrink-0 bg-mint" />
@@ -308,7 +309,8 @@ export function TargetPicker({ target, onPick }: { target: Target; onPick: (t: T
                     className="flex items-center gap-2 rounded-lg px-2.5 py-1 text-left text-[13px] text-chalk-dim hover:bg-slate-2 hover:text-chalk"
                   >
                     <Avatar seed={a.spriteSeed} providerId={a.providerId} scale={1.5} />
-                    {a.name}
+                    <span className="min-w-0 flex-1 truncate">{a.name}</span>
+                    <span className="shrink-0 text-[11px] text-chalk-faint">{modelLabel(models[a.providerId], a.model)}</span>
                   </button>
                 ))}
             </div>

@@ -45,9 +45,18 @@ export type FailureKind =
  * subscription. Agent Café never sees credentials; see docs/specs/…-subscription-harnesses.md.
  */
 export type HarnessId = 'claude-code' | 'codex';
-export const HARNESS: Record<ProviderId, { id: HarnessId; name: string; login: string }> = {
-  anthropic: { id: 'claude-code', name: 'Claude Code', login: 'claude auth login' },
-  openai: { id: 'codex', name: 'Codex', login: 'codex login' },
+export const HARNESS: Record<ProviderId, {
+  id: HarnessId;
+  /** The coding agent that runs the floor. */
+  name: string;
+  /** The account you connect it with. */
+  account: string;
+  login: string;
+  /** Agent Café can run live tasks on it (Codex is next). */
+  live: boolean;
+}> = {
+  anthropic: { id: 'claude-code', name: 'Claude Code', account: 'Claude', login: 'claude auth login', live: true },
+  openai: { id: 'codex', name: 'Codex', account: 'ChatGPT', login: 'codex login', live: false },
 };
 
 /** How much an agent may do without asking. Commands always ask unless the harness allows them. */
@@ -165,6 +174,8 @@ export interface ProviderStatusDTO {
   harness: HarnessId;
   connection: HarnessConnectionDTO;
   usage: PlanUsageDTO | null;
+  /** Live tasks can run: the harness is supported and signed in. */
+  liveAvailable: boolean;
   /** True when the plan's usage limit is reached: "Limit reached". */
   closed: boolean;
 }

@@ -11,10 +11,15 @@ import { testDb } from '../test/testDb.js';
 
 const config: ServerConfig = { host: '127.0.0.1', port: 0, workspaceDir: '.' };
 
+const opened: Array<{ title: string; exe: string; args: string[] }> = [];
+
 async function setup(harness: Parameters<typeof fakeHarnesses>[0] = 'signed_out') {
   const db = await testDb({ seed: true });
   const mock = new MockAdapter({ sleep: async () => {}, failRate: 0 });
-  const services = createServices(config, db, { harnesses: fakeHarnesses(harness), resolveAdapter: async () => mock });
+  const services = createServices(config, db, {
+    harnesses: fakeHarnesses(harness, async (title, exe, args) => void opened.push({ title, exe, args })),
+    resolveAdapter: async () => mock,
+  });
   const app = await buildApp(services);
   return { app, services, db };
 }
@@ -117,5 +122,24 @@ describe('HTTP API', () => {
     expect(retry.json().retryOf).toBe(t.id);
     await services.orchestrator.idle();
     expect((await app.inject({ method: 'POST', url: '/api/tasks/nope/cancel' })).statusCode).toBe(404);
+  });
+
+  it('connects by opening the vendor sign-in in a terminal, and never takes credentials', async () => {
+    const { app } = await setup('signed_out');
+    opened.length = 0;
+    const res = await app.inject({ method: 'POST', url: '/api/providers/anthropic/connect' });
+    expect(res.statusCode).toBe(200);
+    expect(opened).toEqual([{ title: 'Connect Claude', exe: '/usr/local/bin/claude', args: ['auth', 'login'] }]);
+    const out = await app.inject({ method: 'POST', url: '/api/providers/openai/disconnect' });
+    expect(out.json()).toMatchObject({ id: 'openai', liveAvailable: false });
+  });
+
+  it('refuses changes from other websites', async () => {
+    const { app } = await setup();
+    const evil = await app.inject({ method: 'POST', url: '/api/providers/anthropic/connect', headers: { origin: 'https://evil.example' } });
+    expect(evil.statusCode).toBe(403);
+    const ours = await app.inject({ method: 'POST', url: '/api/providers/anthropic/check', headers: { origin: 'http://localhost:3000' } });
+    expect(ours.statusCode).toBe(200);
+    expect((await app.inject({ url: '/api/providers', headers: { origin: 'https://evil.example' } })).statusCode).toBe(200);
   });
 });

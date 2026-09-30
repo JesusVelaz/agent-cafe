@@ -2,7 +2,6 @@
 
 import type { ThemeId } from '@/scene/atmosphere';
 import type { ThemeChoice } from '@/lib/theme';
-import { Caret, Popover } from './ui';
 
 const ICONS: Record<ThemeId, React.ReactNode> = {
   day: (
@@ -22,7 +21,7 @@ const ICONS: Record<ThemeId, React.ReactNode> = {
   night: <path d="M13.5 9.8A5.5 5.5 0 0 1 6.2 2.5a5.5 5.5 0 1 0 7.3 7.3z" />,
 };
 
-const LABELS: Record<ThemeChoice, string> = {
+export const THEME_LABELS: Record<ThemeChoice, string> = {
   auto: 'Auto (local time and season)',
   day: 'Day',
   summer: 'Golden hour',
@@ -36,49 +35,5 @@ export function ThemeIcon({ theme }: { theme: ThemeId }) {
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
       {ICONS[theme]}
     </svg>
-  );
-}
-
-/** Auto plus the five looks, in a small menu. Auto shows which look it resolves to right now. */
-export function ThemePicker({ choice, theme, onChange }: { choice: ThemeChoice; theme: ThemeId; onChange: (c: ThemeChoice) => void }) {
-  const options: ThemeChoice[] = ['auto', 'day', 'summer', 'rain', 'snow', 'night'];
-  return (
-    <Popover
-      label="Café theme"
-      side="bottom"
-      align="end"
-      className="w-[220px]"
-      trigger={({ open, toggle }) => (
-        <button
-          type="button"
-          onClick={toggle}
-          aria-expanded={open}
-          aria-label={`Theme: ${LABELS[choice]}`}
-          className={`flex h-9 items-center gap-2 rounded-lg border px-2.5 text-[13px] text-chalk-dim hover:text-chalk ${open ? 'border-[#434a58] bg-slate' : 'border-slate-line hover:bg-slate'}`}
-        >
-          <ThemeIcon theme={theme} />
-          {choice === 'auto' ? 'Auto' : LABELS[choice]}
-          <Caret />
-        </button>
-      )}
-    >
-      {(close) => (
-        <div role="radiogroup" aria-label="Café theme" className="flex flex-col p-1.5">
-          {options.map((opt) => (
-            <button
-              key={opt}
-              type="button"
-              role="radio"
-              aria-checked={opt === choice}
-              onClick={() => (onChange(opt), close())}
-              className={`flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[13px] ${opt === choice ? 'bg-slate-2 text-chalk' : 'text-chalk-dim hover:bg-slate-2 hover:text-chalk'}`}
-            >
-              <ThemeIcon theme={opt === 'auto' ? theme : opt} />
-              {opt === 'auto' ? `Auto · ${LABELS[theme]} now` : LABELS[opt]}
-            </button>
-          ))}
-        </div>
-      )}
-    </Popover>
   );
 }

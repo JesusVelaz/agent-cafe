@@ -31,6 +31,14 @@ export async function buildApp(services?: Services): Promise<FastifyInstance> {
     return reply.code(500).send({ error: 'Internal error' });
   });
 
+  // Only the café UI (or a local tool that sends no Origin) may change anything. Bodyless POSTs
+  // are "simple" requests that skip CORS preflight, so check the Origin explicitly.
+  app.addHook('onRequest', async (req, reply) => {
+    if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return;
+    const origin = req.headers.origin;
+    if (origin && !ALLOWED_ORIGINS.includes(origin)) return reply.code(403).send({ error: 'Not allowed from this origin.' });
+  });
+
   app.get('/api/health', async () => ({ ok: true }));
 
   if (services) {

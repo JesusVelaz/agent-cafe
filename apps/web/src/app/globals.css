@@ -57,9 +57,11 @@ body {
   image-rendering: crisp-edges;
 }
 
-:focus-visible {
-  outline: 2px solid var(--color-brass);
-  outline-offset: 2px;
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
 }
 
 ::selection {

@@ -11,6 +11,9 @@ import { needsAttention } from '@/store/reduce';
 import { CafeScene } from './CafeScene';
 import { Composer } from './Composer';
 
+/** How far the café rises in café view: clears the message bar; the sky above has room to spare. */
+const LIFT = 64;
+
 /**
  * The café, plus what it needs when the side panel is folded away (café view):
  * a callout over each agent that needs you and a message bar at the bottom.
@@ -74,7 +77,7 @@ export function CafeStage({ theme, collapsed }: { theme: ThemeId; collapsed: boo
 
   return (
     <div className="relative grid min-h-0">
-      <CafeScene theme={theme} onFrame={onFrame} overlay={overlay} />
+      <CafeScene theme={theme} onFrame={onFrame} overlay={overlay} lift={collapsed ? LIFT : 0} />
       <div
         inert={!collapsed}
         className={`absolute inset-x-0 bottom-4 mx-auto w-[min(720px,calc(100%-2rem))] transition-[opacity,transform] duration-300 ease-out ${
