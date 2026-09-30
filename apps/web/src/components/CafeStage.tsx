@@ -78,7 +78,7 @@ export function CafeStage({ theme, collapsed }: { theme: ThemeId; collapsed: boo
       <CafeScene theme={theme} onFrame={onFrame} overlay={overlay} />
       <div
         inert={!collapsed}
-        className={`absolute bottom-5 right-5 w-[min(480px,29vw)] min-w-[340px] transition-[opacity,transform] duration-300 ease-out ${
+        className={`absolute bottom-5 right-5 z-30 w-[min(480px,29vw)] min-w-[340px] transition-[opacity,transform] duration-300 ease-out ${
           collapsed ? 'translate-x-0 opacity-100' : 'pointer-events-none translate-x-6 opacity-0'
         }`}
       >

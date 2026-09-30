@@ -48,7 +48,7 @@ export function CafeApp() {
   const collapsed = useCafe((s) => s.panelCollapsed);
 
   return (
-    <div className="grid h-dvh grid-rows-[auto_minmax(0,1fr)] bg-night text-chalk">
+    <div className="grid h-dvh grid-rows-[auto_minmax(0,1fr)] overflow-x-hidden bg-night text-chalk lg:overflow-hidden">
       <TopBar themeChoice={choice} theme={theme} onTheme={setChoice} />
       <div className="relative grid min-h-0">
         <main

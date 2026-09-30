@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 
 /**
  * A button that opens a floating panel above (or below) it. Closes on Escape,
@@ -23,6 +23,29 @@ export function Popover({
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  const [shift, setShift] = useState(0);
+
+  // Keep the panel inside the window: slide it sideways when it would spill off an edge.
+  useLayoutEffect(() => {
+    if (!open) return setShift(0);
+    const el = panel.current;
+    if (!el) return;
+    const place = () => {
+      el.style.translate = '0px';
+      const r = el.getBoundingClientRect();
+      const margin = 8;
+      let dx = 0;
+      if (r.right > window.innerWidth - margin) dx = window.innerWidth - margin - r.right;
+      if (r.left + dx < margin) dx = margin - r.left;
+      el.style.translate = '';
+      setShift(Math.round(dx));
+    };
+    place();
+    window.addEventListener('resize', place);
+    return () => window.removeEventListener('resize', place);
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     const onDown = (e: PointerEvent) => {
@@ -43,9 +66,11 @@ export function Popover({
       {trigger({ open, toggle: () => setOpen((o) => !o) })}
       {open && (
         <div
+          ref={panel}
           role="dialog"
           aria-label={label}
-          className={`absolute z-40 rounded-xl border border-slate-line bg-slate shadow-[0_16px_40px_rgba(0,0,0,.45)] ${
+          style={{ translate: `${shift}px 0` }}
+          className={`absolute z-40 max-w-[calc(100vw-16px)] rounded-xl border border-slate-line bg-slate shadow-[0_16px_40px_rgba(0,0,0,.45)] ${
             side === 'top' ? 'bottom-full mb-2' : 'top-full mt-2'
           } ${align === 'start' ? 'left-0' : 'right-0'} ${className}`}
         >
