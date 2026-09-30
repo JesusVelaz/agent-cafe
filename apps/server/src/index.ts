@@ -37,6 +37,7 @@ async function shutdown() {
   if (closing) return;
   closing = true;
   services.ambient.stop();
+  services.providers.harnesses.close();
   await services.orchestrator.shutdown();
   await app.close();
   await db.$disconnect();

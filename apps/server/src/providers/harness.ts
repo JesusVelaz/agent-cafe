@@ -176,20 +176,56 @@ export class HarnessService {
   private readonly usage = new Map<ProviderId, PlanUsageDTO>();
   private readonly modelCache = new Map<ProviderId, HarnessModelDTO[]>();
   private readonly inflight = new Map<ProviderId, Promise<HarnessConnectionDTO>>();
+  private readonly watchers = new Map<ProviderId, ReturnType<typeof setInterval>>();
+  private readonly listeners = new Set<(id: ProviderId) => void>();
 
   constructor(
     probes: Partial<Record<ProviderId, HarnessProbe>> = {},
     private readonly opener: TerminalOpener = openTerminal,
+    private readonly watch = { everyMs: 3000, forMs: 10 * 60_000 },
   ) {
     this.probes = { anthropic: claudeCodeProbe, openai: codexProbe, ...probes };
   }
 
-  /** Opens the vendor's sign-in in a terminal window. The UI then re-checks until connected. */
+  /** Called whenever a check finds a different connection (signed in, signed out…). */
+  onChange(fn: (id: ProviderId) => void): () => void {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
+  }
+
+  /**
+   * Opens the vendor's sign-in in a terminal window, then keeps checking in the
+   * background until it's connected (or the watch times out), so the UI updates
+   * by itself however long the sign-in takes.
+   */
   async connect(id: ProviderId): Promise<void> {
     const c = await this.check(id);
     const exe = this.executable(id);
     if (!exe) throw new Error(c.message ?? `${HARNESS[id].name} isn't installed.`);
     await this.opener(`Connect ${HARNESS[id].account}`, exe, this.probes[id].loginArgs);
+    this.watchSignIn(id);
+  }
+
+  private watchSignIn(id: ProviderId) {
+    clearInterval(this.watchers.get(id));
+    const started = Date.now();
+    const t = setInterval(() => {
+      void this.check(id).then((c) => {
+        if (c.state === 'ready' || Date.now() - started > this.watch.forMs) this.stopWatching(id);
+      });
+    }, this.watch.everyMs);
+    t.unref?.();
+    this.watchers.set(id, t);
+  }
+
+  private stopWatching(id: ProviderId) {
+    clearInterval(this.watchers.get(id));
+    this.watchers.delete(id);
+  }
+
+  /** Stops background sign-in watches (server shutdown, tests). */
+  close() {
+    for (const id of [...this.watchers.keys()]) this.stopWatching(id);
   }
 
   /** Signs the CLI out (for every use of it on this computer, not just Agent Café). */
@@ -218,8 +254,11 @@ export class HarnessService {
     const p = this.probes[id]
       .check()
       .then((s) => {
+        const before = this.state.get(id);
         this.state.set(id, s);
         if (s.state !== 'ready') this.modelCache.delete(id);
+        const changed = !before || before.state !== s.state || before.account !== s.account || before.plan !== s.plan;
+        if (changed) for (const fn of this.listeners) fn(id);
         return this.connection(id);
       })
       .finally(() => this.inflight.delete(id));

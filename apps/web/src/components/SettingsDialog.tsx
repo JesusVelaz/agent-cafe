@@ -202,20 +202,15 @@ function ProviderCard({ id, active }: { id: ProviderId; active: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const connected = c?.state === 'ready';
 
-  // After "Connect", re-check every few seconds until signed in (or three minutes pass).
+  // After "Connect" the server watches for the sign-in and pushes the change; this only clears the note.
   useEffect(() => {
-    if (!waiting || !active) return;
-    if (connected) return setWaiting(false);
-    const started = Date.now();
-    const t = setInterval(() => {
-      if (Date.now() - started > 180_000) {
-        setWaiting(false);
-        return;
-      }
-      void api.checkProvider(id).catch(() => {});
-    }, 3000);
-    return () => clearInterval(t);
-  }, [waiting, active, connected, id]);
+    if (connected) setWaiting(false);
+  }, [connected]);
+  // Opening Settings refreshes anything not yet connected.
+  useEffect(() => {
+    if (active && c && c.state !== 'ready' && c.state !== 'checking') void api.checkProvider(id).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per opening
+  }, [active, id]);
 
   const run = async (fn: () => Promise<unknown>) => {
     setBusy(true);
@@ -294,7 +289,7 @@ function ProviderCard({ id, active }: { id: ProviderId; active: boolean }) {
 
       {waiting && !connected && (
         <p className="mt-3 rounded-lg bg-night-2 px-3 py-2 text-[12px] text-chalk-dim">
-          Finish signing in to {h.account} in the terminal window that just opened (it may open your browser). This updates by itself when you’re done.
+          Finish signing in to {h.account} in the terminal window that just opened (it may open your browser). This card updates by itself when you’re done, even if you close Settings.
         </p>
       )}
       {error && <p role="alert" className="mt-3 text-[12px] text-coral">{error}</p>}

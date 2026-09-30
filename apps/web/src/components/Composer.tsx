@@ -109,6 +109,14 @@ export function Composer({ variant }: { variant: 'panel' | 'bar' }) {
     : `Ask anyone ${provider === 'anthropic' ? 'upstairs' : 'downstairs'} to…`;
   const floorNote = mode === 'live' ? `Live · ${HARNESS[provider].name}` : mode === 'off' ? 'Floor is off' : 'Demo · no real calls';
 
+  const projectChip = (
+    <ProjectPicker
+      projectId={projectId}
+      required={live}
+      onPick={(id) => (agent ? setOverride((o) => ({ ...o, projectId: id })) : setAnyProject(id))}
+    />
+  );
+
   return (
     <form
       aria-label={agent ? `Message ${agent.name}` : 'New task'}
@@ -116,13 +124,19 @@ export function Composer({ variant }: { variant: 'panel' | 'bar' }) {
         e.preventDefault();
         void send();
       }}
-      className={
-        variant === 'panel'
-          ? 'flex flex-col gap-1 border-t border-slate-line px-3 pb-2.5 pt-3'
-          : 'flex flex-col gap-1 rounded-2xl border border-slate-line bg-night-2/95 p-2 pb-1.5 shadow-[0_20px_50px_rgba(0,0,0,.45)] backdrop-blur'
-      }
+      className={variant === 'panel' ? 'flex flex-col gap-1 border-t border-slate-line px-3 pb-2.5 pt-3' : 'flex flex-col items-end gap-1.5'}
     >
-      <div className="rounded-xl border border-slate-line bg-slate px-3 pb-1.5 pt-2.5 focus-within:border-[#434a58]">
+      {/* The café view's bar is one compact box; its messages float just above it. */}
+      {variant === 'bar' && notice && (
+        <p role="status" className={`rounded-lg bg-night-2/95 px-2.5 py-1 text-[12px] shadow-lg ${notice.ok ? 'text-mint' : 'text-coral'}`}>
+          {notice.text}
+        </p>
+      )}
+      <div
+        className={`w-full rounded-xl border border-slate-line bg-slate px-3 pb-1.5 pt-2.5 focus-within:border-[#434a58] ${
+          variant === 'bar' ? 'shadow-[0_18px_44px_rgba(0,0,0,.5)]' : ''
+        }`}
+      >
         <label htmlFor={promptId} className="sr-only">{placeholder}</label>
         <textarea
           id={promptId}
@@ -156,6 +170,7 @@ export function Composer({ variant }: { variant: 'panel' | 'bar' }) {
               }
             }}
           />
+          {variant === 'bar' && projectChip}
           {live && (
             <PermissionPicker value={permission} onPick={(v) => (agent ? setOverride((o) => ({ ...o, permission: v })) : setAnyPermission(v))} />
           )}
@@ -163,33 +178,31 @@ export function Composer({ variant }: { variant: 'panel' | 'bar' }) {
           <PixelSend disabled={!prompt.trim() || sending || mode === 'off'} busy={sending} />
         </div>
       </div>
-      <div className="flex min-w-0 items-center gap-0.5 px-0.5">
-        <ProjectPicker
-          projectId={projectId}
-          required={live}
-          onPick={(id) => (agent ? setOverride((o) => ({ ...o, projectId: id })) : setAnyProject(id))}
-        />
-        {agent && thread && (
-          <Chip
-            onClick={() => setNewThread((n) => !n)}
-            active={newThread}
-            label={newThread ? 'Starting a new thread. Click to continue the last one instead' : 'Continuing the last thread. Click to start a new one'}
-          >
-            {newThread ? (
-              <>
-                <span aria-hidden>＋</span> New thread
-              </>
-            ) : (
-              <>
-                <span aria-hidden>↳</span> Continuing
-              </>
-            )}
-          </Chip>
-        )}
-        <span role="status" className={`ml-auto truncate pl-2 text-[11px] ${notice ? (notice.ok ? 'text-mint' : 'text-coral') : 'text-chalk-faint'}`}>
-          {notice?.text ?? floorNote}
-        </span>
-      </div>
+      {variant === 'panel' && (
+        <div className="flex min-w-0 items-center gap-0.5 px-0.5">
+          {projectChip}
+          {agent && thread && (
+            <Chip
+              onClick={() => setNewThread((n) => !n)}
+              active={newThread}
+              label={newThread ? 'Starting a new thread. Click to continue the last one instead' : 'Continuing the last thread. Click to start a new one'}
+            >
+              {newThread ? (
+                <>
+                  <span aria-hidden>＋</span> New thread
+                </>
+              ) : (
+                <>
+                  <span aria-hidden>↳</span> Continuing
+                </>
+              )}
+            </Chip>
+          )}
+          <span role="status" className={`ml-auto truncate pl-2 text-[11px] ${notice ? (notice.ok ? 'text-mint' : 'text-coral') : 'text-chalk-faint'}`}>
+            {notice?.text ?? floorNote}
+          </span>
+        </div>
+      )}
     </form>
   );
 }

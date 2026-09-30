@@ -27,6 +27,10 @@ export function createServices(
 ): Services {
   const bus = new EventBus();
   const providers = new ProviderConfigService(db, overrides.harnesses ?? new HarnessService());
+  // Any change in a harness's sign-in reaches every open café right away.
+  providers.harnesses.onChange((id) => {
+    void providers.status(id).then((provider) => bus.publish({ type: 'provider.updated', provider }));
+  });
   const settings = new SettingsService(db);
   const tools = createToolRegistry({ db, workspaceDir: config.workspaceDir });
   const resolveAdapter = overrides.resolveAdapter ?? createAdapterResolver();

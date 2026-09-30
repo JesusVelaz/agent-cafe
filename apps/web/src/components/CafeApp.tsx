@@ -2,6 +2,7 @@
 
 import dynamic from 'next/dynamic';
 import { useEffect } from 'react';
+import { api } from '@/lib/api';
 import { connectStream } from '@/lib/stream';
 import { useTheme } from '@/lib/theme';
 import { readFlag, useCafe } from '@/store/cafe';
@@ -25,6 +26,21 @@ export function CafeApp() {
     return connectStream(apply, setConnection);
   }, []);
   useEffect(() => useCafe.setState({ panelCollapsed: readFlag('cafe.panelCollapsed') }), []);
+  // Coming back to the window (say, after signing in elsewhere): re-check any provider that isn't connected.
+  useEffect(() => {
+    const recheck = () => {
+      if (document.visibilityState !== 'visible') return;
+      for (const p of Object.values(useCafe.getState().providers)) {
+        if (p && p.connection.state !== 'ready' && p.connection.state !== 'checking') void api.checkProvider(p.id).catch(() => {});
+      }
+    };
+    window.addEventListener('focus', recheck);
+    document.addEventListener('visibilitychange', recheck);
+    return () => {
+      window.removeEventListener('focus', recheck);
+      document.removeEventListener('visibilitychange', recheck);
+    };
+  }, []);
 
   const { choice, theme, setChoice } = useTheme();
   const hydrated = useCafe((s) => s.hydrated);
