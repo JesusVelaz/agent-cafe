@@ -141,7 +141,7 @@ export function Composer({ variant }: { variant: 'panel' | 'bar' }) {
         <textarea
           id={promptId}
           ref={box}
-          rows={variant === 'bar' ? 1 : 2}
+          rows={2}
           value={prompt}
           onChange={(e) => {
             setPrompt(e.target.value);
@@ -156,25 +156,27 @@ export function Composer({ variant }: { variant: 'panel' | 'bar' }) {
           placeholder={placeholder}
           className="block w-full resize-none bg-transparent text-[14px] leading-snug text-chalk outline-none placeholder:text-chalk-faint"
         />
-        <div className="mt-1 flex min-w-0 items-center gap-0.5">
-          {!selected && <TargetPicker target={boardTarget} onPick={setBoardTarget} />}
-          <ModelPicker
-            provider={provider}
-            model={model}
-            {...(agent ? { lockedTo: agent.providerId } : {})}
-            onPick={(p, m) => {
-              if (agent) setOverride((o) => ({ ...o, model: m }));
-              else {
-                setAnyModel((a) => ({ ...a, [p]: m }));
-                if (p !== provider) setBoardTarget({ kind: 'any', provider: p });
-              }
-            }}
-          />
-          {variant === 'bar' && projectChip}
-          {live && (
-            <PermissionPicker value={permission} onPick={(v) => (agent ? setOverride((o) => ({ ...o, permission: v })) : setAnyPermission(v))} />
-          )}
-          <span className="ml-auto" />
+        {/* Chips wrap to a second line when they don't fit; send stays pinned bottom-right. */}
+        <div className="mt-1 flex min-w-0 items-end gap-1">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-0.5">
+            {!selected && <TargetPicker target={boardTarget} onPick={setBoardTarget} />}
+            <ModelPicker
+              provider={provider}
+              model={model}
+              {...(agent ? { lockedTo: agent.providerId } : {})}
+              onPick={(p, m) => {
+                if (agent) setOverride((o) => ({ ...o, model: m }));
+                else {
+                  setAnyModel((a) => ({ ...a, [p]: m }));
+                  if (p !== provider) setBoardTarget({ kind: 'any', provider: p });
+                }
+              }}
+            />
+            {variant === 'bar' && projectChip}
+            {live && (
+              <PermissionPicker value={permission} onPick={(v) => (agent ? setOverride((o) => ({ ...o, permission: v })) : setAnyPermission(v))} />
+            )}
+          </div>
           <PixelSend disabled={!prompt.trim() || sending || mode === 'off'} busy={sending} />
         </div>
       </div>

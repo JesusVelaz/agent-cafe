@@ -39,7 +39,7 @@ export function Popover({
     };
   }, [open]);
   return (
-    <div ref={ref} className="relative">
+    <div ref={ref} className="relative min-w-0">
       {trigger({ open, toggle: () => setOpen((o) => !o) })}
       {open && (
         <div
@@ -80,7 +80,7 @@ export function Chip({
       title={title}
       disabled={disabled}
       onClick={onClick}
-      className={`flex h-7 max-w-full shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[12px] disabled:opacity-40 ${
+      className={`flex h-7 min-w-0 max-w-full items-center gap-1.5 rounded-full px-2.5 text-[12px] disabled:opacity-40 ${
         active ? 'bg-slate-2 text-chalk' : 'text-chalk-dim hover:bg-slate-2 hover:text-chalk'
       }`}
     >
