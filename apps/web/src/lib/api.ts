@@ -78,7 +78,7 @@ export const api = {
     post<AgentDTO>('/api/agents', a),
   updateAgent: (
     id: string,
-    a: { name?: string; model?: string; systemPrompt?: string; projectId?: string | null; permission?: AgentPermission },
+    a: { name?: string; model?: string; systemPrompt?: string; projectId?: string | null; permission?: AgentPermission; spriteSeed?: number },
   ) => patch<AgentDTO>(`/api/agents/${id}`, a),
   answerApproval: (taskId: string, approvalId: string, decision: 'allow' | 'deny') =>
     post<TaskDTO>(`/api/tasks/${taskId}/approvals/${approvalId}`, { decision }),

@@ -271,6 +271,7 @@ export class World {
       }
       sim.home = home;
       sim.view.name = agent.name;
+      sim.view.spriteSeed = agent.spriteSeed; // a new look from Settings shows at once
     }
     this.initialised = true;
 

@@ -142,4 +142,15 @@ describe('HTTP API', () => {
     expect(ours.statusCode).toBe(200);
     expect((await app.inject({ url: '/api/providers', headers: { origin: 'https://evil.example' } })).statusCode).toBe(200);
   });
+
+  it('renames an agent and changes their look and model', async () => {
+    const { app, db } = await setup();
+    const earl = await db.agent.findFirstOrThrow({ where: { name: 'Earl' } });
+    const url = `/api/agents/${earl.id}`;
+    const res = await app.inject({ method: 'PATCH', url, payload: { name: 'Espresso', spriteSeed: 4242, model: 'claude-sonnet-5' } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ name: 'Espresso', spriteSeed: 4242, model: 'claude-sonnet-5' });
+    expect((await app.inject({ method: 'PATCH', url, payload: { name: '   ' } })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'PATCH', url, payload: { spriteSeed: 0 } })).statusCode).toBe(400);
+  });
 });

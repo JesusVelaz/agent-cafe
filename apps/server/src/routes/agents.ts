@@ -20,6 +20,8 @@ const patchBody = z.object({
   model: z.string().trim().min(1).max(100).optional(),
   systemPrompt: z.string().max(8000).optional(),
   projectId: z.string().nullable().optional(),
+  /** The character's look (hair, skin, clothes are derived from it). */
+  spriteSeed: z.number().int().min(1).max(999_999).optional(),
   permission: z.enum(['ask', 'acceptEdits']).optional(),
   archived: z.boolean().optional(),
 });

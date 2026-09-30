@@ -1,20 +1,23 @@
 'use client';
 
-import { HARNESS, type ProviderId, type ProviderMode, type ProviderStatusDTO } from '@agent-cafe/shared';
+import { HARNESS, type AgentDTO, type ProviderId, type ProviderMode, type ProviderStatusDTO } from '@agent-cafe/shared';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { api } from '@/lib/api';
 import { FLOOR_NAME } from '@/lib/format';
+import { modelLabel, useModels } from '@/lib/models';
 import type { ThemeChoice } from '@/lib/theme';
 import type { ThemeId } from '@/scene/atmosphere';
 import { useCafe } from '@/store/cafe';
 import { AddProjectDialog } from './AddProjectDialog';
+import { Avatar } from './Avatar';
 import { THEME_LABELS, ThemeIcon } from './ThemePicker';
 import { FolderIcon, HarnessIcon } from './ui';
 
-type Section = 'general' | 'providers' | 'projects';
+type Section = 'general' | 'agents' | 'providers' | 'projects';
 
 const SECTIONS: Array<{ id: Section; label: string }> = [
   { id: 'general', label: 'General' },
+  { id: 'agents', label: 'Agents' },
   { id: 'providers', label: 'Providers' },
   { id: 'projects', label: 'Projects' },
 ];
@@ -81,6 +84,7 @@ export function SettingsDialog({
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden><path d="M3 3l8 8M11 3l-8 8" /></svg>
           </button>
           {section === 'general' && <General themeChoice={themeChoice} theme={theme} onTheme={onTheme} />}
+          {section === 'agents' && <Agents />}
           {section === 'providers' && <Providers active={open} />}
           {section === 'projects' && <Projects />}
         </div>
@@ -158,6 +162,165 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (on:
     >
       <span className={`absolute top-0.5 size-5 rounded-full bg-white shadow transition-[left] ${checked ? 'left-[18px]' : 'left-0.5'}`} />
     </button>
+  );
+}
+
+// ── Agents ───────────────────────────────────────────────────────────────────
+
+function Agents() {
+  const agents = useCafe((s) => s.agents);
+  const floors: ProviderId[] = ['anthropic', 'openai'];
+  return (
+    <>
+      <Heading title="Agents">
+        Rename your agents, change how they look, and pick the model each one uses by default. You can still pick a
+        different model for any message.
+      </Heading>
+      <div className="flex flex-col gap-6">
+        {floors.map((f) => {
+          const crew = Object.values(agents)
+            .filter((a) => a.providerId === f)
+            .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+          return (
+            <section key={f} aria-label={FLOOR_LABEL[f]}>
+              <p className="mb-2 flex items-center gap-2 text-[12px] text-chalk-faint">
+                <HarnessIcon harness={HARNESS[f].id} />
+                {FLOOR_LABEL[f]} · {HARNESS[f].name}
+              </p>
+              <div className="flex flex-col gap-2">
+                {crew.map((a) => (
+                  <AgentRow key={a.id} agent={a} />
+                ))}
+              </div>
+            </section>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+/** Twelve looks to choose from: the current one first, then eleven others (Shuffle for more). */
+function lookChoices(seed: number, page: number): number[] {
+  const out = [seed];
+  let x = (seed * 2654435761 + page * 97531) >>> 0;
+  while (out.length < 12) {
+    x = (Math.imul(x ^ (x >>> 15), 2246822507) + 3266489909) >>> 0;
+    const next = (x % 999_998) + 1;
+    if (!out.includes(next)) out.push(next);
+  }
+  return out;
+}
+
+function AgentRow({ agent }: { agent: AgentDTO }) {
+  const models = useModels(agent.providerId);
+  const [name, setName] = useState(agent.name);
+  const [picking, setPicking] = useState(false);
+  const [page, setPage] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => setName(agent.name), [agent.name]);
+
+  const save = (patch: Parameters<typeof api.updateAgent>[1]) => {
+    setError(null);
+    api.updateAgent(agent.id, patch).catch((e: Error) => setError(e.message.replace(/^name: /, '')));
+  };
+  const commitName = () => {
+    const n = name.trim();
+    if (!n) return setName(agent.name);
+    if (n !== agent.name) save({ name: n });
+  };
+  const known = models.some((m) => m.value === agent.model);
+  // The seed the grid was built from stays put while you try looks, so the options don't jump.
+  const [base, setBase] = useState(agent.spriteSeed);
+  const choices = lookChoices(base, page);
+
+  return (
+    <div className="rounded-xl border border-slate-line bg-slate">
+      <div className="flex items-center gap-3 p-3">
+        <button
+          type="button"
+          aria-label={`Change ${agent.name}'s look`}
+          aria-expanded={picking}
+          onClick={() => {
+            setBase(agent.spriteSeed);
+            setPage(0);
+            setPicking((p) => !p);
+          }}
+          className={`grid size-12 shrink-0 place-items-center rounded-lg bg-night-2 ${picking ? 'ring-2 ring-accent' : 'hover:ring-1 hover:ring-slate-line'}`}
+        >
+          <Avatar seed={agent.spriteSeed} providerId={agent.providerId} scale={3} />
+        </button>
+        <label className="sr-only" htmlFor={`name-${agent.id}`}>Name</label>
+        <input
+          id={`name-${agent.id}`}
+          value={name}
+          maxLength={24}
+          onChange={(e) => setName(e.target.value)}
+          onBlur={commitName}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') e.currentTarget.blur();
+            if (e.key === 'Escape') {
+              // Undo the edit without closing Settings.
+              e.preventDefault();
+              setName(agent.name);
+            }
+          }}
+          className="h-9 w-40 min-w-0 rounded-lg border border-transparent bg-transparent px-2 font-display text-[22px] leading-none text-chalk outline-none hover:border-slate-line focus:border-accent focus:bg-night-2"
+        />
+        <label className="sr-only" htmlFor={`model-${agent.id}`}>Model</label>
+        <select
+          id={`model-${agent.id}`}
+          value={agent.model}
+          onChange={(e) => save({ model: e.target.value })}
+          className="h-9 min-w-0 flex-1 rounded-lg border border-slate-line bg-night-2 px-2 text-[13px] text-chalk outline-none focus:border-accent"
+        >
+          {!known && <option value={agent.model}>{modelLabel(models, agent.model)}</option>}
+          {models.map((m) => (
+            <option key={m.value} value={m.value}>
+              {m.label}
+              {m.tag ? ` · ${m.tag}` : ''}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {picking && (
+        <div className="border-t border-slate-line p-3">
+          <div role="radiogroup" aria-label={`${agent.name}'s look`} className="grid grid-cols-6 gap-2">
+            {choices.map((seed, i) => {
+              const on = seed === agent.spriteSeed;
+              return (
+                <button
+                  key={seed}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  aria-label={i === 0 && seed === base ? 'Current look' : `Look ${i + 1}`}
+                  onClick={() => save({ spriteSeed: seed })}
+                  className={`grid aspect-square place-items-center rounded-lg ${on ? 'bg-slate-2 ring-2 ring-accent' : 'bg-night-2 hover:bg-slate-2'}`}
+                >
+                  <Avatar seed={seed} providerId={agent.providerId} scale={3} />
+                </button>
+              );
+            })}
+          </div>
+          <div className="mt-2.5 flex items-center justify-between gap-3">
+            <p className="text-[12px] text-chalk-faint">
+              {agent.providerId === 'openai' ? 'Ground floor agents wear casual clothes.' : 'Upstairs agents wear office clothes.'}
+            </p>
+            <div className="flex gap-1.5">
+              <button type="button" onClick={() => setPage((n) => n + 1)} className="h-8 rounded-lg border border-slate-line px-3 text-[12px] text-chalk-dim hover:bg-slate-2 hover:text-chalk">
+                Shuffle
+              </button>
+              <button type="button" onClick={() => setPicking(false)} className="h-8 rounded-lg bg-accent px-3 text-[12px] font-medium text-white hover:bg-[#7f9bff]">
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {error && <p role="alert" className="px-3 pb-3 text-[12px] text-coral">{error}</p>}
+    </div>
   );
 }
 
