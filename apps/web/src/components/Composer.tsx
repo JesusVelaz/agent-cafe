@@ -9,6 +9,9 @@ import { tasksFor } from '@/store/reduce';
 import { ModelPicker, PermissionPicker, ProjectPicker, TargetPicker, type Target } from './pickers';
 import { Chip, PixelSend } from './ui';
 
+/** How long a success notice ("Sent to Steve.") stays up. */
+const NOTICE_MS = 4000;
+
 /**
  * The message box, docked at the bottom of the side panel (and Focus mode's bar).
  *
@@ -63,6 +66,12 @@ export function Composer({ variant }: { variant: 'panel' | 'bar' }) {
   const [prompt, setPrompt] = useState('');
   const [sending, setSending] = useState(false);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
+  // "Sent to Steve." fades on its own; errors stay until the next edit or send.
+  useEffect(() => {
+    if (!notice?.ok) return;
+    const t = setTimeout(() => setNotice((n) => (n === notice ? null : n)), NOTICE_MS);
+    return () => clearTimeout(t);
+  }, [notice]);
   const promptId = useId();
   const box = useRef<HTMLTextAreaElement>(null);
 
