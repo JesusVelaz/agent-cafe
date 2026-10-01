@@ -84,8 +84,8 @@ export const api = {
     post<TaskDTO>(`/api/tasks/${taskId}/approvals/${approvalId}`, { decision }),
   updateProvider: (id: ProviderId, p: { mode?: ProviderMode }) => patch<ProviderStatusDTO>(`/api/providers/${id}`, p),
   checkProvider: (id: ProviderId) => post<ProviderStatusDTO>(`/api/providers/${id}/check`),
-  /** Opens the provider's own sign-in in a terminal window; then poll checkProvider. */
-  connectProvider: (id: ProviderId) => post<{ ok: true }>(`/api/providers/${id}/connect`),
+  /** Opens the provider's own sign-in in a terminal window (unless already signed in); the result arrives on the stream. */
+  connectProvider: (id: ProviderId) => post<{ ok: true; connected: boolean }>(`/api/providers/${id}/connect`),
   disconnectProvider: (id: ProviderId) => post<ProviderStatusDTO>(`/api/providers/${id}/disconnect`),
   models: (id: ProviderId) => request<{ source: 'harness' | 'catalog'; models: HarnessModelDTO[] }>(`/api/providers/${id}/models`),
   updateSettings: (s: Partial<SettingsDTO>) => patch<SettingsDTO>('/api/settings', s),

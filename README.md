@@ -10,12 +10,12 @@ what, and what just finished. Click anyone to open their thread: your messages, 
 answers, and a message box to prompt them directly.
 
 - **Ground floor: OpenAI.** **Upstairs: Anthropic.** The upper floor sits on top, one step smaller.
-- **No API keys.** Live floors run the vendor's own coding agent (Claude Code, and Codex next),
-  signed in with *your* subscription. Agent Café never sees or stores credentials.
+- **No API keys.** Live floors run the vendor's own coding agent (Claude Code upstairs, Codex
+  downstairs), signed in with *your* subscription. Agent Café never sees or stores credentials.
 - Every floor also has a **Demo** mode: scripted runs, no real calls.
 
-> Status: Claude Code runs the Anthropic floor live. Codex for the OpenAI floor is next; until
-> then that floor runs in Demo. See [Roadmap](#roadmap).
+> Status: Claude Code runs the Anthropic floor live and Codex runs the OpenAI floor live; both
+> can work at the same time. See [Roadmap](#roadmap).
 
 ## Quick start
 
@@ -48,6 +48,29 @@ the session); switch the footer chip to **New thread** to start fresh. Each agen
 model, permission and project it used last.
 
 Live runs count against your plan's normal usage limits; the top bar shows the current window.
+
+### Going live with your ChatGPT subscription (Codex)
+
+1. Install [Codex](https://developers.openai.com/codex) 0.154 or newer (the Codex desktop app ships
+   one). Agent Café talks to it through `codex app-server`.
+2. In **Settings → Providers**, press **Connect** on ChatGPT (it runs `codex login`), then switch the
+   ground floor on. On Windows, Codex's sandbox must be set up (the Codex app does this); without
+   it, live Codex tasks don't start.
+3. Pick a project and send a task to a ground-floor agent. The model list is the one Codex offers
+   your account.
+
+How the permission picker maps to Codex: both settings run Codex with approval policy
+`untrusted` and the `workspace-write` sandbox, and approvals always come to you (never Codex's
+auto-reviewer). **Ask first** sends every file edit and every command Codex doesn't already trust
+to an Allow / Deny card. **Auto-accept edits** lets Agent Café accept file edits itself when every
+file the edit writes, including move destinations and resolved symlink/junction targets, is inside the project (the thread notes each
+one); commands, and edits that reach outside the project, still ask. Agent Café pins the sandbox
+(no network, no extra writable folders) over anything in `~/.codex/config.toml`, and refuses to
+start a task if the policy Codex reports back is looser. Differences from Claude Code: approved
+commands still run inside Codex's sandbox (they can write only in the project and temp folders,
+with no network unless Codex asks again and you allow it), and read-only commands Codex already
+trusts run without a card. Codex reports tokens and plan-limit
+windows, never a price, so live tasks show no cost.
 
 ## What you're looking at
 
@@ -85,8 +108,9 @@ Everything is optional. Copy `.env.example` to `.env` at the repo root to change
 | `WORKSPACE_DIR` | `./workspace` | The folder demo runs' file tools can read (read-only) |
 | `CAFE_API_PORT` | `4318` | API server port (always bound to 127.0.0.1) |
 
-`ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` are deliberately removed from Claude Code's
-environment, so live runs always use your subscription.
+`ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` and `OPENAI_API_KEY` / `CODEX_API_KEY` are deliberately
+removed from the harnesses' environment, and Codex must be signed in with ChatGPT, so live runs
+always use your subscription.
 
 Useful scripts: `pnpm test`, `pnpm typecheck`, `pnpm db:reset` (wipe and reseed).
 
@@ -100,7 +124,8 @@ apps/web (Next.js 16, Tailwind 4, canvas)           apps/server (Fastify 5, Pris
 │ store/  zustand + pure reducer        │            │   FIFO, routing, approvals, recovery)   │
 │ sim/    layout · A* · activity · cats │   SSE      │   · runner (demo tool loop) · ambient   │
 │ scene/  software rasteriser · sprites │ ◄───────── │ providers/  harness (sign-in, models) · │
-└───────────────────────────────────────┘ CafeEvents │   claude (Agent SDK) · mock · config    │
+└───────────────────────────────────────┘ CafeEvents │   claude (Agent SDK) · codex            │
+                                                     │   (app-server) · mock · config          │
                                                      │ tools/  calculator · time · notes · file │
                                                      └─────────────────────────────────────────┘
           packages/shared: domain types · CafeEvent protocol · model catalog (used by both)
@@ -109,8 +134,8 @@ apps/web (Next.js 16, Tailwind 4, canvas)           apps/server (Fastify 5, Pris
 Key decisions:
 
 - **Harnesses, not keys.** A floor's live tasks run on the vendor's agent (Claude Code via
-  `@anthropic-ai/claude-agent-sdk`, driving your installed `claude`). Its permission prompts become
-  approvals in the café. See [docs/specs/2026-09-27-subscription-harnesses.md](docs/specs/2026-09-27-subscription-harnesses.md).
+  `@anthropic-ai/claude-agent-sdk`, driving your installed `claude`; Codex via JSON-RPC to
+  `codex app-server`, one process per task). Their permission prompts become approvals in the café. See [docs/specs/2026-09-27-subscription-harnesses.md](docs/specs/2026-09-27-subscription-harnesses.md).
 - **Two layers that only share events.** The orchestration layer (server) emits
   `CafeEvent`s: task lifecycle, model steps, tool calls, approvals. The simulation layer (web)
   turns them into positions and poses. Neither imports the other.
@@ -132,7 +157,7 @@ Key decisions:
 packages/shared/src     domain.ts · events.ts · catalog.ts (demo models + prices, dated)
 apps/server/src         app.ts · index.ts · services.ts (composition root)
   orchestrator/         orchestrator.ts · runner.ts · ambient.ts
-  providers/            harness.ts · claude.ts · config.ts · mock.ts · registry.ts · types.ts
+  providers/            harness.ts · live.ts · claude.ts · codex.ts · codexRpc.ts · config.ts · mock.ts · registry.ts · types.ts
   tools/                registry.ts · calculator.ts · files.ts   (demo runs)
   routes/  db/  events/
 apps/web/src
@@ -149,7 +174,7 @@ docs/                   specs/ (design decisions) · plans/ (implementation plan
 
 - **Done:** orchestrator with queues and recovery, demo provider, SSE; stacked café on a street
   corner with cats, side panel with agent threads and café view, auto themes; Claude Code on the
-  Anthropic floor with projects, per-message models and resumable conversations.
-- **Next:** Codex (`codex app-server`) on the OpenAI floor, signed in with `codex login`.
+  Anthropic floor with projects, per-message models and resumable conversations; Codex
+  (`codex app-server`) on the OpenAI floor, signed in with `codex login`.
 - **Later:** "always allow" rules, history page,
   live weather (Open-Meteo), `POST /api/events` ingest so outside sessions appear as visiting agents.

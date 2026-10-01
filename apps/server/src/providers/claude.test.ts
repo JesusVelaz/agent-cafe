@@ -1,7 +1,7 @@
-import type { CanUseTool, Options, query } from '@anthropic-ai/claude-agent-sdk';
+import type { CanUseTool, Options, SDKRateLimitInfo, query } from '@anthropic-ai/claude-agent-sdk';
 import type { TaskEventData } from '@agent-cafe/shared';
 import { describe, expect, it } from 'vitest';
-import { runClaudeTask, summarizeToolInput, type ApprovalAsk } from './claude.js';
+import { claudePlanUsage, planUsageFromClaude, planUsageFromClaudeUsage, runClaudeTask, summarizeToolInput, type ApprovalAsk } from './claude.js';
 
 type Msg = Record<string, unknown>;
 
@@ -45,7 +45,7 @@ async function run(script: Parameters<typeof fakeQuery>[0], decision: 'allow' | 
     signal: new AbortController().signal,
     emit: (e) => events.push(e),
     approve: async (ask) => (asks.push(ask), decision),
-    onRateLimit: (i) => limits.push(i),
+    onUsage: (u) => limits.push(u),
     query: q,
   });
   return { outcome, events, asks, limits, sessions, options: calls[0]! };
@@ -74,7 +74,7 @@ describe('runClaudeTask', () => {
     ]);
     expect(outcome).toMatchObject({ status: 'completed', output: 'Fixed.', totals: { steps: 2, inputTokens: 30, outputTokens: 14, costUsd: null } });
     expect(asks).toEqual([{ tool: 'Bash', summary: 'npm test', reason: null }]);
-    expect(limits).toHaveLength(1);
+    expect(limits).toEqual([{ status: 'allowed', window: 'five_hour', utilization: 0.3, resetsAt: null }]);
     const kinds = events.map((e) => e.kind);
     expect(kinds).toEqual([
       'model.start', 'model.delta', 'status', 'tool.start', 'tool.end', 'status', 'model.end', 'model.start', 'model.end',
@@ -118,5 +118,57 @@ describe('runClaudeTask', () => {
     expect(summarizeToolInput('Bash', { command: 'git status' })).toBe('git status');
     expect(summarizeToolInput('Write', { file_path: '/a/b.ts', content: 'x' })).toBe('/a/b.ts');
     expect(summarizeToolInput('Other', { a: 1 })).toBe('{"a":1}');
+  });
+});
+
+describe('Claude plan usage', () => {
+  it('reads the 5-hour window from a live rate-limit event (as Claude Code 2.1 sends it)', () => {
+    // Captured from a real run: no top-level utilization, the windows sit in unifiedWindows (0..1).
+    const info = {
+      status: 'allowed',
+      resetsAt: 1790833800,
+      rateLimitType: 'five_hour',
+      unifiedWindows: { five_hour: { utilization: 0.77, resetsAt: 1790833800 }, seven_day: { utilization: 0.48, resetsAt: 1791079200 } },
+    } as unknown as SDKRateLimitInfo;
+    expect(planUsageFromClaude(info)).toEqual({ status: 'allowed', window: 'five_hour', utilization: 0.77, resetsAt: new Date(1790833800 * 1000).toISOString() });
+  });
+
+  it('falls back to the top-level fields older CLIs send', () => {
+    const info = { status: 'allowed_warning', rateLimitType: 'seven_day', utilization: 0.9, resetsAt: 1791079200 } as SDKRateLimitInfo;
+    expect(planUsageFromClaude(info)).toEqual({ status: 'allowed_warning', window: 'seven_day', utilization: 0.9, resetsAt: new Date(1791079200 * 1000).toISOString() });
+    expect(planUsageFromClaude({ status: 'allowed' } as SDKRateLimitInfo)).toEqual({ status: 'allowed', window: null, utilization: null, resetsAt: null });
+  });
+
+  it('reads the 5-hour window from the /usage data (percent, ISO time)', () => {
+    const reply = {
+      rate_limits_available: true,
+      rate_limits: { five_hour: { utilization: 77, resets_at: '2026-10-01T05:50:00.056978+00:00' }, seven_day: { utilization: 48, resets_at: '2026-10-04T02:00:00Z' } },
+    };
+    expect(planUsageFromClaudeUsage(reply)).toEqual({ status: 'allowed', window: 'five_hour', utilization: 0.77, resetsAt: '2026-10-01T05:50:00.056Z' });
+    expect(planUsageFromClaudeUsage({ rate_limits_available: true, rate_limits: { five_hour: { utilization: 100, resets_at: null } } })).toMatchObject({ status: 'rejected', utilization: 1 });
+    expect(planUsageFromClaudeUsage({ rate_limits_available: false, rate_limits: null })).toBeNull();
+    expect(planUsageFromClaudeUsage({ rate_limits_available: true, rate_limits: { five_hour: null } })).toBeNull();
+    expect(planUsageFromClaudeUsage(null)).toBeNull();
+  });
+
+  it('asks a prompt-less session for usage, and gives up quietly when the API is gone', async () => {
+    const session = (method: unknown) => {
+      const closed: boolean[] = [];
+      const q = ((params: { prompt: AsyncIterable<unknown> }) => {
+        void params.prompt[Symbol.asyncIterator]().next(); // the prompt never yields
+        return { close: () => closed.push(true), usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: method };
+      }) as unknown as typeof query;
+      return { q, closed };
+    };
+    const ok = session(async (o: unknown) => ({ seen: o, rate_limits_available: true, rate_limits: { five_hour: { utilization: 12, resets_at: null } } }));
+    expect(await claudePlanUsage('/bin/claude', ok.q)).toMatchObject({ window: 'five_hour', utilization: 0.12 });
+    expect(ok.closed).toEqual([true]);
+
+    const gone = session(undefined); // renamed or removed in a later SDK
+    expect(await claudePlanUsage('/bin/claude', gone.q)).toBeNull();
+    expect(gone.closed).toEqual([true]);
+
+    const broken = session(async () => Promise.reject(new Error('usage endpoint 500')));
+    expect(await claudePlanUsage('/bin/claude', broken.q)).toBeNull();
   });
 });

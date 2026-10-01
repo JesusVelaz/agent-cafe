@@ -52,11 +52,11 @@ export const HARNESS: Record<ProviderId, {
   /** The account you connect it with. */
   account: string;
   login: string;
-  /** Agent Café can run live tasks on it (Codex is next). */
+  /** Agent Café can run live tasks on it. */
   live: boolean;
 }> = {
   anthropic: { id: 'claude-code', name: 'Claude Code', account: 'Claude', login: 'claude auth login', live: true },
-  openai: { id: 'codex', name: 'Codex', account: 'ChatGPT', login: 'codex login', live: false },
+  openai: { id: 'codex', name: 'Codex', account: 'ChatGPT', login: 'codex login', live: true },
 };
 
 /** How much an agent may do without asking. Commands always ask unless the harness allows them. */

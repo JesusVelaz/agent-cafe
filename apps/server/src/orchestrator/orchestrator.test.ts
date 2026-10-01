@@ -7,9 +7,10 @@ import { sleep, type ProviderAdapter } from '../providers/types.js';
 import { SettingsService } from '../settings.js';
 import { testDb } from '../test/testDb.js';
 import type { ToolRegistry } from '../tools/registry.js';
-import type { ClaudeRunContext } from '../providers/claude.js';
+import type { LiveRunContext, LiveRunners } from '../providers/live.js';
 import type { HarnessState } from '@agent-cafe/shared';
-import { fakeHarnesses } from '../test/fakeHarness.js';
+import { HarnessService } from '../providers/harness.js';
+import { fakeHarnesses, fakeProbe } from '../test/fakeHarness.js';
 import { Orchestrator } from './orchestrator.js';
 import type { RunOutcome } from './runner.js';
 
@@ -40,13 +41,13 @@ function gatedAdapter(kind: 'mock' | 'live' = 'mock') {
 }
 
 async function setup(
-  opts: { adapter?: ProviderAdapter; harness?: HarnessState; runClaude?: (ctx: ClaudeRunContext) => Promise<RunOutcome> } = {},
+  opts: { adapter?: ProviderAdapter; harness?: HarnessState; harnesses?: HarnessService; runLive?: Partial<LiveRunners> } = {},
 ) {
   const db = await testDb({ seed: true });
   const bus = new EventBus();
   const events: CafeEvent[] = [];
   bus.subscribe((e) => events.push(e));
-  const providers = new ProviderConfigService(db, fakeHarnesses(opts.harness));
+  const providers = new ProviderConfigService(db, opts.harnesses ?? fakeHarnesses(opts.harness));
   const gated = gatedAdapter();
   const adapter = opts.adapter ?? gated.adapter;
   const orch = new Orchestrator({
@@ -56,7 +57,7 @@ async function setup(
     settings: new SettingsService(db),
     tools,
     resolveAdapter: async () => adapter,
-    ...(opts.runClaude ? { runClaude: opts.runClaude } : {}),
+    ...(opts.runLive ? { runLive: opts.runLive } : {}),
   });
   const agent = (name: string) => db.agent.findFirstOrThrow({ where: { name } });
   return { db, bus, events, providers, orch, gated, agent };
@@ -158,15 +159,15 @@ describe('Orchestrator', () => {
   });
 
   it('runs live Anthropic tasks on Claude Code and waits for approvals', async () => {
-    const seen: ClaudeRunContext[] = [];
-    const runClaude = async (ctx: ClaudeRunContext): Promise<RunOutcome> => {
+    const seen: LiveRunContext[] = [];
+    const runClaude = async (ctx: LiveRunContext): Promise<RunOutcome> => {
       seen.push(ctx);
       ctx.emit({ kind: 'tool.start', step: 1, callId: 'c1', tool: 'Bash', input: { command: 'ls' } });
       const d = await ctx.approve({ tool: 'Bash', summary: 'ls', reason: null }, ctx.signal);
       ctx.emit({ kind: 'tool.end', step: 1, callId: 'c1', tool: 'Bash', ok: d === 'allow', output: '' });
       return { status: 'completed', output: d, totals: { inputTokens: 3, outputTokens: 4, costUsd: null, steps: 1 } };
     };
-    const { orch, providers, agent, db } = await setup({ runClaude });
+    const { orch, providers, agent, db } = await setup({ runLive: { anthropic: runClaude } });
     const earl = await agent('Earl');
     const project = await db.project.create({ data: { name: 'app', path: '/tmp/project' } });
     await providers.update('anthropic', { mode: 'live' });
@@ -190,11 +191,11 @@ describe('Orchestrator', () => {
   });
 
   it('denies a pending approval when the task is cancelled', async () => {
-    const runClaude = async (ctx: ClaudeRunContext): Promise<RunOutcome> => {
+    const runClaude = async (ctx: LiveRunContext): Promise<RunOutcome> => {
       const d = await ctx.approve({ tool: 'Edit', summary: 'a.ts', reason: null }, ctx.signal);
       return { status: 'failed', failureKind: 'provider_error', error: d, totals: { inputTokens: 0, outputTokens: 0, costUsd: null, steps: 0 } };
     };
-    const { orch, providers, agent, db } = await setup({ runClaude });
+    const { orch, providers, agent, db } = await setup({ runLive: { anthropic: runClaude } });
     const earl = await agent('Earl');
     const project = await db.project.create({ data: { name: 'app', path: '/tmp/project' } });
     await providers.update('anthropic', { mode: 'live' });
@@ -207,13 +208,13 @@ describe('Orchestrator', () => {
   });
 
   it('continues a conversation by resuming the earlier task’s session', async () => {
-    const seen: ClaudeRunContext[] = [];
-    const runClaude = async (ctx: ClaudeRunContext): Promise<RunOutcome> => {
+    const seen: LiveRunContext[] = [];
+    const runClaude = async (ctx: LiveRunContext): Promise<RunOutcome> => {
       seen.push(ctx);
       ctx.onSession?.(`sess-${seen.length}`);
       return { status: 'completed', output: 'ok', totals: { inputTokens: 1, outputTokens: 1, costUsd: null, steps: 1 } };
     };
-    const { orch, providers, agent, db } = await setup({ runClaude });
+    const { orch, providers, agent, db } = await setup({ runLive: { anthropic: runClaude } });
     const earl = await agent('Earl');
     const project = await db.project.create({ data: { name: 'app', path: '/tmp/project' } });
     const other = await db.project.create({ data: { name: 'site', path: '/tmp/site' } });
@@ -230,7 +231,80 @@ describe('Orchestrator', () => {
     await expect(orch.enqueue({ prompt: 'x', target: { agentId: matcha.id }, continueTaskId: first.id })).rejects.toThrow(/another agent/);
   });
 
-  it('refuses live tasks until Claude Code is signed in and a project is picked', async () => {
+  it('routes each floor’s live tasks to its own harness, running Claude and Codex at once without cross-talk', async () => {
+    const started: string[] = [];
+    let release!: () => void;
+    const bothRunning = new Promise<void>((r) => (release = r));
+    const runner = (floor: string) => async (ctx: LiveRunContext): Promise<RunOutcome> => {
+      started.push(`${floor}:${ctx.task.prompt}`);
+      if (started.length === 2) release();
+      await bothRunning; // neither finishes until both have started
+      const d = await ctx.approve({ tool: floor === 'codex' ? 'shell' : 'Bash', summary: `${floor} cmd`, reason: null }, ctx.signal);
+      return { status: 'completed', output: `${floor}:${d}`, totals: { inputTokens: 1, outputTokens: 1, costUsd: null, steps: 1 } };
+    };
+    const { orch, providers, agent, db } = await setup({ runLive: { anthropic: runner('claude'), openai: runner('codex') } });
+    const project = await db.project.create({ data: { name: 'app', path: '/tmp/project' } });
+    await providers.update('anthropic', { mode: 'live' });
+    await providers.update('openai', { mode: 'live' });
+    const earl = await orch.enqueue({ prompt: 'upstairs', target: { agentId: (await agent('Earl')).id }, projectId: project.id });
+    const mocha = await orch.enqueue({ prompt: 'downstairs', target: { agentId: (await agent('Mocha')).id }, projectId: project.id });
+    const pendingOf = async (id: string) => (await db.task.findUniqueOrThrow({ where: { id } })).pendingApproval;
+    await waitFor(async () => Boolean((await pendingOf(earl.id)) && (await pendingOf(mocha.id))));
+    expect(started.sort()).toEqual(['claude:upstairs', 'codex:downstairs']);
+    const codexAsk = JSON.parse((await pendingOf(mocha.id))!);
+    const claudeAsk = JSON.parse((await pendingOf(earl.id))!);
+    expect(codexAsk).toMatchObject({ tool: 'shell', summary: 'codex cmd' });
+    // An approval belongs to its own task.
+    await expect(orch.resolveApproval(earl.id, codexAsk.id, 'allow')).rejects.toThrow(/already answered/);
+    await orch.resolveApproval(mocha.id, codexAsk.id, 'deny');
+    await orch.resolveApproval(earl.id, claudeAsk.id, 'allow');
+    await orch.idle();
+    expect(await db.task.findUniqueOrThrow({ where: { id: earl.id } })).toMatchObject({ status: 'completed', output: 'claude:allow', isMock: false });
+    expect(await db.task.findUniqueOrThrow({ where: { id: mocha.id } })).toMatchObject({ status: 'completed', output: 'codex:deny', isMock: false });
+  });
+
+  it('resumes the earlier Codex thread for a follow-up, and shares Codex’s plan usage', async () => {
+    const seen: LiveRunContext[] = [];
+    const runCodex = async (ctx: LiveRunContext): Promise<RunOutcome> => {
+      seen.push(ctx);
+      ctx.onSession?.(`thr_${seen.length}`);
+      ctx.onUsage({ status: 'allowed', window: 'five_hour', utilization: 0.2, resetsAt: null });
+      return { status: 'completed', output: 'ok', totals: { inputTokens: 1, outputTokens: 1, costUsd: null, steps: 1 } };
+    };
+    const { orch, providers, agent, db, events } = await setup({ runLive: { openai: runCodex } });
+    const mocha = await agent('Mocha');
+    const project = await db.project.create({ data: { name: 'app', path: '/tmp/project' } });
+    await providers.update('openai', { mode: 'live' });
+    const first = await orch.enqueue({ prompt: 'one', target: { agentId: mocha.id }, projectId: project.id, model: 'gpt-6-astra' });
+    await orch.idle();
+    expect((await db.task.findUniqueOrThrow({ where: { id: first.id } })).sessionId).toBe('thr_1');
+    await orch.enqueue({ prompt: 'two', target: { agentId: mocha.id }, continueTaskId: first.id });
+    await orch.idle();
+    expect(seen[0]).toMatchObject({ task: { model: 'gpt-6-astra' }, agent: { workDir: '/tmp/project' } });
+    expect(seen[0]!.resume).toBeUndefined();
+    expect(seen[1]!.resume).toBe('thr_1');
+    const usage = events.filter((e) => e.type === 'provider.updated' && e.provider.id === 'openai').map((e) => (e as { provider: { usage: unknown } }).provider.usage);
+    expect(usage).toContainEqual({ status: 'allowed', window: 'five_hour', utilization: 0.2, resetsAt: null });
+  });
+
+  it('refreshes the floor’s plan usage after a live task, so the bar keeps up', async () => {
+    let used = 0.3;
+    const probe = { ...fakeProbe('ready'), usage: async () => ({ status: 'allowed' as const, window: 'five_hour', utilization: used, resetsAt: null }) };
+    const harnesses = new HarnessService({ anthropic: probe, openai: fakeProbe('ready') }, async () => {});
+    const runClaude = async (): Promise<RunOutcome> => {
+      used = 0.35; // the run used some of the window
+      return { status: 'completed', output: 'ok', totals: { inputTokens: 1, outputTokens: 1, costUsd: null, steps: 1 } };
+    };
+    const { orch, providers, agent, db, events } = await setup({ harnesses, runLive: { anthropic: runClaude } });
+    const project = await db.project.create({ data: { name: 'app', path: '/tmp/project' } });
+    await providers.update('anthropic', { mode: 'live' });
+    await orch.enqueue({ prompt: 'x', target: { agentId: (await agent('Earl')).id }, projectId: project.id });
+    await orch.idle();
+    await waitFor(() => events.some((e) => e.type === 'provider.updated' && e.provider.id === 'anthropic' && e.provider.usage?.utilization === 0.35));
+    expect(harnesses.planUsage('anthropic')).toMatchObject({ utilization: 0.35 });
+  });
+
+  it('refuses live tasks until the harness is signed in and a project is picked', async () => {
     const signedOut = await setup({ harness: 'signed_out' });
     await expect(signedOut.providers.update('anthropic', { mode: 'live' })).rejects.toThrow(/claude auth login/);
 
@@ -238,8 +312,9 @@ describe('Orchestrator', () => {
     await ready.providers.update('anthropic', { mode: 'live' });
     await expect(ready.orch.enqueue({ prompt: 'x', target: { agentId: (await ready.agent('Earl')).id } })).rejects.toThrow(/project/);
     await expect(ready.orch.enqueue({ prompt: 'x', target: { agentId: (await ready.agent('Earl')).id }, projectId: 'nope' })).rejects.toThrow(/no longer exists/);
-    // Codex isn't wired yet: the ground floor can't go live.
-    await expect(ready.providers.update('openai', { mode: 'live' })).rejects.toThrow(/coming next/);
+    // Codex goes live the same way, and needs a project too.
+    await ready.providers.update('openai', { mode: 'live' });
+    await expect(ready.orch.enqueue({ prompt: 'x', target: { agentId: (await ready.agent('Mocha')).id } })).rejects.toThrow(/project/);
   });
 
   it('persists ordered events, streams deltas without persisting them, and tracks usage', async () => {

@@ -4,9 +4,10 @@ import { basename, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
 import type { ServerConfig } from '../config.js';
+import { HarnessService } from '../providers/harness.js';
 import { MockAdapter } from '../providers/mock.js';
 import { createServices } from '../services.js';
-import { fakeHarnesses } from '../test/fakeHarness.js';
+import { fakeHarnesses, fakeProbe } from '../test/fakeHarness.js';
 import { testDb } from '../test/testDb.js';
 
 const config: ServerConfig = { host: '127.0.0.1', port: 0, workspaceDir: '.' };
@@ -61,6 +62,14 @@ describe('HTTP API', () => {
     expect(models.models.find((m: { value: string }) => m.value === 'claude-sonnet-5')).toMatchObject({ label: 'Sonnet 5', tag: 'Default' });
     const demo = (await app.inject('/api/providers/openai/models')).json();
     expect(demo.source).toBe('catalog');
+  });
+
+  it('offers Codex’s own model list on the ground floor once it’s signed in', async () => {
+    const db = await testDb({ seed: true });
+    const codexList = [{ value: 'gpt-6-astra', label: 'GPT-6-Astra', description: 'Flagship', tag: 'Default' }];
+    const harnesses = new HarnessService({ anthropic: fakeProbe('ready'), openai: { ...fakeProbe('ready'), models: async () => codexList } }, async () => {});
+    const app = await buildApp(createServices(config, db, { harnesses, resolveAdapter: async () => new MockAdapter({ sleep: async () => {}, failRate: 0 }) }));
+    expect((await app.inject('/api/providers/openai/models')).json()).toEqual({ source: 'harness', models: codexList });
   });
 
   it('adds projects only for folders that exist, named after the folder', async () => {
@@ -131,7 +140,19 @@ describe('HTTP API', () => {
     expect(res.statusCode).toBe(200);
     expect(opened).toEqual([{ title: 'Connect Claude', exe: '/usr/local/bin/claude', args: ['auth', 'login'] }]);
     const out = await app.inject({ method: 'POST', url: '/api/providers/openai/disconnect' });
-    expect(out.json()).toMatchObject({ id: 'openai', liveAvailable: false });
+    expect(out.json()).toMatchObject({ id: 'openai', harness: 'codex' });
+  });
+
+  it('connecting when already signed in opens nothing and tells every café', async () => {
+    const { app, services } = await setup('ready');
+    opened.length = 0;
+    const seen: string[] = [];
+    services.bus.subscribe((e) => e.type === 'provider.updated' && seen.push(`${e.provider.id}:${e.provider.connection.state}`));
+    const res = await app.inject({ method: 'POST', url: '/api/providers/anthropic/connect' });
+    expect(res.statusCode).toBe(200);
+    expect(opened).toEqual([]);
+    // A café showing a stale "Not connected" catches up even though the server saw no change.
+    expect(seen).toContain('anthropic:ready');
   });
 
   it('refuses changes from other websites', async () => {

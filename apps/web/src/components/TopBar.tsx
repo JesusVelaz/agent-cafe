@@ -8,8 +8,9 @@ import { useNow } from '@/lib/useNow';
 import type { ThemeId } from '@/scene/atmosphere';
 import { useCafe } from '@/store/cafe';
 import { needsAttention } from '@/store/reduce';
+import { ConnectPrompt } from './ConnectPrompt';
 import { CupIcon } from './CupIcon';
-import { SettingsDialog } from './SettingsDialog';
+import { SettingsDialog, type Section } from './SettingsDialog';
 
 interface Props {
   themeChoice: ThemeChoice;
@@ -25,7 +26,7 @@ export function TopBar({ themeChoice, theme, onTheme }: Props) {
   const queued = all.filter((t) => t.status === 'queued').length;
   const needYou = needsAttention(state, now, state.dismissed, DEFAULTS.stuckAfterSec).length;
   const conn = state.connection;
-  const [settings, setSettings] = useState(false);
+  const [settings, setSettings] = useState<Section | null>(null);
   // A live floor that can't run (signed out, not installed) is worth a dot on the gear.
   const attention = Object.values(state.providers).some((p) => p && p.mode === 'live' && !p.liveAvailable && p.connection.state !== 'checking');
 
@@ -82,7 +83,7 @@ export function TopBar({ themeChoice, theme, onTheme }: Props) {
       <div className="ml-auto flex items-center gap-2">
         <button
           type="button"
-          onClick={() => setSettings(true)}
+          onClick={() => setSettings('general')}
           aria-label={attention ? 'Settings (a provider needs attention)' : 'Settings'}
           title="Settings"
           className="relative flex h-9 items-center gap-2 rounded-lg border border-slate-line px-3 text-[13px] text-chalk-dim hover:bg-slate hover:text-chalk"
@@ -95,7 +96,15 @@ export function TopBar({ themeChoice, theme, onTheme }: Props) {
           {attention && <span aria-hidden className="absolute -right-1 -top-1 size-2.5 rounded-full bg-coral shadow-[0_0_0_2px_var(--color-night-2)]" />}
         </button>
       </div>
-      <SettingsDialog open={settings} onClose={() => setSettings(false)} themeChoice={themeChoice} theme={theme} onTheme={onTheme} />
+      <SettingsDialog
+        open={settings !== null}
+        initial={settings ?? 'general'}
+        onClose={() => setSettings(null)}
+        themeChoice={themeChoice}
+        theme={theme}
+        onTheme={onTheme}
+      />
+      <ConnectPrompt onConnect={() => setSettings('providers')} />
     </header>
   );
 }

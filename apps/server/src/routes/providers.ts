@@ -36,7 +36,7 @@ export const providerRoutes =
       return provider;
     });
 
-    /** Opens the vendor's own sign-in in a terminal window; poll /check afterwards. */
+    /** Opens the vendor's own sign-in in a terminal window; the sign-in watch pushes the result. */
     app.post('/api/providers/:id/connect', async (req) => {
       const { id } = idParam.parse(req.params);
       try {
@@ -44,7 +44,10 @@ export const providerRoutes =
       } catch (err) {
         throw new ConfigError((err as Error).message);
       }
-      return { ok: true };
+      // Pushed even when nothing changed, so a café showing a stale "Not connected" catches up.
+      const provider = await providers.status(id);
+      bus.publish({ type: 'provider.updated', provider });
+      return { ok: true, connected: provider.connection.state === 'ready' };
     });
 
     app.post('/api/providers/:id/disconnect', async (req) => {
@@ -68,6 +71,8 @@ export const providerRoutes =
       }));
       const live = await providers.harnesses.models(id).catch(() => []);
       if (!live.length) return { source: 'catalog', models };
+      // Codex lists the exact models this account can use (with its default tagged); offer those.
+      if (id === 'openai') return { source: 'harness', models: live };
       const def = live.find((m) => m.value === 'default')?.resolved?.replace(/\[1m\]$/, '').replace(/-\d{8}$/, '');
       return { source: 'harness', models: models.map((m) => (m.value === def ? { ...m, tag: 'Default' } : m)) };
     });

@@ -72,6 +72,11 @@ const TOOLS: Record<string, { station: StationId | null; label: string }> = {
   PowerShell: { station: 'register', label: 'Running a command' },
   Task: { station: null, label: 'Delegating' },
   Agent: { station: null, label: 'Delegating' },
+  // Codex
+  shell: { station: 'register', label: 'Running a command' },
+  apply_patch: { station: 'archive', label: 'Editing files' },
+  web_search: { station: 'bookcase', label: 'Searching the web' },
+  permissions: { station: null, label: 'Asking for access' },
 };
 
 /** Which station a tool is performed at (null: at the agent's own desk). */

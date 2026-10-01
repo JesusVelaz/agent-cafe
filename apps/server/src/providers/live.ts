@@ -1,0 +1,46 @@
+/**
+ * The contract every live harness runner meets (Claude Code, Codex): run one task
+ * in the agent's project on the user's signed-in CLI, translate its activity into
+ * café task events, and route its permission prompts through `approve`.
+ */
+import type { AgentPermission, PlanUsageDTO, ProviderId, TaskEventData } from '@agent-cafe/shared';
+import type { RunOutcome } from '../orchestrator/runner.js';
+
+export interface ApprovalAsk {
+  tool: string;
+  summary: string;
+  reason: string | null;
+}
+
+export interface LiveRunContext {
+  task: { prompt: string; model: string };
+  agent: { systemPrompt: string; workDir: string; permission: AgentPermission };
+  executable: string;
+  signal: AbortSignal;
+  emit: (event: TaskEventData) => void;
+  /** Resolves when the user answers (deny if the signal fires first). */
+  approve: (ask: ApprovalAsk, signal: AbortSignal) => Promise<'allow' | 'deny'>;
+  /** The plan's rate-limit window as the harness reports it. Never a cost. */
+  onUsage: (usage: PlanUsageDTO) => void;
+  /** Called with the harness's session (Claude) or thread (Codex) id, so a follow-up can resume it. */
+  onSession?: (sessionId: string) => void;
+  /** Resume this earlier session or thread (a follow-up message). */
+  resume?: string;
+}
+
+/** The child environment for harness processes: never an API key, so runs bill the user's plan. */
+export function harnessEnv(): Record<string, string | undefined> {
+  const env: Record<string, string | undefined> = { ...process.env, CLAUDE_AGENT_SDK_CLIENT_APP: 'agent-cafe/0.1.0' };
+  delete env.ANTHROPIC_API_KEY;
+  delete env.ANTHROPIC_AUTH_TOKEN;
+  delete env.OPENAI_API_KEY;
+  delete env.CODEX_API_KEY;
+  return env;
+}
+
+export type LiveRunner = (ctx: LiveRunContext) => Promise<RunOutcome>;
+export type LiveRunners = Record<ProviderId, LiveRunner>;
+
+/** Epoch seconds (tolerating milliseconds) as an ISO string. */
+export const epochToIso = (t: number | null | undefined): string | null =>
+  typeof t === 'number' && Number.isFinite(t) && t > 0 ? new Date(t < 1e12 ? t * 1000 : t).toISOString() : null;

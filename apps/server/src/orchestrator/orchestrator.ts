@@ -23,12 +23,16 @@ import type { Db } from '../db/client.js';
 import { toAgentDTO, toProjectDTO, toTaskDTO, toTaskEventDTO } from '../db/mappers.js';
 import type { EventBus } from '../events/bus.js';
 import type { Task } from '../generated/prisma/client.js';
-import { runClaudeTask, type ApprovalAsk, type ClaudeRunContext } from '../providers/claude.js';
+import { runClaudeTask } from '../providers/claude.js';
+import { runCodexTask } from '../providers/codex.js';
 import type { ProviderConfigService } from '../providers/config.js';
+import type { ApprovalAsk, LiveRunners } from '../providers/live.js';
 import type { AdapterResolver } from '../providers/registry.js';
 import type { SettingsService } from '../settings.js';
 import type { ToolRegistry } from '../tools/registry.js';
 import { runTask, type RunOutcome } from './runner.js';
+
+const DEFAULT_RUNNERS: LiveRunners = { anthropic: runClaudeTask, openai: runCodexTask };
 
 export class OrchestratorError extends Error {
   constructor(
@@ -62,8 +66,8 @@ export interface OrchestratorDeps {
   tools: ToolRegistry;
   resolveAdapter: AdapterResolver;
   maxSteps?: number;
-  /** Runs a live Anthropic task on Claude Code. Injected in tests. */
-  runClaude?: (ctx: ClaudeRunContext) => Promise<RunOutcome>;
+  /** Live harness runners by floor (Claude Code upstairs, Codex downstairs). Injected in tests. */
+  runLive?: Partial<LiveRunners>;
 }
 
 interface PendingApproval {
@@ -336,7 +340,7 @@ export class Orchestrator {
       : undefined;
     if (mode === 'live') {
       const c = await providers.harnesses.ensure(providerId);
-      if (c.state !== 'ready' || !providers.harnesses.executable(providerId) || providerId !== 'anthropic') {
+      if (c.state !== 'ready' || !providers.harnesses.executable(providerId)) {
         await this.finish(task.id, { status: 'failed', failureKind: 'signed_out', error: c.message ?? `${HARNESS[providerId].name} isn't ready.` });
         return;
       }
@@ -381,7 +385,7 @@ export class Orchestrator {
           emit,
           ...(this.deps.maxSteps ? { maxSteps: this.deps.maxSteps } : {}),
         })
-      : await (this.deps.runClaude ?? runClaudeTask)({
+      : await this.liveRunner(providerId)({
           task: { prompt: task.prompt, model: task.model },
           agent: { systemPrompt: agent.systemPrompt, workDir: project!.path, permission: task.permission as AgentPermission },
           executable: providers.harnesses.executable(providerId)!,
@@ -392,13 +396,24 @@ export class Orchestrator {
           signal: ctrl.signal,
           emit,
           approve: (ask, signal) => this.askUser(task.id, ask, emit, signal),
-          onRateLimit: (info) => {
-            if (!providers.harnesses.recordUsage(providerId, info)) return;
+          onUsage: (usage) => {
+            if (!providers.harnesses.recordUsage(providerId, usage)) return;
             void providers.status(providerId).then((provider) => this.deps.bus.publish({ type: 'provider.updated', provider }));
           },
         });
     await chain;
     await this.finish(task.id, outcomeToFinish(outcome));
+    // A live run used some of the plan: re-read the window so the bar keeps up (in the background).
+    if (!adapter) {
+      void providers.harnesses
+        .refreshUsage(providerId)
+        .then(async (changed) => changed && this.deps.bus.publish({ type: 'provider.updated', provider: await providers.status(providerId) }))
+        .catch(() => {});
+    }
+  }
+
+  private liveRunner(providerId: ProviderId) {
+    return this.deps.runLive?.[providerId] ?? DEFAULT_RUNNERS[providerId];
   }
 
   /** Parks a harness permission prompt until the user answers (or the task is cancelled). */

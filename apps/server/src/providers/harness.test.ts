@@ -36,6 +36,53 @@ describe('HarnessService', () => {
     h.close();
   });
 
+  it('does not open a sign-in when the CLI is already signed in', async () => {
+    const opened: string[][] = [];
+    const h = new HarnessService({ anthropic: fakeProbe('ready') }, async (_t, _exe, args) => void opened.push(args), { everyMs: 10, forMs: 5000 });
+    const c = await h.connect('anthropic');
+    expect(c.state).toBe('ready');
+    expect(opened).toEqual([]);
+    h.close();
+  });
+
+  it('refreshes plan usage on each check when the harness can report it', async () => {
+    let used = 0.1;
+    const probe: HarnessProbe = { ...fakeProbe('ready'), usage: async () => ({ status: 'allowed', window: 'five_hour', utilization: used, resetsAt: null }) };
+    const h = new HarnessService({ openai: probe }, async () => {});
+    await h.check('openai');
+    expect(h.planUsage('openai')).toMatchObject({ utilization: 0.1 });
+    used = 0.5;
+    await h.check('openai');
+    expect(h.planUsage('openai')).toMatchObject({ utilization: 0.5 });
+    // A failing usage read never breaks the connection check.
+    const flaky = new HarnessService({ openai: { ...fakeProbe('ready'), usage: async () => Promise.reject(new Error('boom')) } }, async () => {});
+    expect((await flaky.check('openai')).state).toBe('ready');
+    expect(flaky.planUsage('openai')).toBeNull();
+  });
+
+  it('refreshes usage on demand, saying whether it changed, and skips harnesses that aren’t ready', async () => {
+    let used = 0.2;
+    const probe: HarnessProbe = { ...fakeProbe('ready'), usage: async () => ({ status: 'allowed', window: 'five_hour', utilization: used, resetsAt: null }) };
+    const h = new HarnessService({ anthropic: probe }, async () => {});
+    await h.check('anthropic');
+    expect(await h.refreshUsage('anthropic')).toBe(false); // same as the check just read
+    used = 0.4;
+    expect(await h.refreshUsage('anthropic')).toBe(true);
+    expect(h.planUsage('anthropic')).toMatchObject({ utilization: 0.4 });
+
+    const out = new HarnessService({ anthropic: { ...fakeProbe('signed_out'), usage: async () => Promise.reject(new Error('should not be asked')) } }, async () => {});
+    await out.check('anthropic');
+    expect(await out.refreshUsage('anthropic')).toBe(false);
+  });
+
+  it('does not open a sign-in for a CLI that is too old, and says to update', async () => {
+    const opened: string[][] = [];
+    const old: HarnessProbe = { ...fakeProbe('ready'), check: async () => ({ ...(await fakeProbe('ready').check()), state: 'unsupported', message: 'Run `codex update`.' }) };
+    const h = new HarnessService({ openai: old }, async (_t, _e, args) => void opened.push(args));
+    await expect(h.connect('openai')).rejects.toThrow(/codex update/);
+    expect(opened).toEqual([]);
+  });
+
   it('stops watching after the time limit', async () => {
     const { probe } = signingIn();
     const h = new HarnessService({ anthropic: probe }, async () => {}, { everyMs: 5, forMs: 30 });

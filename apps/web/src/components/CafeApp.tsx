@@ -57,8 +57,10 @@ export function CafeApp() {
           }`}
         >
           <CafeStage theme={theme} collapsed={collapsed} />
-          {/* Both panel faces stay mounted; the column slides and they cross-fade. */}
-          <div className="relative min-h-0 overflow-hidden border-slate-line lg:border-l">
+          {/* Both panel faces stay mounted; the column slides and they cross-fade.
+              Clip, not hidden: a hidden box can still be scrolled, and the thread's
+              scrollIntoView would slide the folded rail sideways. */}
+          <div className="relative min-h-0 overflow-clip border-slate-line lg:border-l">
             <div
               inert={collapsed}
               className={`h-[70dvh] transition-[opacity,visibility] duration-200 lg:absolute lg:inset-y-0 lg:left-0 lg:h-auto lg:w-[440px] ${collapsed ? 'lg:invisible lg:opacity-0' : 'visible opacity-100 lg:delay-100'}`}
