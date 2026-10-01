@@ -5,6 +5,10 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 /**
  * A button that opens a floating panel above (or below) it. Closes on Escape,
  * on a click outside, and when `close` is called by the content.
+ *
+ * 'top' and 'bottom' hang the panel off the trigger. 'auto' places it against the
+ * window instead (below, or above when there's more room there), so a scrolling
+ * parent, like a dialog's body, can't clip it; it follows the trigger as that scrolls.
  */
 export function Popover({
   trigger,
@@ -16,7 +20,7 @@ export function Popover({
 }: {
   trigger: (p: { open: boolean; toggle: () => void }) => ReactNode;
   children: (close: () => void) => ReactNode;
-  side?: 'top' | 'bottom';
+  side?: 'top' | 'bottom' | 'auto';
   align?: 'start' | 'end';
   label: string;
   className?: string;
@@ -25,16 +29,35 @@ export function Popover({
   const ref = useRef<HTMLDivElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const [shift, setShift] = useState(0);
+  const [fixed, setFixed] = useState<{ top: number; left: number } | null>(null);
 
   // Keep the panel inside the window: slide it sideways when it would spill off an edge.
   useLayoutEffect(() => {
-    if (!open) return setShift(0);
+    if (!open) {
+      setShift(0);
+      setFixed(null);
+      return;
+    }
     const el = panel.current;
-    if (!el) return;
+    const anchor = ref.current;
+    if (!el || !anchor) return;
+    const margin = 8;
     const place = () => {
+      if (side === 'auto') {
+        const t = anchor.getBoundingClientRect();
+        const r = el.getBoundingClientRect();
+        const below = window.innerHeight - t.bottom - margin;
+        const above = t.top - margin;
+        const top = r.height + margin <= below || below >= above ? t.bottom + margin : t.top - margin - r.height;
+        const left = align === 'end' ? t.right - r.width : t.left;
+        setFixed({
+          top: Math.round(Math.max(margin, Math.min(top, window.innerHeight - margin - r.height))),
+          left: Math.round(Math.max(margin, Math.min(left, window.innerWidth - margin - r.width))),
+        });
+        return;
+      }
       el.style.translate = '0px';
       const r = el.getBoundingClientRect();
-      const margin = 8;
       let dx = 0;
       if (r.right > window.innerWidth - margin) dx = window.innerWidth - margin - r.right;
       if (r.left + dx < margin) dx = margin - r.left;
@@ -43,8 +66,13 @@ export function Popover({
     };
     place();
     window.addEventListener('resize', place);
-    return () => window.removeEventListener('resize', place);
-  }, [open]);
+    // A scrolling parent moves the trigger; keep a window-placed panel with it.
+    if (side === 'auto') window.addEventListener('scroll', place, true);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    };
+  }, [open, side, align]);
 
   useEffect(() => {
     if (!open) return;
@@ -52,7 +80,9 @@ export function Popover({
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
+      if (e.key !== 'Escape') return;
+      e.preventDefault(); // inside a <dialog>, Escape closes just this, not the dialog too
+      setOpen(false);
     };
     document.addEventListener('pointerdown', onDown);
     document.addEventListener('keydown', onKey);
@@ -61,6 +91,11 @@ export function Popover({
       document.removeEventListener('keydown', onKey);
     };
   }, [open]);
+
+  const where =
+    side === 'auto'
+      ? 'fixed' // placed by the layout effect; transparent until then (still focusable) so it never flashes at 0,0
+      : `absolute ${side === 'top' ? 'bottom-full mb-2' : 'top-full mt-2'} ${align === 'start' ? 'left-0' : 'right-0'}`;
   return (
     <div ref={ref} className="relative min-w-0">
       {trigger({ open, toggle: () => setOpen((o) => !o) })}
@@ -69,10 +104,12 @@ export function Popover({
           ref={panel}
           role="dialog"
           aria-label={label}
-          style={{ translate: `${shift}px 0` }}
-          className={`absolute z-40 max-w-[calc(100vw-16px)] rounded-xl border border-slate-line bg-slate shadow-[0_16px_40px_rgba(0,0,0,.45)] ${
-            side === 'top' ? 'bottom-full mb-2' : 'top-full mt-2'
-          } ${align === 'start' ? 'left-0' : 'right-0'} ${className}`}
+          style={
+            side === 'auto'
+              ? { top: fixed?.top ?? 0, left: fixed?.left ?? 0, opacity: fixed ? undefined : 0 }
+              : { translate: `${shift}px 0` }
+          }
+          className={`${where} z-40 max-w-[calc(100vw-16px)] rounded-xl border border-slate-line bg-slate shadow-[0_16px_40px_rgba(0,0,0,.45)] ${className}`}
         >
           {children(() => setOpen(false))}
         </div>

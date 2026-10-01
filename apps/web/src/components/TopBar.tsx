@@ -54,33 +54,32 @@ export function TopBar({ themeChoice, theme, onTheme }: Props) {
         )}
       </div>
 
-      <div role="status" aria-label="Café status" className="flex items-center gap-4 text-[13px]">
-        {quiet ? (
-          <span className="text-chalk-faint">All quiet</span>
-        ) : (
-          <>
-            {working > 0 && (
-              <span className="flex items-center gap-1.5 text-chalk">
-                <span aria-hidden className="size-2 bg-mint" />
-                {working} working
-              </span>
-            )}
-            {queued > 0 && <span className="text-chalk-faint">{queued} queued</span>}
-            {needYou > 0 && (
-              <button
-                type="button"
-                onClick={showNeeds}
-                className="flex h-7 items-center gap-1.5 rounded-full border border-[#5a3128] bg-[#2a1915] px-2.5 text-[12px] text-[#ff9b80] hover:bg-[#3a1f1a]"
-              >
-                <span aria-hidden className="size-2 bg-coral" />
-                {needYou} {needYou === 1 ? 'needs' : 'need'} you
-              </button>
-            )}
-          </>
-        )}
-      </div>
-
-      <div className="ml-auto flex items-center gap-2">
+      <div className="ml-auto flex items-center gap-4">
+        <div role="status" aria-label="Café status" className="flex items-center gap-4 text-[13px]">
+          {quiet ? (
+            <span className="text-chalk-faint">All quiet</span>
+          ) : (
+            <>
+              {working > 0 && (
+                <span className="flex items-center gap-1.5 text-chalk">
+                  <span aria-hidden className="size-2 bg-mint" />
+                  {working} working
+                </span>
+              )}
+              {queued > 0 && <span className="text-chalk-faint">{queued} queued</span>}
+              {needYou > 0 && (
+                <button
+                  type="button"
+                  onClick={showNeeds}
+                  className="flex h-7 items-center gap-1.5 rounded-full border border-[#5a3128] bg-[#2a1915] px-2.5 text-[12px] text-[#ff9b80] hover:bg-[#3a1f1a]"
+                >
+                  <span aria-hidden className="size-2 bg-coral" />
+                  {needYou} {needYou === 1 ? 'needs' : 'need'} you
+                </button>
+              )}
+            </>
+          )}
+        </div>
         <button
           type="button"
           onClick={() => setSettings('general')}

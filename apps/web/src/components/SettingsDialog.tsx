@@ -10,7 +10,8 @@ import { useCafe } from '@/store/cafe';
 import { AddProjectDialog } from './AddProjectDialog';
 import { Avatar } from './Avatar';
 import { THEME_LABELS, ThemeIcon } from './ThemePicker';
-import { FolderIcon, HarnessIcon } from './ui';
+import { ModelList } from './pickers';
+import { Caret, FolderIcon, HarnessIcon, Popover } from './ui';
 
 export type Section = 'general' | 'agents' | 'providers' | 'projects';
 
@@ -229,7 +230,7 @@ function AgentRow({ agent }: { agent: AgentDTO }) {
     if (!n) return setName(agent.name);
     if (n !== agent.name) save({ name: n });
   };
-  const known = models.some((m) => m.value === agent.model);
+  const current = models.find((m) => m.value === agent.model);
   // The seed the grid was built from stays put while you try looks, so the options don't jump.
   const [base, setBase] = useState(agent.spriteSeed);
   const choices = lookChoices(base, page);
@@ -267,21 +268,45 @@ function AgentRow({ agent }: { agent: AgentDTO }) {
           }}
           className="h-9 w-40 min-w-0 rounded-lg border border-transparent bg-transparent px-2 font-display text-[22px] leading-none text-chalk outline-none hover:border-slate-line focus:border-accent focus:bg-night-2"
         />
-        <label className="sr-only" htmlFor={`model-${agent.id}`}>Model</label>
-        <select
-          id={`model-${agent.id}`}
-          value={agent.model}
-          onChange={(e) => save({ model: e.target.value })}
-          className="h-9 min-w-0 flex-1 rounded-lg border border-slate-line bg-night-2 px-2 text-[13px] text-chalk outline-none focus:border-accent"
-        >
-          {!known && <option value={agent.model}>{modelLabel(models, agent.model)}</option>}
-          {models.map((m) => (
-            <option key={m.value} value={m.value}>
-              {m.label}
-              {m.tag ? ` · ${m.tag}` : ''}
-            </option>
-          ))}
-        </select>
+        {/* The same list as the composer's model picker; agents stay on their own floor. */}
+        <div className="min-w-0 flex-1">
+          <Popover
+            label={`${agent.name}'s model`}
+            side="auto"
+            align="end"
+            className="w-[320px]"
+            trigger={({ open, toggle }) => (
+              <button
+                type="button"
+                onClick={toggle}
+                aria-expanded={open}
+                aria-label={`Model: ${modelLabel(models, agent.model)}`}
+                className={`flex h-9 w-full items-center gap-2 rounded-full border bg-night-2 pl-3.5 pr-4 text-left text-[13px] text-chalk transition-colors ${
+                  open ? 'border-accent' : 'border-slate-line hover:border-chalk-faint'
+                }`}
+              >
+                <HarnessIcon harness={HARNESS[agent.providerId].id} />
+                <span className="min-w-0 flex-1 truncate">
+                  {modelLabel(models, agent.model)}
+                  {current?.tag && <span className="text-chalk-faint"> · {current.tag}</span>}
+                </span>
+                <Caret />
+              </button>
+            )}
+          >
+            {(close) => (
+              <ModelList
+                initial={agent.providerId}
+                model={agent.model}
+                lockedTo={agent.providerId}
+                onPick={(_p, m) => {
+                  close();
+                  if (m !== agent.model) save({ model: m });
+                }}
+              />
+            )}
+          </Popover>
+        </div>
       </div>
 
       {picking && (

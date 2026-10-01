@@ -43,7 +43,8 @@ export function ModelPicker({
   );
 }
 
-function ModelList({
+/** The model list behind ModelPicker: a floor rail, search, and each model with its note. */
+export function ModelList({
   initial,
   model,
   lockedTo,
