@@ -83,3 +83,36 @@ body {
   scrollbar-width: thin;
   scrollbar-color: var(--color-slate-line) transparent;
 }
+
+/* The logo's steam: two frames that take turns. */
+@keyframes steam-a {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+@keyframes steam-b {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.steam-a {
+  animation: steam-a 1.2s steps(1) infinite;
+}
+.steam-b {
+  opacity: 0;
+  animation: steam-b 1.2s steps(1) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .steam-a,
+  .steam-b {
+    animation: none !important;
+  }
+}

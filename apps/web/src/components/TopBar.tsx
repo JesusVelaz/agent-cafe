@@ -1,12 +1,14 @@
 'use client';
 
 import { DEFAULTS } from '@agent-cafe/shared';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { cupDataUrl } from '@/lib/cup';
 import type { ThemeChoice } from '@/lib/theme';
 import { useNow } from '@/lib/useNow';
 import type { ThemeId } from '@/scene/atmosphere';
 import { useCafe } from '@/store/cafe';
 import { needsAttention } from '@/store/reduce';
+import { CupIcon } from './CupIcon';
 import { SettingsDialog } from './SettingsDialog';
 
 interface Props {
@@ -27,19 +29,54 @@ export function TopBar({ themeChoice, theme, onTheme }: Props) {
   // A live floor that can't run (signed out, not installed) is worth a dot on the gear.
   const attention = Object.values(state.providers).some((p) => p && p.mode === 'live' && !p.liveAvailable && p.connection.state !== 'checking');
 
+  // The tab tells you what's happening from another tab: title and favicon.
+  useEffect(() => {
+    document.title = needYou ? `(${needYou}) Agent Café` : working ? `${working} working · Agent Café` : 'Agent Café';
+    const href = cupDataUrl({ steam: working > 0, badge: needYou > 0 });
+    for (const link of document.querySelectorAll<HTMLLinkElement>('link[rel~="icon"]')) link.href = href;
+  }, [working, needYou]);
+
+  const showNeeds = () => {
+    state.setPanelCollapsed(false);
+    state.selectAgent(null);
+    requestAnimationFrame(() => document.getElementById('b-need')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  };
+  const quiet = !working && !queued && !needYou;
+
   return (
-    <header className="flex h-14 items-center gap-5 border-b border-slate-line bg-night-2 px-4">
-      <div className="flex items-baseline gap-2.5">
+    <header className="flex h-14 items-center gap-6 border-b border-slate-line bg-night-2 px-4">
+      <div className="flex items-center gap-2.5">
+        <CupIcon size={28} steaming={working > 0} />
         <h1 className="font-display text-[30px] leading-none">Agent Café</h1>
         {conn !== 'open' && (
           <span className={`text-[11px] ${conn === 'connecting' ? 'text-amber' : 'text-coral'}`}>{conn === 'connecting' ? 'Connecting…' : 'Server offline'}</span>
         )}
       </div>
 
-      <div className="flex items-center gap-1.5" aria-label="Café status">
-        <Pill tone="var(--color-mint)">{working} working</Pill>
-        <Pill tone={needYou ? 'var(--color-coral)' : undefined}>{needYou} need you</Pill>
-        {queued > 0 && <Pill>{queued} queued</Pill>}
+      <div role="status" aria-label="Café status" className="flex items-center gap-4 text-[13px]">
+        {quiet ? (
+          <span className="text-chalk-faint">All quiet</span>
+        ) : (
+          <>
+            {working > 0 && (
+              <span className="flex items-center gap-1.5 text-chalk">
+                <span aria-hidden className="size-2 bg-mint" />
+                {working} working
+              </span>
+            )}
+            {queued > 0 && <span className="text-chalk-faint">{queued} queued</span>}
+            {needYou > 0 && (
+              <button
+                type="button"
+                onClick={showNeeds}
+                className="flex h-7 items-center gap-1.5 rounded-full border border-[#5a3128] bg-[#2a1915] px-2.5 text-[12px] text-[#ff9b80] hover:bg-[#3a1f1a]"
+              >
+                <span aria-hidden className="size-2 bg-coral" />
+                {needYou} {needYou === 1 ? 'needs' : 'need'} you
+              </button>
+            )}
+          </>
+        )}
       </div>
 
       <div className="ml-auto flex items-center gap-2">
@@ -60,14 +97,5 @@ export function TopBar({ themeChoice, theme, onTheme }: Props) {
       </div>
       <SettingsDialog open={settings} onClose={() => setSettings(false)} themeChoice={themeChoice} theme={theme} onTheme={onTheme} />
     </header>
-  );
-}
-
-function Pill({ children, tone }: { children: React.ReactNode; tone?: string }) {
-  return (
-    <span className={`flex h-7 items-center gap-1.5 rounded-full bg-slate px-2.5 text-[12px] ${tone ? 'text-chalk' : 'text-chalk-dim'}`}>
-      {tone && <span aria-hidden className="size-2" style={{ background: tone }} />}
-      {children}
-    </span>
   );
 }
