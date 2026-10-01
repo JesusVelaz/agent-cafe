@@ -61,13 +61,13 @@ export function CafeApp() {
           <div className="relative min-h-0 overflow-hidden border-slate-line lg:border-l">
             <div
               inert={collapsed}
-              className={`h-[70dvh] transition-opacity duration-200 lg:absolute lg:inset-y-0 lg:left-0 lg:h-auto lg:w-[440px] ${collapsed ? 'lg:opacity-0' : 'opacity-100 lg:delay-100'}`}
+              className={`h-[70dvh] transition-[opacity,visibility] duration-200 lg:absolute lg:inset-y-0 lg:left-0 lg:h-auto lg:w-[440px] ${collapsed ? 'lg:invisible lg:opacity-0' : 'visible opacity-100 lg:delay-100'}`}
             >
               <SidePanel />
             </div>
             <div
               inert={!collapsed}
-              className={`hidden transition-opacity duration-200 lg:absolute lg:inset-y-0 lg:left-0 lg:block lg:w-14 ${collapsed ? 'opacity-100 lg:delay-150' : 'pointer-events-none opacity-0'}`}
+              className={`hidden transition-opacity duration-200 lg:absolute lg:inset-0 lg:block ${collapsed ? 'opacity-100 lg:delay-150' : 'pointer-events-none opacity-0'}`}
             >
               <PanelRail />
             </div>

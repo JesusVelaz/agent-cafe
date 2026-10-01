@@ -71,7 +71,7 @@ export function PanelRail() {
     if (agentId) state.selectAgent(agentId);
   };
   return (
-    <nav aria-label="Agents" className="flex h-full flex-col items-center gap-1.5 bg-night-2 py-2">
+    <nav aria-label="Agents" className="scroll-chalk flex h-full w-full flex-col items-center gap-1.5 overflow-y-auto overflow-x-hidden bg-night-2 py-2 [scrollbar-width:none]">
       <button type="button" aria-label="Expand the panel" title="Expand the panel" onClick={() => open()} className="grid size-10 place-items-center rounded-lg text-chalk-dim hover:bg-slate hover:text-chalk">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden><path d="M12 3L7 8l5 5M7 3L2 8l5 5" /></svg>
       </button>
