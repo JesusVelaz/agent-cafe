@@ -33,7 +33,6 @@ export const CUP_PAL: Record<string, string> = {
   t: '#cfd6e6',
 };
 
-export const TILE = '#17191e';
 export const BADGE = '#ff8a6b';
 
 export interface Px {
@@ -55,14 +54,14 @@ export function cupPixels(): Px[] {
   return out;
 }
 
-/** A standalone SVG (for favicons): dark rounded tile, cup, optional steam and badge. */
+/** A standalone SVG (for favicons): the cup on a transparent background, optional steam and badge. */
 export function cupSvg({ steam = false, badge = false }: { steam?: boolean; badge?: boolean } = {}): string {
   const rects = cupPixels()
     .filter((p) => !p.steam || (steam && p.steam === 's'))
     .map((p) => `<rect x="${p.x}" y="${p.y}" width="1" height="1" fill="${p.fill}"/>`)
     .join('');
   const dot = badge ? `<rect x="11" y="0" width="5" height="5" fill="${BADGE}"/>` : '';
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" shape-rendering="crispEdges"><rect width="16" height="16" rx="3" fill="${TILE}"/>${rects}${dot}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" shape-rendering="crispEdges">${rects}${dot}</svg>`;
 }
 
 export const cupDataUrl = (o: { steam?: boolean; badge?: boolean }) => `data:image/svg+xml,${encodeURIComponent(cupSvg(o))}`;
