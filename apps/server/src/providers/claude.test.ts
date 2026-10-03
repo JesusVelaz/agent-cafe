@@ -1,7 +1,7 @@
 import type { CanUseTool, Options, SDKRateLimitInfo, query } from '@anthropic-ai/claude-agent-sdk';
 import type { TaskEventData } from '@agent-cafe/shared';
 import { describe, expect, it } from 'vitest';
-import { claudePlanUsage, planUsageFromClaude, planUsageFromClaudeUsage, runClaudeTask, summarizeToolInput, type ApprovalAsk } from './claude.js';
+import { claudePlanUsage, planUsageFromClaude, planUsageFromClaudeUsage, runClaudeTask, summarizeToolInput, type ApprovalAsk, type ClaudeRunContext } from './claude.js';
 
 type Msg = Record<string, unknown>;
 
@@ -30,7 +30,7 @@ const assistant = (id: string, content: unknown[]) => ({
   message: { id, content, usage: { input_tokens: 10, cache_read_input_tokens: 5, output_tokens: 7 } },
 });
 
-async function run(script: Parameters<typeof fakeQuery>[0], decision: 'allow' | 'deny' = 'allow', extra: { resume?: string } = {}) {
+async function run(script: Parameters<typeof fakeQuery>[0], decision: 'allow' | 'deny' = 'allow', extra: Partial<ClaudeRunContext> = {}) {
   const { q, calls } = fakeQuery(script);
   const events: TaskEventData[] = [];
   const asks: ApprovalAsk[] = [];
@@ -52,6 +52,16 @@ async function run(script: Parameters<typeof fakeQuery>[0], decision: 'allow' | 
 }
 
 describe('runClaudeTask', () => {
+  it('adds only the Café tools to allowedTools and leaves file/command approvals in place', async () => {
+    const { options, asks } = await run([{ ask: ['Bash', { command: 'npm test' }] }, { type: 'result', subtype: 'success', is_error: false, result: 'ok' }], 'deny', {
+      collaboration: { call: async () => [] },
+    });
+    expect(options.mcpServers?.cafe).toMatchObject({ type: 'sdk', name: 'cafe' });
+    expect(Object.keys(options.mcpServers!)).toEqual(['cafe']);
+    expect(options).toMatchObject({ strictMcpConfig: true, settings: { disableClaudeAiConnectors: true } });
+    expect(options.allowedTools).toEqual(['mcp__cafe__cafe_list_agents', 'mcp__cafe__cafe_send_message', 'mcp__cafe__cafe_delegate_task', 'mcp__cafe__cafe_get_task']);
+    expect(asks).toEqual([{ tool: 'Bash', summary: 'npm test', reason: null }]);
+  });
   it('runs in the agent folder with its model and no API key', async () => {
     process.env.ANTHROPIC_API_KEY = 'sk-should-not-leak';
     const { options } = await run([{ type: 'result', subtype: 'success', is_error: false, result: 'ok', num_turns: 1 }]);
@@ -60,6 +70,7 @@ describe('runClaudeTask', () => {
     expect(options.resume).toBeUndefined();
     expect(options.systemPrompt).toEqual({ type: 'preset', preset: 'claude_code', append: 'Be tidy.' });
     expect(options.env?.ANTHROPIC_API_KEY).toBeUndefined();
+    expect(options).toMatchObject({ strictMcpConfig: true, mcpServers: {}, settings: { disableClaudeAiConnectors: true } });
   });
 
   it('turns the SDK stream into steps, tool events and a result', async () => {
@@ -93,6 +104,7 @@ describe('runClaudeTask', () => {
       { resume: 'sess-1' },
     );
     expect(options.resume).toBe('sess-1');
+    expect(options).toMatchObject({ strictMcpConfig: true, settings: { disableClaudeAiConnectors: true } });
     expect(sessions).toEqual(['sess-2']);
   });
 
@@ -154,15 +166,18 @@ describe('Claude plan usage', () => {
   it('asks a prompt-less session for usage, and gives up quietly when the API is gone', async () => {
     const session = (method: unknown) => {
       const closed: boolean[] = [];
-      const q = ((params: { prompt: AsyncIterable<unknown> }) => {
+      const calls: Options[] = [];
+      const q = ((params: { prompt: AsyncIterable<unknown>; options: Options }) => {
+        calls.push(params.options);
         void params.prompt[Symbol.asyncIterator]().next(); // the prompt never yields
         return { close: () => closed.push(true), usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: method };
       }) as unknown as typeof query;
-      return { q, closed };
+      return { q, closed, calls };
     };
     const ok = session(async (o: unknown) => ({ seen: o, rate_limits_available: true, rate_limits: { five_hour: { utilization: 12, resets_at: null } } }));
     expect(await claudePlanUsage('/bin/claude', ok.q)).toMatchObject({ window: 'five_hour', utilization: 0.12 });
     expect(ok.closed).toEqual([true]);
+    expect(ok.calls[0]).toMatchObject({ strictMcpConfig: true, mcpServers: {}, settings: { disableClaudeAiConnectors: true }, persistSession: false });
 
     const gone = session(undefined); // renamed or removed in a later SDK
     expect(await claudePlanUsage('/bin/claude', gone.q)).toBeNull();

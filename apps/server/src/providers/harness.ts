@@ -14,7 +14,7 @@ import {
   type PlanUsageDTO,
   type ProviderId,
 } from '@agent-cafe/shared';
-import { claudePlanUsage } from './claude.js';
+import { claudePlanUsage, claudeSessionOptions } from './claude.js';
 import { CODEX_MIN_VERSION, codexModels, codexPlanUsage, tooOldMessage, versionAtLeast } from './codex.js';
 import { harnessEnv } from './live.js';
 
@@ -129,7 +129,7 @@ export const claudeCodeProbe: HarnessProbe = {
     async function* noPrompt() {
       await idle;
     }
-    const q = query({ prompt: noPrompt(), options: { pathToClaudeCodeExecutable: executable, env: harnessEnv(), persistSession: false } });
+    const q = query({ prompt: noPrompt(), options: { ...claudeSessionOptions(executable), persistSession: false } });
     try {
       const models = await q.supportedModels();
       return models.map((m) => ({
@@ -181,7 +181,9 @@ export class HarnessService {
   private readonly probes: Record<ProviderId, HarnessProbe>;
   private readonly state = new Map<ProviderId, HarnessConnectionDTO & { executable: string | null }>();
   private readonly usage = new Map<ProviderId, PlanUsageDTO>();
-  private readonly modelCache = new Map<ProviderId, HarnessModelDTO[]>();
+  private readonly modelCache = new Map<ProviderId, { models: HarnessModelDTO[]; expiresAt: number }>();
+  private readonly modelInflight = new Map<ProviderId, Promise<HarnessModelDTO[]>>();
+  private readonly modelGeneration = new Map<ProviderId, number>();
   private readonly inflight = new Map<ProviderId, Promise<HarnessConnectionDTO>>();
   private readonly watchers = new Map<ProviderId, ReturnType<typeof setInterval>>();
   private readonly listeners = new Set<(id: ProviderId) => void>();
@@ -272,7 +274,10 @@ export class HarnessService {
       .then((s) => {
         const before = this.state.get(id);
         this.state.set(id, s);
-        if (s.state !== 'ready') this.modelCache.delete(id);
+        // A check can reflect a changed account, plan, CLI, or model entitlement.
+        this.modelCache.delete(id);
+        this.modelInflight.delete(id);
+        this.modelGeneration.set(id, (this.modelGeneration.get(id) ?? 0) + 1);
         const changed = !before || before.state !== s.state || before.account !== s.account || before.plan !== s.plan;
         if (changed) for (const fn of this.listeners) fn(id);
         return this.connection(id);
@@ -287,15 +292,26 @@ export class HarnessService {
     return this.state.has(id) ? this.connection(id) : this.check(id);
   }
 
-  async models(id: ProviderId): Promise<HarnessModelDTO[]> {
-    const cached = this.modelCache.get(id);
-    if (cached) return cached;
-    const c = await this.ensure(id);
+  async models(id: ProviderId, refresh = false): Promise<HarnessModelDTO[]> {
+    const c = refresh ? await this.check(id) : await this.ensure(id);
     const exe = this.executable(id);
     if (c.state !== 'ready' || !exe) return [];
-    const models = await this.probes[id].models(exe);
-    this.modelCache.set(id, models);
-    return models;
+    const cached = this.modelCache.get(id);
+    if (!refresh && cached && cached.expiresAt > Date.now()) return cached.models;
+    const pending = this.modelInflight.get(id);
+    if (pending) return pending;
+    const generation = this.modelGeneration.get(id) ?? 0;
+    const request = this.probes[id].models(exe).then((models) => {
+      if ((this.modelGeneration.get(id) ?? 0) !== generation) throw new Error('Connection changed while loading models. Refresh to try again.');
+      const unique = [...new Map(models.filter((m) => m.value.trim()).map((m) => [m.value, m])).values()];
+      if (unique.length) this.modelCache.set(id, { models: unique, expiresAt: Date.now() + 60_000 });
+      else this.modelCache.delete(id);
+      return unique;
+    }).catch((err) => { if ((this.modelGeneration.get(id) ?? 0) === generation) this.modelCache.delete(id); throw err; }).finally(() => {
+      if (this.modelInflight.get(id) === request) this.modelInflight.delete(id);
+    });
+    this.modelInflight.set(id, request);
+    return request;
   }
 
   planUsage(id: ProviderId): PlanUsageDTO | null {

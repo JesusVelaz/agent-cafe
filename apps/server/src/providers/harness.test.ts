@@ -1,5 +1,5 @@
 import type { HarnessState } from '@agent-cafe/shared';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fakeProbe } from '../test/fakeHarness.js';
 import { HarnessService, type HarnessProbe } from './harness.js';
 
@@ -17,8 +17,53 @@ const until = async (ok: () => boolean, ms = 2000) => {
     await new Promise((r) => setTimeout(r, 5));
   }
 };
+afterEach(() => vi.restoreAllMocks());
 
 describe('HarnessService', () => {
+  it('expires model lists and invalidates them after a check even if the account stays ready', async () => {
+    let list = [{ value: 'first', label: 'First', description: '' }];
+    const read = vi.fn(async () => list);
+    const h = new HarnessService({ openai: { ...fakeProbe(), models: read } });
+    const now = Date.now();
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(now);
+    expect(await h.models('openai')).toEqual(list);
+    list = [{ value: 'second', label: 'Second', description: '' }];
+    expect((await h.models('openai'))[0]?.value).toBe('first');
+    clock.mockReturnValue(now + 60_001);
+    expect(await h.models('openai')).toEqual(list);
+    list = [{ value: 'third', label: 'Third', description: '' }];
+    await h.check('openai');
+    expect(await h.models('openai')).toEqual(list);
+    expect(read).toHaveBeenCalledTimes(3);
+  });
+
+  it('does not leak an old account model request into the new account cache', async () => {
+    let account = 'first';
+    let release!: (models: Array<{ value: string; label: string; description: string }>) => void;
+    let reads = 0;
+    const h = new HarnessService({ openai: {
+      ...fakeProbe(), check: async () => ({ ...await fakeProbe().check(), account }),
+      models: async () => ++reads === 1 ? new Promise((r) => { release = r; }) : [{ value: 'new-account-only', label: 'New', description: '' }],
+    } });
+    const old = h.models('openai');
+    await until(() => reads === 1);
+    const rejection = expect(old).rejects.toThrow('Connection changed');
+    account = 'second';
+    await h.check('openai');
+    expect((await h.models('openai'))[0]?.value).toBe('new-account-only');
+    release([{ value: 'old-account-only', label: 'Old', description: '' }]);
+    await rejection;
+    expect((await h.models('openai'))[0]?.value).toBe('new-account-only');
+  });
+
+  it('refresh rechecks sign-in and never serves cached options after sign-out', async () => {
+    let state: HarnessState = 'ready';
+    const h = new HarnessService({ openai: { ...fakeProbe(), check: () => fakeProbe(state).check(), models: async () => [{ value: 'current', label: 'Current', description: '' }] } });
+    expect(await h.models('openai')).toHaveLength(1);
+    state = 'signed_out';
+    expect(await h.models('openai', true)).toEqual([]);
+    expect(await h.models('openai')).toEqual([]);
+  });
   it('keeps checking after Connect and reports the sign-in without anyone asking', async () => {
     const { probe, finish } = signingIn();
     const opened: string[][] = [];

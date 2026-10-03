@@ -7,6 +7,7 @@
 import {
   query as sdkQuery,
   type CanUseTool,
+  type Options,
   type SDKMessage,
   type SDKRateLimitInfo,
 } from '@anthropic-ai/claude-agent-sdk';
@@ -14,6 +15,8 @@ import { DEFAULTS, type FailureKind, type PlanUsageDTO } from '@agent-cafe/share
 import type { RunOutcome, RunResult, RunTotals } from '../orchestrator/runner.js';
 import { harnessEnv } from './live.js';
 import { epochToIso, type LiveRunContext } from './live.js';
+import { claudeCollaborationServer } from './collaborationTools.js';
+import { collaborationSpecs } from '../orchestrator/collaboration.js';
 
 export type { ApprovalAsk } from './live.js';
 
@@ -21,6 +24,18 @@ export interface ClaudeRunContext extends LiveRunContext {
   maxTurns?: number;
   /** Injected in tests. */
   query?: typeof sdkQuery;
+}
+
+/** Café sessions expose only explicitly supplied MCP tools, not personal integrations. */
+export function claudeSessionOptions(executable: string) {
+  return {
+    pathToClaudeCodeExecutable: executable,
+    env: harnessEnv(),
+    strictMcpConfig: true,
+    mcpServers: {},
+    // Cloud connectors have a separate auto-discovery path from local MCP configs.
+    settings: { disableClaudeAiConnectors: true },
+  } satisfies Options;
 }
 
 type Obj = Record<string, unknown>;
@@ -80,7 +95,7 @@ export async function claudePlanUsage(executable: string, query: typeof sdkQuery
   async function* noPrompt(): AsyncGenerator<never> {
     await idle;
   }
-  const q = query({ prompt: noPrompt(), options: { pathToClaudeCodeExecutable: executable, env: harnessEnv(), persistSession: false } });
+  const q = query({ prompt: noPrompt(), options: { ...claudeSessionOptions(executable), persistSession: false } });
   let timer: NodeJS.Timeout | undefined;
   try {
     const call = (q as unknown as Obj)[USAGE_METHOD];
@@ -145,9 +160,12 @@ export async function runClaudeTask(ctx: ClaudeRunContext): Promise<RunOutcome> 
   const q = (ctx.query ?? sdkQuery)({
     prompt: task.prompt,
     options: {
-      pathToClaudeCodeExecutable: ctx.executable,
-      env: harnessEnv(),
+      ...claudeSessionOptions(ctx.executable),
       cwd: agent.workDir,
+      ...(ctx.collaboration ? {
+        mcpServers: { cafe: claudeCollaborationServer(ctx.collaboration) },
+        allowedTools: collaborationSpecs.map((s) => `mcp__cafe__${s.name}`),
+      } : {}),
       ...(task.model && task.model !== 'default' ? { model: task.model } : {}),
       permissionMode: agent.permission === 'acceptEdits' ? 'acceptEdits' : 'default',
       canUseTool,

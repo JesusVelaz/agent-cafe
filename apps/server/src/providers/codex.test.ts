@@ -57,6 +57,39 @@ const usageNote = (s: FakeCodexServer, total: [number, number], last: [number, n
   });
 
 describe('runCodexTask', () => {
+  it('registers collaboration tools and answers scoped dynamic calls without changing approvals', async () => {
+    const srv = new FakeCodexServer();
+    const calls: unknown[] = [];
+    let reply: any;
+    let foreign: any;
+    const { outcome } = await run(srv, {
+      ctx: { collaboration: { call: async (name, args) => { calls.push({ name, args }); return { taskId: 'delegated' }; } } },
+      turn: async (s) => {
+        reply = await s.request('item/tool/call', { threadId: 'thr_new', turnId: 'turn_1', callId: 'c1', tool: 'cafe_delegate_task', arguments: { agentId: 'claude', message: 'Review' } });
+        foreign = await s.request('item/tool/call', { threadId: 'thr_other', turnId: 'turn_1', callId: 'c2', tool: 'cafe_delegate_task', arguments: {} });
+        s.completeTurn('completed');
+      },
+    });
+    expect(outcome.status).toBe('completed');
+    expect(srv.received[0]).toMatchObject({ params: { capabilities: { experimentalApi: true } } });
+    expect(srv.requests('thread/start')[0]!.params).toMatchObject({ approvalPolicy: 'untrusted', approvalsReviewer: 'user', dynamicTools: expect.arrayContaining([expect.objectContaining({ type: 'function', name: 'cafe_delegate_task' })]) });
+    expect(calls).toEqual([{ name: 'cafe_delegate_task', args: { agentId: 'claude', message: 'Review' } }]);
+    expect(reply).toMatchObject({ result: { success: true, contentItems: [{ type: 'inputText', text: '{"taskId":"delegated"}' }] } });
+    expect(foreign.error).toMatchObject({ code: -32602 });
+  });
+
+  it('returns a collaboration failure to the model as a failed tool result', async () => {
+    const srv = new FakeCodexServer();
+    let reply: any;
+    await run(srv, {
+      ctx: { collaboration: { call: async () => { throw new Error('Teammate is unavailable.'); } } },
+      turn: async (s) => {
+        reply = await s.request('item/tool/call', { threadId: 'thr_new', turnId: 'turn_1', callId: 'c1', tool: 'cafe_delegate_task', arguments: {} });
+        s.completeTurn('completed');
+      },
+    });
+    expect(reply).toMatchObject({ result: { success: false, contentItems: [{ type: 'inputText', text: 'Teammate is unavailable.' }] } });
+  });
   it('starts app-server, then a thread in the project under the café’s approval and sandbox policy', async () => {
     const srv = new FakeCodexServer();
     const { outcome, sessions } = await run(srv, { turn: (s) => s.completeTurn('completed') });

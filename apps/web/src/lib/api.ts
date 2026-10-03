@@ -87,7 +87,7 @@ export const api = {
   /** Opens the provider's own sign-in in a terminal window (unless already signed in); the result arrives on the stream. */
   connectProvider: (id: ProviderId) => post<{ ok: true; connected: boolean }>(`/api/providers/${id}/connect`),
   disconnectProvider: (id: ProviderId) => post<ProviderStatusDTO>(`/api/providers/${id}/disconnect`),
-  models: (id: ProviderId) => request<{ source: 'harness' | 'catalog'; models: HarnessModelDTO[] }>(`/api/providers/${id}/models`),
+  models: (id: ProviderId, refresh = false) => request<{ source: 'harness' | 'catalog' | 'unavailable'; models: HarnessModelDTO[]; message?: string }>(`/api/providers/${id}/models${refresh ? '?refresh=true' : ''}`),
   updateSettings: (s: Partial<SettingsDTO>) => patch<SettingsDTO>('/api/settings', s),
   addProject: (p: { path: string; name?: string }) => post<ProjectDTO>('/api/projects', p),
   renameProject: (id: string, name: string) => patch<ProjectDTO>(`/api/projects/${id}`, { name }),

@@ -53,7 +53,7 @@ export function CafeApp() {
       <div className="relative grid min-h-0">
         <main
           className={`grid min-h-0 grid-rows-[minmax(360px,1fr)_auto] lg:grid-rows-1 lg:transition-[grid-template-columns] lg:duration-300 lg:ease-[cubic-bezier(.2,.8,.2,1)] ${
-            collapsed ? 'lg:grid-cols-[minmax(0,1fr)_56px]' : 'lg:grid-cols-[minmax(0,1fr)_440px]'
+            collapsed ? 'lg:grid-cols-[minmax(0,1fr)_56px]' : 'lg:grid-cols-[minmax(0,1fr)_520px]'
           }`}
         >
           <CafeStage theme={theme} collapsed={collapsed} />
@@ -63,7 +63,7 @@ export function CafeApp() {
           <div className="relative min-h-0 overflow-clip border-slate-line lg:border-l">
             <div
               inert={collapsed}
-              className={`h-[70dvh] transition-[opacity,visibility] duration-200 lg:absolute lg:inset-y-0 lg:left-0 lg:h-auto lg:w-[440px] ${collapsed ? 'lg:invisible lg:opacity-0' : 'visible opacity-100 lg:delay-100'}`}
+              className={`h-[70dvh] transition-[opacity,visibility] duration-200 lg:absolute lg:inset-y-0 lg:left-0 lg:h-auto lg:w-[520px] ${collapsed ? 'lg:invisible lg:opacity-0' : 'visible opacity-100 lg:delay-100'}`}
             >
               <SidePanel />
             </div>

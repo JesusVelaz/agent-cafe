@@ -1,5 +1,5 @@
 import { randomInt } from 'node:crypto';
-import { PROVIDER_IDS } from '@agent-cafe/shared';
+import { HARNESS, PROVIDER_IDS, offeredModel, type ProviderId } from '@agent-cafe/shared';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { toAgentDTO } from '../db/mappers.js';
@@ -27,8 +27,14 @@ const patchBody = z.object({
 });
 
 export const agentRoutes =
-  ({ db, bus }: Services): FastifyPluginAsync =>
+  ({ db, bus, providers }: Services): FastifyPluginAsync =>
   async (app) => {
+    const validateModel = async (id: ProviderId, model: string) => {
+      if (await providers.mode(id) !== 'live') return;
+      const models = await providers.harnesses.models(id).catch(() => []);
+      if (!models.length) throw new OrchestratorError('Could not verify available models. Refresh the model list and try again.', 'conflict');
+      if (!offeredModel(models, model)) throw new OrchestratorError(`${model} is not available in ${HARNESS[id].name} for this account.`, 'invalid');
+    };
     app.get('/api/agents', async () => {
       const agents = await db.agent.findMany({ where: { archivedAt: null }, orderBy: { createdAt: 'asc' } });
       return agents.map(toAgentDTO);
@@ -36,6 +42,7 @@ export const agentRoutes =
 
     app.post('/api/agents', async (req, reply) => {
       const body = createBody.parse(req.body);
+      await validateModel(body.providerId, body.model);
       const agent = toAgentDTO(
         await db.agent.create({
           data: { ...body, systemPrompt: body.systemPrompt?.trim() || DEFAULT_PROMPT, spriteSeed: randomInt(1, 1_000_000) },
@@ -49,6 +56,7 @@ export const agentRoutes =
       const { archived, ...rest } = patchBody.parse(req.body);
       const existing = await db.agent.findUnique({ where: { id: req.params.id } });
       if (!existing) throw new OrchestratorError('Agent not found.', 'not_found');
+      if (rest.model) await validateModel(existing.providerId as ProviderId, rest.model);
       // Model changes apply to tasks queued from now on; queued tasks keep their model.
       const agent = toAgentDTO(
         await db.agent.update({

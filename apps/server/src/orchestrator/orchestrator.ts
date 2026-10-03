@@ -10,6 +10,8 @@ import { randomUUID } from 'node:crypto';
 import {
   DEFAULTS,
   HARNESS,
+  exchangeMessage,
+  offeredModel,
   isTerminal,
   type AgentPermission,
   type ApprovalDTO,
@@ -31,6 +33,7 @@ import type { AdapterResolver } from '../providers/registry.js';
 import type { SettingsService } from '../settings.js';
 import type { ToolRegistry } from '../tools/registry.js';
 import { runTask, type RunOutcome } from './runner.js';
+import { Collaboration, COLLABORATION_INSTRUCTIONS } from './collaboration.js';
 
 const DEFAULT_RUNNERS: LiveRunners = { anthropic: runClaudeTask, openai: runCodexTask };
 
@@ -56,6 +59,15 @@ export interface EnqueueInput {
   permission?: AgentPermission;
   /** Continue the conversation of this earlier task (same agent and project). */
   continueTaskId?: string;
+  /** Server-owned provenance, never accepted from the public create-task route. */
+  collaboration?: {
+    sourceTaskId: string;
+    exchangeKind: 'message' | 'delegation' | 'result';
+    rootTaskId: string;
+    exchangeDepth: number;
+    resultForTaskId?: string;
+    exchangeData?: string;
+  };
 }
 
 export interface OrchestratorDeps {
@@ -88,13 +100,23 @@ export class Orchestrator {
   private readonly seq = new Map<string, number>();
   private readonly approvals = new Map<string, PendingApproval>();
   private stopped = false;
+  private recovering = false;
+  private readonly collaboration: Collaboration;
+  private readonly records = new Map<string, Promise<void>>();
 
-  constructor(private readonly deps: OrchestratorDeps) {}
+  constructor(private readonly deps: OrchestratorDeps) {
+    this.collaboration = new Collaboration({
+      db: deps.db, enqueue: (input) => this.enqueue(input),
+      mode: (id) => deps.providers.mode(id as ProviderId),
+      log: (taskId, agentId, message) => this.record(taskId, agentId, { kind: 'log', level: 'info', message }),
+    });
+  }
 
   // ── Lifecycle ────────────────────────────────────────────────────────────
 
   /** On boot: anything mid-run is marked interrupted (never silently re-billed); queues resume. */
   async recover(): Promise<void> {
+    this.recovering = true;
     const { db } = this.deps;
     const stale = await db.task.findMany({ where: { status: { in: ['running', 'tool_wait'] } } });
     for (const t of stale) {
@@ -103,8 +125,10 @@ export class Orchestrator {
         error: 'The server stopped while this task was running. Nothing was re-sent; use Retry to run it again.',
       });
     }
+    this.recovering = false;
     const queued = await db.task.findMany({ where: { status: 'queued' }, select: { agentId: true }, distinct: ['agentId'] });
     for (const { agentId } of queued) this.pump(agentId);
+    await this.collaboration.recover();
   }
 
   /** Abort running tasks (they end as cancelled) and stop picking up new ones. */
@@ -134,7 +158,8 @@ export class Orchestrator {
     if (mode === 'off') {
       throw new OrchestratorError(`${agent.providerId} is switched off. Switch it to Live or Demo.`, 'conflict');
     }
-    const model = input.model?.trim() || agent.model;
+    let model = input.model?.trim() || agent.model;
+    let modelNote: string | null = null;
     const permission = input.permission ?? (agent.permission as AgentPermission);
     const projectId = input.projectId === undefined ? agent.projectId : input.projectId;
     if (projectId && !(await db.project.findUnique({ where: { id: projectId } }))) {
@@ -147,7 +172,25 @@ export class Orchestrator {
       if (prev.projectId !== projectId) throw new OrchestratorError('Follow-ups stay in the same project. Start a new thread to switch.', 'invalid');
       continueOf = prev.id;
     }
-    if (mode === 'live') await this.assertLiveReady(agent, projectId);
+    if (mode === 'live') {
+      await this.assertLiveReady(agent, projectId);
+      const providerId = agent.providerId as ProviderId;
+      const available = await providers.harnesses.models(providerId).catch(() => { throw new OrchestratorError('Could not verify available models. Refresh the model list and try again.', 'conflict'); });
+      if (!available.length) throw new OrchestratorError('No available models were reported. Refresh the model list before starting live work.', 'conflict');
+      if (providerId === 'openai' && model === 'default') model = (available.find((m) => m.tag === 'Default') ?? available[0]!).value;
+      if (!offeredModel(available, model)) {
+        // Delegation uses an agent's saved preference, which may come from the demo catalog.
+        // An explicit user choice must fail validation instead of silently changing models.
+        if (input.model && !input.collaboration) {
+          throw new OrchestratorError(`${model} isn't available in ${HARNESS[providerId].name} for this account. Pick one of: ${available.map((m) => m.label).join(', ')}.`, 'invalid');
+        }
+        const family = model.match(/-(sol|luna|terra|astra)$/)?.[0];
+        const replacement = (family ? available.find((m) => m.value.endsWith(family)) : undefined)
+          ?? available.find((m) => m.tag === 'Default') ?? available[0]!;
+        modelNote = `Café: ${agent.name}'s saved model ${model} is unavailable. Using ${replacement.label}, available on this account.`;
+        model = replacement.value;
+      }
+    }
     const row = await db.task.create({
       data: {
         agentId: agent.id,
@@ -160,6 +203,7 @@ export class Orchestrator {
         projectId,
         permission,
         continueOf,
+        ...(input.collaboration ?? {}),
       },
     });
     // The composer remembers each agent's last choices.
@@ -169,6 +213,7 @@ export class Orchestrator {
     }
     const task = this.publishTask(row);
     await this.record(row.id, row.agentId, { kind: 'status', status: 'queued' });
+    if (modelNote) await this.record(row.id, row.agentId, { kind: 'log', level: 'info', message: modelNote });
     this.pump(agent.id);
     return task;
   }
@@ -176,6 +221,9 @@ export class Orchestrator {
   async cancel(taskId: string): Promise<TaskDTO> {
     const task = await this.deps.db.task.findUnique({ where: { id: taskId } });
     if (!task) throw new OrchestratorError('Task not found.', 'not_found');
+    await this.collaboration.cancel(taskId);
+    const children = await this.deps.db.task.findMany({ where: { sourceTaskId: taskId } });
+    for (const child of children) await this.cancel(child.id);
     if (isTerminal(task.status as TaskDTO['status'])) return toTaskDTO(task);
 
     // Still queued? Cancel atomically, so it can't be claimed by the agent at the same moment.
@@ -216,6 +264,13 @@ export class Orchestrator {
       model: task.model,
       permission: task.permission as AgentPermission,
       ...(task.continueOf ? { continueTaskId: task.continueOf } : {}),
+      ...(task.sourceTaskId && task.rootTaskId && task.exchangeKind ? {
+        collaboration: {
+          sourceTaskId: task.sourceTaskId, rootTaskId: task.rootTaskId,
+          exchangeKind: task.exchangeKind as 'message' | 'delegation' | 'result', exchangeDepth: task.exchangeDepth,
+          ...(task.exchangeData ? { exchangeData: task.exchangeData } : {}),
+        },
+      } : {}),
     });
   }
 
@@ -319,6 +374,7 @@ export class Orchestrator {
     const { db, providers, tools, resolveAdapter } = this.deps;
     const providerId = task.providerId as ProviderId;
     const agent = await db.agent.findUniqueOrThrow({ where: { id: task.agentId } });
+    const harnessPrompt = task.exchangeKind ? this.exchangePrompt(task) : task.prompt;
 
     // Atomic claim: if the task was cancelled while we were picking it up, skip it.
     const claimed = await db.task.updateMany({
@@ -386,8 +442,9 @@ export class Orchestrator {
           ...(this.deps.maxSteps ? { maxSteps: this.deps.maxSteps } : {}),
         })
       : await this.liveRunner(providerId)({
-          task: { prompt: task.prompt, model: task.model },
-          agent: { systemPrompt: agent.systemPrompt, workDir: project!.path, permission: task.permission as AgentPermission },
+          task: { prompt: harnessPrompt, model: task.model },
+          agent: { systemPrompt: `${agent.systemPrompt}\n\n${COLLABORATION_INSTRUCTIONS}`, workDir: project!.path, permission: task.permission as AgentPermission },
+          collaboration: this.collaboration.forTask(task.id, ctrl.signal),
           executable: providers.harnesses.executable(providerId)!,
           ...(resume ? { resume } : {}),
           onSession: (sessionId) => {
@@ -414,6 +471,16 @@ export class Orchestrator {
 
   private liveRunner(providerId: ProviderId) {
     return this.deps.runLive?.[providerId] ?? DEFAULT_RUNNERS[providerId];
+  }
+
+  /** Attribution and continuation guidance go to the harness, never into the visible message. */
+  private exchangePrompt(task: Task): string {
+    const dto = toTaskDTO(task);
+    const sender = dto.exchange ? `${dto.exchange.senderName} (${dto.exchange.senderProviderId})` : 'a teammate';
+    const header = task.exchangeKind === 'result'
+      ? `Delegation result from ${sender}: ${dto.exchange?.status ?? 'finished'}`
+      : `${task.exchangeKind === 'delegation' ? 'Delegated task' : 'Message'} from ${sender}`;
+    return `[${header}]\n${exchangeMessage(dto)}${task.exchangeKind === 'result' ? '\n\nContinue the original request using this result. Other delegated tasks may still be pending.' : ''}`;
   }
 
   /** Parks a harness permission prompt until the user answers (or the task is cancelled). */
@@ -479,11 +546,23 @@ export class Orchestrator {
       },
     });
     await this.record(taskId, row.agentId, { kind: 'status', status: f.status, ...(f.error ? { note: f.error } : {}) });
-    return this.publishTask(row);
+    const task = this.publishTask(row);
+    if (!this.stopped && !this.recovering) await this.collaboration.deliver(row).catch(async (err) => {
+      await this.record(row.id, row.agentId, { kind: 'log', level: 'warn', message: `Café: Result delivery pending: ${(err as Error).message}` });
+    });
+    return task;
   }
 
   /** Persist one event with the next per-task sequence number, then broadcast it. */
-  private async record(taskId: string, agentId: string, data: TaskEventData): Promise<void> {
+  private record(taskId: string, agentId: string, data: TaskEventData): Promise<void> {
+    const next = (this.records.get(taskId) ?? Promise.resolve()).then(() => this.persistRecord(taskId, agentId, data));
+    const tail = next.catch(() => {});
+    this.records.set(taskId, tail);
+    void tail.then(() => { if (this.records.get(taskId) === tail) this.records.delete(taskId); });
+    return next;
+  }
+
+  private async persistRecord(taskId: string, agentId: string, data: TaskEventData): Promise<void> {
     const { db, bus } = this.deps;
     let seq = this.seq.get(taskId);
     if (seq === undefined) {

@@ -4,7 +4,7 @@
  * item events into café task events, and its approval requests into approvals the
  * user answers in the café.
  *
- * Uses only the stable app-server surface (no experimentalApi), verified against
+ * Uses the stable app-server surface plus experimental dynamic tools for Café collaboration, verified against
  * Codex 0.154.0. To diff a newer CLI's protocol:
  *   codex app-server generate-ts --out <dir>          (stable)
  *   codex app-server generate-ts --experimental --out <dir>
@@ -34,6 +34,7 @@ import type { FailureKind, HarnessModelDTO, PlanUsageDTO } from '@agent-cafe/sha
 import type { RunOutcome, RunResult, RunTotals } from '../orchestrator/runner.js';
 import { CodexRpc, CodexRpcError, RpcReplyError, exitMessage, spawnCodex, type CodexRpcHandlers, type CodexSpawner } from './codexRpc.js';
 import { epochToIso, type ApprovalAsk, type LiveRunContext } from './live.js';
+import { codexCollaborationTools } from './collaborationTools.js';
 
 /** The oldest Codex whose app-server this was verified against. */
 export const CODEX_MIN_VERSION = '0.154.0';
@@ -95,11 +96,11 @@ export const tooOldMessage = (v: string) =>
 // ── Sessions ─────────────────────────────────────────────────────────────────
 
 /** Starts `codex app-server` and completes the initialize handshake. */
-export async function openCodex(exe: string, handlers: CodexRpcHandlers = {}, spawn: CodexSpawner = spawnCodex): Promise<CodexRpc> {
+export async function openCodex(exe: string, handlers: CodexRpcHandlers = {}, spawn: CodexSpawner = spawnCodex, experimentalApi = false): Promise<CodexRpc> {
   const rpc = new CodexRpc(spawn(exe, ['app-server']), handlers);
   try {
     const init = obj(
-      await rpc.request('initialize', { clientInfo: { name: 'agent_cafe', title: 'Agent Café', version: '0.1.0' }, capabilities: null }, 20_000),
+      await rpc.request('initialize', { clientInfo: { name: 'agent_cafe', title: 'Agent Café', version: '0.1.0' }, capabilities: experimentalApi ? { experimentalApi: true } : null }, 20_000),
     );
     const version = parseCodexVersion(str(init?.userAgent) ?? '');
     if (version && !versionAtLeast(version, CODEX_MIN_VERSION)) throw new CodexProtocolError(tooOldMessage(version));
@@ -260,6 +261,10 @@ function toolResult(item: Obj): { ok: boolean; output: string } {
       const content = obj(item.result)?.content;
       const text = Array.isArray(content) ? content.map((c) => str(obj(c)?.text) ?? '').filter(Boolean).join('\n') : '';
       return { ok: status === 'completed' && !err, output: err ? str(err.message) ?? 'Failed.' : text };
+    }
+    case 'dynamicToolCall': {
+      const content = Array.isArray(item.contentItems) ? item.contentItems : [];
+      return { ok: item.success !== false && status === 'completed', output: content.map((c) => str(obj(c)?.text) ?? '').join('\n') };
     }
     default:
       return { ok: status !== 'failed' && status !== 'declined', output: '' };
@@ -436,6 +441,18 @@ export async function runCodexTask(ctx: CodexRunContext): Promise<RunOutcome> {
     const p = obj(params);
     if (threadId && p && str(p.threadId) && p.threadId !== threadId) throw new RpcReplyError(-32602, 'Not this task’s thread.');
     switch (method) {
+      case 'item/tool/call': {
+        if (!ctx.collaboration) throw new RpcReplyError(-32601, 'Café collaboration tools are not enabled.');
+        if (!threadId || p?.threadId !== threadId || !turnId || p.turnId !== turnId || runAc.signal.aborted) {
+          throw new RpcReplyError(-32602, 'Not an active Café collaboration turn.');
+        }
+        try {
+          const result = await ctx.collaboration.call(str(p.tool) ?? '', p.arguments);
+          return { success: true, contentItems: [{ type: 'inputText', text: JSON.stringify(result) }] };
+        } catch (err) {
+          return { success: false, contentItems: [{ type: 'inputText', text: (err as Error).message }] };
+        }
+      }
       case 'item/commandExecution/requestApproval': {
         const command = str(p?.command);
         const d = await ask({
@@ -480,7 +497,7 @@ export async function runCodexTask(ctx: CodexRunContext): Promise<RunOutcome> {
 
   let rpc: CodexRpc | null = null;
   try {
-    rpc = await openCodex(ctx.executable, { onNotification, onRequest, onMalformed: () => {} }, ctx.spawn);
+    rpc = await openCodex(ctx.executable, { onNotification, onRequest, onMalformed: () => {} }, ctx.spawn, !!ctx.collaboration);
 
     const account = obj(obj(await rpc.request('account/read', {}))?.account);
     if (!account) return done({ status: 'failed', failureKind: 'signed_out', error: 'Codex isn’t signed in. Connect ChatGPT in Settings.' });
@@ -513,6 +530,8 @@ export async function runCodexTask(ctx: CodexRunContext): Promise<RunOutcome> {
       cwd: agent.workDir,
       ...THREAD_POLICY,
       config: SANDBOX_CONFIG,
+      // Codex persists these in the thread; thread/resume restores them.
+      ...(!ctx.resume && ctx.collaboration ? { dynamicTools: codexCollaborationTools } : {}),
       ...(agent.systemPrompt ? { developerInstructions: agent.systemPrompt } : {}),
       ...(task.model && task.model !== 'default' ? { model: task.model } : {}),
     };

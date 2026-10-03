@@ -39,15 +39,70 @@ agents (Mocha, Chai and Biscotti downstairs; Earl, Matcha and Scone upstairs), a
 3. On the same card, switch the upstairs floor to **Live**.
 4. Under the message box, open the project chip and **add a project**: paste the full path of a
    folder once, then pick it by name from then on (like a checkout).
-5. Send a task. In the box, pick the model (every model Claude Code offers) and a permission:
+5. Send a task. In the box, pick the model (the choices reported by your signed-in Claude Code harness) and a permission:
    **Ask first** (default) or **Auto-accept edits** (commands still ask). When Claude Code wants to
    run a command or edit a file, the agent raises a hand and an **Allow / Deny** card appears.
 
-Messaging an agent again continues their last conversation in that project (Claude Code resumes
-the session); switch the footer chip to **New thread** to start fresh. Each agent remembers the
-model, permission and project it used last.
+Open an agent to see their threads, then open a thread to reply in that conversation (Claude Code
+resumes the session). Use **New thread** in the thread list to start fresh. A reply stays in its
+thread's project; each agent remembers the model, permission and project it used last.
 
 Live runs count against your plan's normal usage limits; the top bar shows the current window.
+
+### Agents working together
+
+Live Claude and Codex agents can discover teammates, send messages, delegate tasks, and read
+the status of tasks in their collaboration. The Café server attributes and queues each exchange;
+the sending agent cannot choose another sender identity or raise the recipient's permissions.
+
+Try sending Earl a task such as:
+
+> Implement this fix, then delegate a read-only review to Mocha. Incorporate the review and
+> report what changed and how you verified it.
+
+Both floors must be connected and in **Live** mode. Delegated tasks use the sender's project,
+the recipient's model and permission setting, and a fresh harness conversation. Sending a
+message continues the recipient's most recent completed conversation in that project, if one
+exists; a reply to an ancestor continues that ancestor's original conversation. Recipients can
+explicitly send replies. Messages do not automatically return replies; delegation does. A result, including a
+failure or cancellation, queues a follow-up in the requester's original conversation. The
+requester should finish its turn after dispatching work instead of polling. Task prompts show
+the sender, recipient threads label messages/delegations/results, and the sender's thread
+records outgoing exchanges. Start a **New thread** for Codex conversations created before
+this feature so Codex registers the new tools.
+
+Any agent can act as a coordinator. For example:
+
+> Coordinate this investigation. Delegate backend inspection to Mocha and a read-only test
+> review to Earl. Give them separate scopes. Collect their results and summarize the findings
+> once both finish. Do not edit files until the reviews are complete.
+
+The coordinator uses existing Café agents, each with its own Claude or Codex conversation.
+Different agents work concurrently; each agent's own tasks remain queued in order. Automatic
+creation of new agent identities and additional harness adapters are future work. Cross-agent
+tools are available in Live mode; Demo agents retain their scripted behavior.
+
+There is a shared limit of **12 outgoing exchanges** and **3 levels** per original request,
+and agents cannot delegate to themselves or back to an ancestor. Automatic result deliveries
+do not consume that limit. Cancelling a task cancels its outstanding descendant tasks and
+suppresses follow-ups to that requester. Result delivery is persisted and deduplicated across
+restarts; if the receiving provider is unavailable, delivery is retried on server restart.
+Interrupted requesters are not silently resumed. Coordinate reviews or disjoint files: this
+feature does not isolate worktrees or merge competing edits.
+
+Tools: `cafe_list_agents`, `cafe_send_message`, `cafe_delegate_task`, `cafe_get_task`.
+Claude receives these through an in-process MCP server; Codex uses App Server dynamic tools
+(an experimental interface verified against the installed 0.154.0 schema).
+Claude sessions load only the Café MCP server; personal, project, plugin and auto-discovered
+claude.ai connectors are excluded from Café runs and model/usage checks. This setting applies
+only to Café sessions and does not change your Claude configuration.
+
+Live tasks check the signed-in harness's account model list before queuing work. If an agent's saved model
+is no longer offered, Café uses an available model from the same family (or the account's
+default), updates the saved preference, and records the change in the task. Explicit user
+model choices are validated without substitution. Retrying a delegated task preserves its
+sender and result routing. Chat bubbles show message/result content; attribution and resume
+instructions are kept separately. Existing result history also hides the old internal wrapper.
 
 ### Going live with your ChatGPT subscription (Codex)
 
@@ -111,6 +166,14 @@ Everything is optional. Copy `.env.example` to `.env` at the repo root to change
 `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` and `OPENAI_API_KEY` / `CODEX_API_KEY` are deliberately
 removed from the harnesses' environment, and Codex must be signed in with ChatGPT, so live runs
 always use your subscription.
+
+Live model pickers use only the connected harness's model list, including its default and
+aliases. Demo catalogs appear only in Demo mode. If discovery fails or the harness is signed
+out, the picker shows an empty/error state and Live sends are blocked until models can be
+verified. Use **Refresh** in the model picker to recheck sign-in and available choices. Lists
+expire after one minute and are invalidated by connection checks; switching accounts, plans,
+or provider modes clears the browser's visible options. Live task submissions and model
+changes in agent settings are also validated against the offered models.
 
 Useful scripts: `pnpm test`, `pnpm typecheck`, `pnpm db:reset` (wipe and reseed).
 

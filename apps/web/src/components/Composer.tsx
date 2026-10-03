@@ -1,13 +1,12 @@
 'use client';
 
-import { HARNESS, type AgentPermission, type ProviderId } from '@agent-cafe/shared';
+import { HARNESS, offeredModel, type AgentPermission, type ProviderId } from '@agent-cafe/shared';
 import { useEffect, useId, useRef, useState } from 'react';
 import { api } from '@/lib/api';
-import { useModels } from '@/lib/models';
-import { useCafe } from '@/store/cafe';
-import { tasksFor } from '@/store/reduce';
+import { useModelOptions } from '@/lib/models';
+import { useAgentView, useCafe } from '@/store/cafe';
 import { ModelPicker, PermissionPicker, ProjectPicker, TargetPicker, type Target } from './pickers';
-import { Chip, PixelSend } from './ui';
+import { Chip, FolderIcon, PixelSend } from './ui';
 
 /** How long a success notice ("Sent to Steve.") stays up. */
 const NOTICE_MS = 4000;
@@ -16,9 +15,9 @@ const NOTICE_MS = 4000;
  * The message box, docked at the bottom of the side panel (and Focus mode's bar).
  *
  * On the board it addresses whoever is free on a floor, or a named agent; with an
- * agent open it messages them. Model, permission and project are chosen per
- * message (defaulting to what that agent used last). A message to an agent
- * continues their latest conversation in that project unless "New thread" is on.
+ * agent open it follows the panel: inside a thread it replies there (same
+ * conversation, same project); on their thread list or a new thread it starts a
+ * fresh thread and opens it. Model and permission are chosen per message.
  */
 export function Composer({ variant }: { variant: 'panel' | 'bar' }) {
   const agents = useCafe((s) => s.agents);
@@ -40,28 +39,32 @@ export function Composer({ variant }: { variant: 'panel' | 'bar' }) {
   const [anyPermission, setAnyPermission] = useState<AgentPermission>('ask');
   const [anyProject, setAnyProject] = useState<string | null | undefined>(undefined);
   const [override, setOverride] = useState<{ model?: string; permission?: AgentPermission; projectId?: string | null }>({});
-  const [newThread, setNewThread] = useState(false);
-  useEffect(() => {
-    setOverride({});
-    setNewThread(false);
-  }, [agent?.id]);
+  useEffect(() => setOverride({}), [agent?.id]);
+  const agentView = useAgentView();
+  const openThread = selected && agentView?.kind === 'thread' ? agentView.thread : undefined;
 
-  const models = useModels(provider);
-  // The harness's own default when signed in; otherwise what this floor's first agent used last.
-  const floorAgent = Object.values(agents)
-    .filter((a) => a.providerId === provider)
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0];
-  const floorDefault = models.find((m) => m.tag === 'Default')?.value ?? floorAgent?.model ?? models[0]?.value ?? '';
-  const model = agent ? (override.model ?? agent.model) : (anyModel[provider] ?? floorDefault);
+  const modelOptions = useModelOptions(provider);
+  const models = modelOptions.models;
+  const floorDefault = models.find((m) => m.tag === 'Default')?.value ?? models[0]?.value ?? '';
+  const preferredModel = agent ? (override.model ?? agent.model) : (anyModel[provider] ?? floorDefault);
+  const model = offeredModel(models, preferredModel)?.value ?? floorDefault;
   const permission = agent ? (override.permission ?? agent.permission) : anyPermission;
   const firstProject = Object.values(projects).sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0]?.id ?? null;
-  const rawProject = agent ? (override.projectId !== undefined ? override.projectId : agent.projectId) : anyProject !== undefined ? anyProject : firstProject;
+  // A reply stays in its thread's project; a new thread picks one.
+  const rawProject = openThread
+    ? openThread.projectId
+    : agent
+      ? override.projectId !== undefined ? override.projectId : agent.projectId
+      : anyProject !== undefined ? anyProject : firstProject;
   const projectId = rawProject && projects[rawProject] ? rawProject : null;
 
   const mode = providers[provider]?.mode;
   const live = mode === 'live';
-  const thread = agent ? tasksFor({ tasks }, agent.id).find((t) => t.projectId === projectId) : undefined;
-  const continuing = Boolean(thread) && !newThread;
+  // Continue from the newest message that has a harness session to resume (a failed
+  // first try may have none), so the reply keeps the thread's context.
+  const continueFrom = openThread
+    ? [...openThread.taskIds].reverse().map((id) => tasks[id]).find((t) => t?.sessionId) ?? openThread.last
+    : undefined;
 
   const [prompt, setPrompt] = useState('');
   const [sending, setSending] = useState(false);
@@ -83,7 +86,7 @@ export function Composer({ variant }: { variant: 'panel' | 'bar' }) {
     el.style.height = `${Math.min(el.scrollHeight, 180)}px`;
   }, [prompt]);
 
-  const blocked = mode === 'off' ? 'That floor is switched off.' : live && !projectId ? 'Pick a project for live work.' : null;
+  const blocked = mode === 'off' ? 'That floor is switched off.' : modelOptions.loading ? 'Loading available models…' : !model ? modelOptions.error ?? 'Choose an available model first.' : live && !projectId ? 'Pick a project for live work.' : null;
 
   const send = async () => {
     const text = prompt.trim();
@@ -98,12 +101,12 @@ export function Composer({ variant }: { variant: 'panel' | 'bar' }) {
         model,
         permission,
         projectId,
-        ...(continuing && thread ? { continueTaskId: thread.id } : {}),
+        ...(continueFrom ? { continueTaskId: continueFrom.id } : {}),
       });
       setPrompt('');
-      setNewThread(false);
       if (!agent) setNotice({ ok: true, text: `Sent to ${agents[task.agentId]?.name ?? 'an agent'}.` });
-      if (variant === 'panel' && !agent) selectAgent(task.agentId, task.id);
+      // A new thread opens, so you're reading what you just started.
+      if (variant === 'panel' && !openThread) selectAgent(task.agentId, task.id);
     } catch (e) {
       setNotice({ ok: false, text: (e as Error).message });
     } finally {
@@ -112,13 +115,18 @@ export function Composer({ variant }: { variant: 'panel' | 'bar' }) {
   };
 
   const placeholder = agent
-    ? continuing
-      ? `Message ${agent.name}…`
-      : `Give ${agent.name} a new task…`
+    ? openThread
+      ? `Reply to ${agent.name}…`
+      : `Start a new thread with ${agent.name}…`
     : `Ask anyone ${provider === 'anthropic' ? 'upstairs' : 'downstairs'} to…`;
   const floorNote = mode === 'live' ? `Live · ${HARNESS[provider].name}` : mode === 'off' ? 'Floor is off' : 'Demo · no real calls';
 
-  const projectChip = (
+  const projectChip = openThread ? (
+    <Chip label={`Project: ${projectId ? projects[projectId]?.name : 'none'} (a thread stays in its project)`} title="A thread stays in its project. Start a new thread to work elsewhere." disabled>
+      <FolderIcon size={12} />
+      <span className="truncate">{projectId ? projects[projectId]?.name : 'No project'}</span>
+    </Chip>
+  ) : (
     <ProjectPicker
       projectId={projectId}
       required={live}
@@ -192,23 +200,6 @@ export function Composer({ variant }: { variant: 'panel' | 'bar' }) {
       {variant === 'panel' && (
         <div className="flex min-w-0 items-center gap-0.5 px-0.5">
           {projectChip}
-          {agent && thread && (
-            <Chip
-              onClick={() => setNewThread((n) => !n)}
-              active={newThread}
-              label={newThread ? 'Starting a new thread. Click to continue the last one instead' : 'Continuing the last thread. Click to start a new one'}
-            >
-              {newThread ? (
-                <>
-                  <span aria-hidden>＋</span> New thread
-                </>
-              ) : (
-                <>
-                  <span aria-hidden>↳</span> Continuing
-                </>
-              )}
-            </Chip>
-          )}
           <span role="status" className={`ml-auto truncate pl-2 text-[11px] ${notice ? (notice.ok ? 'text-mint' : 'text-coral') : 'text-chalk-faint'}`}>
             {notice?.text ?? floorNote}
           </span>

@@ -1,9 +1,9 @@
 'use client';
 
-import { HARNESS, type AgentDTO, type ProviderId } from '@agent-cafe/shared';
+import { HARNESS, offeredModel, type AgentDTO, type ProviderId } from '@agent-cafe/shared';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { api } from '@/lib/api';
-import { modelLabel, useModels } from '@/lib/models';
+import { useModels } from '@/lib/models';
 import type { ThemeChoice } from '@/lib/theme';
 import type { ThemeId } from '@/scene/atmosphere';
 import { useCafe } from '@/store/cafe';
@@ -230,7 +230,7 @@ function AgentRow({ agent }: { agent: AgentDTO }) {
     if (!n) return setName(agent.name);
     if (n !== agent.name) save({ name: n });
   };
-  const current = models.find((m) => m.value === agent.model);
+  const current = offeredModel(models, agent.model);
   // The seed the grid was built from stays put while you try looks, so the options don't jump.
   const [base, setBase] = useState(agent.spriteSeed);
   const choices = lookChoices(base, page);
@@ -280,14 +280,14 @@ function AgentRow({ agent }: { agent: AgentDTO }) {
                 type="button"
                 onClick={toggle}
                 aria-expanded={open}
-                aria-label={`Model: ${modelLabel(models, agent.model)}`}
+                aria-label={`Model: ${current ? current.label : 'Choose model'}`}
                 className={`flex h-9 w-full items-center gap-2 rounded-full border bg-night-2 pl-3.5 pr-4 text-left text-[13px] text-chalk transition-colors ${
                   open ? 'border-accent' : 'border-slate-line hover:border-chalk-faint'
                 }`}
               >
                 <HarnessIcon harness={HARNESS[agent.providerId].id} />
                 <span className="min-w-0 flex-1 truncate">
-                  {modelLabel(models, agent.model)}
+                  {current ? current.label : 'Choose model'}
                   {current?.tag && <span className="text-chalk-faint"> · {current.tag}</span>}
                 </span>
                 <Caret />
@@ -480,7 +480,7 @@ function ProviderCard({ id, active }: { id: ProviderId; active: boolean }) {
               })}
               className="h-8 rounded-lg bg-accent px-3.5 text-[13px] font-medium text-white hover:bg-[#7f9bff] disabled:opacity-60"
             >
-              {waiting ? 'Waiting…' : 'Connect'}
+              {waiting ? 'Waiting' : 'Connect'}
             </button>
           )}
         </div>
@@ -552,7 +552,7 @@ function ProviderCard({ id, active }: { id: ProviderId; active: boolean }) {
               onClick={() => setConfirmOut(true)}
               className="h-8 rounded-lg border border-slate-line px-3 text-[13px] text-chalk-dim hover:border-[#5a3128] hover:bg-[#231817] hover:text-coral"
             >
-              Sign out…
+              Sign out
             </button>
           )}
         </div>
@@ -577,7 +577,7 @@ function Projects() {
         ))}
       </div>
       <button type="button" onClick={() => setAdding(true)} className="mt-4 h-9 rounded-lg bg-accent px-4 text-[13px] font-medium text-white hover:bg-[#7f9bff]">
-        Add project…
+        Add project
       </button>
       <p className="mt-1.5 text-[12px] text-chalk-faint">Browse to a folder on this computer, or clone a Git or GitHub repository.</p>
       <AddProjectDialog open={adding} onClose={() => setAdding(false)} />

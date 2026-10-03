@@ -5,6 +5,7 @@
  */
 import type { AgentPermission, PlanUsageDTO, ProviderId, TaskEventData } from '@agent-cafe/shared';
 import type { RunOutcome } from '../orchestrator/runner.js';
+import type { CollaborationTools } from '../orchestrator/collaboration.js';
 
 export interface ApprovalAsk {
   tool: string;
@@ -26,6 +27,8 @@ export interface LiveRunContext {
   onSession?: (sessionId: string) => void;
   /** Resume this earlier session or thread (a follow-up message). */
   resume?: string;
+  /** Scoped to this task by the server; harnesses cannot impersonate another sender. */
+  collaboration?: CollaborationTools;
 }
 
 /** The child environment for harness processes: never an API key, so runs bill the user's plan. */

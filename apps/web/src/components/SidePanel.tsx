@@ -1,19 +1,18 @@
 'use client';
 
-import { DEFAULTS, type FailureKind, type TaskDTO } from '@agent-cafe/shared';
-import { useState } from 'react';
+import { DEFAULTS, isTerminal, type FailureKind, type TaskDTO } from '@agent-cafe/shared';
+import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
-import { ago, duration, taskDuration, usd } from '@/lib/format';
-import { modelLabel, useModels } from '@/lib/models';
+import { ago, duration, taskDuration } from '@/lib/format';
 import { useNow } from '@/lib/useNow';
 import { activityLabel, deriveActivity } from '@/sim/activity';
-import { useCafe } from '@/store/cafe';
-import { latestTaskFor, needsAttention, queuedFor, recentFinished, type Attention } from '@/store/reduce';
+import { useAgentView, useCafe } from '@/store/cafe';
+import { agentThreads, latestTaskFor, needsAttention, projectGroups, type Attention, type ProjectGroup, type ThreadSummary } from '@/store/reduce';
 import { AgentHeader, AgentThread } from './AgentThread';
 import { Avatar } from './Avatar';
 import { Composer } from './Composer';
 import { ACTIVITY_TONE } from './Panel';
-import { SectionHeading } from './ui';
+import { FolderIcon, SectionHeading } from './ui';
 
 export const FAILURE_SHORT: Record<FailureKind, string> = {
   provider_error: 'Something went wrong',
@@ -24,20 +23,28 @@ export const FAILURE_SHORT: Record<FailureKind, string> = {
   signed_out: 'Not signed in',
 };
 
-/** The right-hand panel: the board, or the selected agent's thread; the composer is always at the bottom. */
+/**
+ * The right-hand panel: the board, or an agent (their thread list, one thread, or a
+ * new thread); the composer is always at the bottom and follows what's open.
+ */
 export function SidePanel() {
-  const selectedAgentId = useCafe((s) => s.selectedAgentId);
   const agent = useCafe((s) => (s.selectedAgentId ? s.agents[s.selectedAgentId] : undefined));
   const selectAgent = useCafe((s) => s.selectAgent);
   const setPanelCollapsed = useCafe((s) => s.setPanelCollapsed);
+  const view = useAgentView();
+  const inside = agent && view && view.kind !== 'list';
   return (
     <aside aria-label={agent ? agent.name : 'Work board'} className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] bg-night-2">
       <div className="border-b border-slate-line">
         <div className="flex h-12 items-center justify-between pl-3 pr-1.5">
           {agent ? (
-            <button type="button" onClick={() => selectAgent(null)} className="flex h-9 items-center gap-1.5 rounded-lg px-2 text-[13px] text-chalk-dim hover:bg-slate hover:text-chalk">
+            <button
+              type="button"
+              onClick={() => (inside ? selectAgent(agent.id) : selectAgent(null))}
+              className="flex h-9 items-center gap-1.5 rounded-lg px-2 text-[13px] text-chalk-dim hover:bg-slate hover:text-chalk"
+            >
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden><path d="M9 2.5L4.5 7 9 11.5" /></svg>
-              Board
+              {inside ? 'Threads' : 'Board'}
             </button>
           ) : (
             <h2 className="px-2 font-label text-[11px] font-normal tracking-wide text-chalk-dim">WORK BOARD</h2>
@@ -54,9 +61,75 @@ export function SidePanel() {
         </div>
         {agent && <AgentHeader agent={agent} />}
       </div>
-      <div className="scroll-chalk min-h-0 overflow-y-auto">{selectedAgentId && agent ? <AgentThread agentId={selectedAgentId} /> : <Board />}</div>
+      {/* Keyed by view, so each one opens at its own top rather than where the last was scrolled. */}
+      <div key={!agent || !view ? 'board' : view.kind === 'thread' ? view.thread.id : `${agent.id}:${view.kind}`} className="scroll-chalk min-h-0 overflow-y-auto">
+        {!agent || !view ? (
+          <Board />
+        ) : view.kind === 'thread' ? (
+          <AgentThread thread={view.thread} />
+        ) : view.kind === 'new' ? (
+          <p className="px-5 py-6 text-[13px] text-chalk-faint">New thread with {agent.name}. Your first message below starts it, with a fresh context.</p>
+        ) : (
+          <ThreadList agentId={agent.id} />
+        )}
+      </div>
       <Composer variant="panel" />
     </aside>
+  );
+}
+
+/** One agent's threads, newest first, and a way to start another. */
+function ThreadList({ agentId }: { agentId: string }) {
+  const tasks = useCafe((s) => s.tasks);
+  const projects = useCafe((s) => s.projects);
+  const selectAgent = useCafe((s) => s.selectAgent);
+  const startThread = useCafe((s) => s.startThread);
+  const now = useNow(1000);
+  const threads = agentThreads({ tasks }, agentId);
+  return (
+    <section aria-labelledby="t-list" className="flex flex-col gap-2 px-4 py-4">
+      <SectionHeading
+        id="t-list"
+        tone="var(--color-chalk-dim)"
+        action={
+          <button
+            type="button"
+            onClick={startThread}
+            className="flex h-7 items-center gap-1 rounded-full border border-slate-line px-2.5 text-[12px] text-chalk-dim hover:bg-slate hover:text-chalk"
+          >
+            <span aria-hidden>＋</span> New thread
+          </button>
+        }
+      >
+        THREADS
+      </SectionHeading>
+      {threads.length === 0 && <p className="px-2 py-1 text-[13px] text-chalk-faint">No threads yet. Send a message below to start one.</p>}
+      <div className="flex flex-col gap-0.5">
+        {threads.map((th) => {
+          const project = th.projectId ? projects[th.projectId]?.name : null;
+          return (
+            <button
+              key={th.id}
+              type="button"
+              onClick={() => selectAgent(agentId, th.last.id)}
+              className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2.5 rounded-lg px-2 py-2 text-left hover:bg-slate"
+            >
+              <span className="min-w-0">
+                <span className="block truncate text-[13px] text-chalk" title={th.title}>{th.title}</span>
+                <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[12px] text-chalk-faint">
+                  <span className="truncate">
+                    {[th.from && `from ${th.from}`, project, `${th.messages} ${th.messages === 1 ? 'message' : 'messages'}`].filter(Boolean).join(' · ')}
+                  </span>
+                  <span aria-hidden>·</span>
+                  <ThreadStatus task={th.last} now={now} />
+                </span>
+              </span>
+              <span className="pt-px text-[12px] text-chalk-faint">{ago(th.at, now)}</span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -114,17 +187,14 @@ export function PanelRail() {
   );
 }
 
+/** What needs you, then every thread: those at work first (with what they're doing), then the rest. */
 function Board() {
   const state = useCafe();
   const now = useNow(1000);
   const attention = needsAttention(state, now, state.dismissed, DEFAULTS.stuckAfterSec);
-  const working = Object.values(state.tasks)
-    .filter((t) => t.status === 'running' || t.status === 'tool_wait')
-    .sort((a, b) => (a.startedAt ?? '').localeCompare(b.startedAt ?? ''));
-  const finished = recentFinished(state, 12).filter((t) => t.status === 'completed').slice(0, 6);
-  const queued = queuedFor(state);
-  const busy = new Set([...working.map((t) => t.agentId), ...queued.map((t) => t.agentId)]);
-  const idle = Object.values(state.agents).filter((a) => !busy.has(a.id));
+  const groups = projectGroups(state);
+  const working = groups.reduce((n, g) => n + g.working, 0);
+  const [folded, setFolded] = useFolded();
 
   return (
     <div className="flex flex-col gap-6 px-4 py-4">
@@ -137,49 +207,211 @@ function Board() {
         </section>
       )}
 
-      <section aria-labelledby="b-now">
-        <SectionHeading id="b-now" tone="var(--color-mint)" count={working.length}>WORKING NOW</SectionHeading>
-        {working.length === 0 && <p className="px-2 py-1 text-[13px] text-chalk-faint">Nobody is working right now. Send a task below.</p>}
-        <div className="flex flex-col">
-          {working.map((t) => (
-            <WorkingRow key={t.id} task={t} now={now} />
-          ))}
-        </div>
-        {(queued.length > 0 || idle.length > 0) && (
-          <p className="px-2 pt-2 text-[12px] leading-relaxed text-chalk-faint">
-            {queued.length > 0 && <>Queued: {summarize(queued.map((t) => state.agents[t.agentId]?.name ?? '?'))}. </>}
-            {idle.length > 0 && <>Free: {idle.map((a) => a.name).join(', ')}.</>}
-          </p>
-        )}
-      </section>
-
-      <section aria-labelledby="b-done">
-        <SectionHeading id="b-done" tone="var(--color-chalk-dim)">FINISHED</SectionHeading>
-        {finished.length === 0 && <p className="px-2 py-1 text-[13px] text-chalk-faint">Nothing finished yet.</p>}
-        <div className="flex flex-col">
-          {finished.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => state.selectAgent(t.agentId, t.id)}
-              className="grid grid-cols-[14px_72px_minmax(0,1fr)_auto] items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-[13px] hover:bg-slate"
-            >
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" aria-label="Done" className="text-mint"><path d="M2.5 7.5l3 3 6-7" /></svg>
-              <span className="truncate">{state.agents[t.agentId]?.name ?? '—'}</span>
-              <span className="truncate text-chalk-dim">{t.prompt}</span>
-              <span className="text-[12px] text-chalk-faint">{ago(t.finishedAt!, now)}</span>
-            </button>
-          ))}
+      <section aria-labelledby="b-threads">
+        <SectionHeading
+          id="b-threads"
+          tone="var(--color-mint)"
+          action={<span className="text-[12px] text-chalk-faint">{working > 0 ? `${working} working` : 'All quiet'}</span>}
+        >
+          THREADS
+        </SectionHeading>
+        {groups.length === 0 && <p className="px-2 py-1 text-[13px] text-chalk-faint">No threads yet. Send a task below to start one.</p>}
+        <div className="flex flex-col gap-2">
+          {groups.map((g) => {
+            const key = g.projectId ?? DEMO_GROUP;
+            return (
+              <ProjectThreads
+                key={key}
+                group={g}
+                now={now}
+                folded={folded.has(key)}
+                onToggle={() => setFolded(key, !folded.has(key))}
+              />
+            );
+          })}
         </div>
       </section>
     </div>
   );
 }
 
-function summarize(names: string[]): string {
-  const counts = new Map<string, number>();
-  for (const n of names) counts.set(n, (counts.get(n) ?? 0) + 1);
-  return [...counts].map(([n, c]) => (c > 1 ? `${c} for ${n}` : n)).join(', ');
+const DEMO_GROUP = 'demo';
+const FOLDED_KEY = 'cafe.foldedProjects';
+/** How many threads a project shows before "Show N more". */
+const PER_PROJECT = 5;
+
+/** Which project groups are folded, remembered in this browser. */
+function useFolded(): [ReadonlySet<string>, (key: string, fold: boolean) => void] {
+  const [folded, setFoldedState] = useState<ReadonlySet<string>>(() => new Set());
+  // Read after mount, so the server render matches the first client render.
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(FOLDED_KEY) ?? '[]');
+      if (Array.isArray(saved)) setFoldedState(new Set(saved.filter((k): k is string => typeof k === 'string')));
+    } catch {
+      /* nothing saved, or storage is unavailable */
+    }
+  }, []);
+  const set = (key: string, fold: boolean) =>
+    setFoldedState((prev) => {
+      const next = new Set(prev);
+      if (fold) next.add(key);
+      else next.delete(key);
+      try {
+        localStorage.setItem(FOLDED_KEY, JSON.stringify([...next]));
+      } catch {
+        /* private mode: just not remembered */
+      }
+      return next;
+    });
+  return [folded, set];
+}
+
+/** A project's heading (fold it to hide its threads) and its newest threads. */
+function ProjectThreads({ group, now, folded, onToggle }: { group: ProjectGroup; now: number; folded: boolean; onToggle: () => void }) {
+  const project = useCafe((s) => (group.projectId ? s.projects[group.projectId] : undefined));
+  const [all, setAll] = useState(false);
+  const name = group.projectId ? project?.name ?? 'Removed project' : 'Demo';
+  const shown = all ? group.threads : group.threads.slice(0, PER_PROJECT);
+  const hidden = group.threads.length - shown.length;
+  const bodyId = `threads-${group.projectId ?? DEMO_GROUP}`;
+  return (
+    <div className="flex flex-col">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={!folded}
+        aria-controls={bodyId}
+        title={project?.path}
+        className="flex h-8 items-center gap-2 rounded-lg px-2 text-left text-[13px] text-chalk-dim hover:bg-slate hover:text-chalk"
+      >
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden className={`shrink-0 transition-transform ${folded ? '-rotate-90' : ''}`}>
+          <path d="M2.5 4l2.5 2.5L7.5 4" />
+        </svg>
+        <FolderIcon size={14} />
+        <span className="min-w-0 flex-1 truncate font-semibold text-chalk">{name}</span>
+        <span className="shrink-0 text-[12px] text-chalk-faint">
+          {group.working > 0 && <span className="text-mint">{group.working} working · </span>}
+          {group.threads.length}
+        </span>
+      </button>
+      {!folded && (
+        <div id={bodyId} className="flex flex-col gap-0.5 pl-3">
+          {shown.map((th) => (
+            <ThreadRow key={th.id} thread={th} now={now} />
+          ))}
+          {(hidden > 0 || all) && group.threads.length > PER_PROJECT && (
+            <button type="button" onClick={() => setAll((a) => !a)} className="self-start rounded-md px-2 py-1 text-[12px] text-chalk-faint hover:bg-slate hover:text-chalk">
+              {all ? 'Show fewer' : `Show ${hidden} more`}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const OUTCOME: Partial<Record<TaskDTO['status'], { label: string; tone: string; mark: 'done' | 'failed' | 'stopped' }>> = {
+  completed: { label: 'Done', tone: 'text-mint', mark: 'done' },
+  failed: { label: 'Failed', tone: 'text-coral', mark: 'failed' },
+  interrupted: { label: 'Interrupted', tone: 'text-coral', mark: 'failed' },
+  cancelled: { label: 'Stopped', tone: 'text-chalk-faint', mark: 'stopped' },
+};
+
+function OutcomeMark({ status }: { status: TaskDTO['status'] }) {
+  const o = OUTCOME[status];
+  if (!o) return <span aria-label="Working" className="size-2 shrink-0 bg-mint" />;
+  return (
+    <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" aria-label={o.label} className={`shrink-0 ${o.tone}`}>
+      <path d={o.mark === 'done' ? 'M2.5 7.5l3 3 6-7' : o.mark === 'failed' ? 'M3.5 3.5l7 7M10.5 3.5l-7 7' : 'M3.5 7h7'} />
+    </svg>
+  );
+}
+
+/** How a thread ended, or, while it works, what it's doing and for how long. */
+function ThreadStatus({ task, now }: { task: TaskDTO; now: number }) {
+  const state = useCafe();
+  const o = OUTCOME[task.status];
+  if (o) {
+    return (
+      <span className={`flex shrink-0 items-center gap-1 ${o.tone}`}>
+        <OutcomeMark status={task.status} /> {o.label}
+      </span>
+    );
+  }
+  if (task.status === 'queued') return <span className="shrink-0 text-chalk-faint">Queued</span>;
+  const activity = deriveActivity({
+    activeTask: task,
+    latestTask: latestTaskFor(state, task.agentId),
+    lastEvent: state.lastEvent[task.id],
+    lastActivityAt: state.lastActivityAt[task.id],
+    now,
+  });
+  const tone = ACTIVITY_TONE[activity.kind];
+  return (
+    <span className="flex min-w-0 items-center gap-1.5" style={{ color: tone }}>
+      <span aria-hidden className={`size-2 shrink-0 ${activity.kind === 'thinking' ? 'animate-pulse' : ''}`} style={{ background: tone }} />
+      <span className="truncate">{activityLabel(activity)}</span>
+      <span className="shrink-0 text-chalk-faint">· {duration(taskDuration(task, now) ?? 0)}</span>
+    </span>
+  );
+}
+
+/**
+ * One conversation, under its project's heading: what it's about, who has it, what
+ * it's doing or how it ended; work it delegated tucked under it.
+ */
+function ThreadRow({ thread, now }: { thread: ThreadSummary; now: number }) {
+  const agents = useCafe((s) => s.agents);
+  const selectAgent = useCafe((s) => s.selectAgent);
+  const agent = agents[thread.agentId];
+  const working = !isTerminal(thread.last.status);
+  return (
+    <div className="flex flex-col">
+      <button
+        type="button"
+        onClick={() => selectAgent(thread.agentId, thread.last.id)}
+        className="grid grid-cols-[28px_minmax(0,1fr)_auto] items-start gap-x-2.5 rounded-lg px-2 py-2 text-left hover:bg-slate"
+      >
+        {agent ? <Avatar seed={agent.spriteSeed} providerId={agent.providerId} scale={2} /> : <span />}
+        <span className="min-w-0">
+          <span className="block truncate text-[13px] text-chalk" title={thread.title}>{thread.title}</span>
+          <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[12px] text-chalk-faint">
+            <span className={working ? 'shrink-0' : 'truncate'}>
+              <b className="font-semibold text-chalk-dim">{agent?.name ?? 'Someone'}</b>
+              {!working && (
+                <>
+                  {thread.from && <> · from {thread.from}</>} · {thread.messages} {thread.messages === 1 ? 'message' : 'messages'}
+                </>
+              )}
+            </span>
+            <span aria-hidden>·</span>
+            <ThreadStatus task={thread.last} now={now} />
+          </span>
+        </span>
+        <span className="pt-px text-[12px] text-chalk-faint">{working ? 'now' : ago(thread.at, now)}</span>
+      </button>
+      {thread.children.map((c) => {
+        const who = agents[c.agentId];
+        return (
+          <button
+            key={c.id}
+            type="button"
+            onClick={() => selectAgent(c.agentId, c.last.id)}
+            className="ml-9 grid grid-cols-[12px_21px_minmax(0,1fr)_auto_auto] items-center gap-x-2 rounded-lg px-2 py-1 text-left text-[12px] hover:bg-slate"
+          >
+            <span aria-hidden className="text-chalk-faint">↳</span>
+            {who ? <Avatar seed={who.spriteSeed} providerId={who.providerId} scale={1.5} /> : <span />}
+            <span className="min-w-0 truncate text-chalk-dim" title={c.title}>
+              <b className="font-semibold">{who?.name ?? 'Someone'}</b> <span className="text-chalk-faint">{c.title}</span>
+            </span>
+            <OutcomeMark status={c.last.status} />
+            <span className="text-chalk-faint">{ago(c.at, now)}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 /** A harness asking before it acts: the command or file, and Deny / Allow. */
@@ -258,39 +490,6 @@ function AttentionCard({ item, now }: { item: Exclude<Attention, { kind: 'approv
         </div>
       )}
     </article>
-  );
-}
-
-function WorkingRow({ task, now }: { task: TaskDTO; now: number }) {
-  const state = useCafe();
-  const agent = state.agents[task.agentId];
-  const models = useModels(task.providerId);
-  const activity = deriveActivity({
-    activeTask: task,
-    latestTask: latestTaskFor(state, task.agentId),
-    lastEvent: state.lastEvent[task.id],
-    lastActivityAt: state.lastActivityAt[task.id],
-    now,
-  });
-  const tone = ACTIVITY_TONE[activity.kind];
-  return (
-    <button
-      type="button"
-      onClick={() => state.selectAgent(task.agentId, task.id)}
-      className="grid grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-2.5 rounded-lg px-2 py-2 text-left hover:bg-slate"
-    >
-      {agent ? <Avatar seed={agent.spriteSeed} providerId={agent.providerId} scale={2} /> : <span />}
-      <span className="min-w-0">
-        <span className="block truncate text-[13px]">
-          <b className="font-semibold">{agent?.name ?? '—'}</b> <span className="text-chalk-dim">· {task.prompt}</span>
-        </span>
-        <span className="block truncate text-[12px]" style={{ color: tone }}>{activityLabel(activity)}</span>
-      </span>
-      <span className="text-right text-[12px] text-chalk-dim">
-        {duration(taskDuration(task, now) ?? 0)}
-        <span className="block text-chalk-faint">{task.isMock ? `${usd(task.costUsd)} demo` : modelLabel(models, task.model)}</span>
-      </span>
-    </button>
   );
 }
 
