@@ -10,7 +10,6 @@ import { useAgentView, useCafe } from '@/store/cafe';
 import { agentThreads, latestTaskFor, needsAttention, projectGroups, type Attention, type ProjectGroup, type ThreadSummary } from '@/store/reduce';
 import { AgentHeader, AgentThread } from './AgentThread';
 import { Avatar } from './Avatar';
-import { Composer } from './Composer';
 import { ACTIVITY_TONE } from './Panel';
 import { FolderIcon, SectionHeading } from './ui';
 
@@ -25,7 +24,7 @@ export const FAILURE_SHORT: Record<FailureKind, string> = {
 
 /**
  * The right-hand panel: the board, or an agent (their thread list, one thread, or a
- * new thread); the composer is always at the bottom and follows what's open.
+ * new thread); the composer is docked at the bottom and follows what's open.
  */
 export function SidePanel() {
   const agent = useCafe((s) => (s.selectedAgentId ? s.agents[s.selectedAgentId] : undefined));
@@ -73,7 +72,8 @@ export function SidePanel() {
           <ThreadList agentId={agent.id} />
         )}
       </div>
-      <Composer variant="panel" />
+      {/* The composer docks over this slot; CafeApp renders it so it can float in café view. */}
+      <div aria-hidden className="h-[var(--composer-h,9.25rem)]" />
     </aside>
   );
 }

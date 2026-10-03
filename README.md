@@ -146,7 +146,8 @@ plus **Settings** (general, providers, projects); its gear shows a dot when a li
 approvals first, then stuck agents and failures; allow, deny, retry, stop or dismiss them there.
 
 **Café view:** fold the side panel away (» at its top) and the café fills the screen. Agents that
-need you get a callout, a message bar sits at the bottom, and a rail on the right shows everyone's
+need you get a callout, the message box floats bottom-right by the rail (it keeps your
+draft when the panel comes back), and a rail on the right shows everyone's
 status; click anyone to open the panel on them. « brings the panel back.
 
 **Themes:** Auto follows your local time (day, golden hour from 17:30, night from 20:00) and

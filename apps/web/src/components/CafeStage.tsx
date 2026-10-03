@@ -9,13 +9,12 @@ import type { AgentHit } from '@/scene/renderer';
 import { useCafe } from '@/store/cafe';
 import { needsAttention } from '@/store/reduce';
 import { CafeScene } from './CafeScene';
-import { Composer } from './Composer';
 
 /**
  * The café, plus what it needs when the side panel is folded away (café view):
- * a callout over each agent that needs you, and a message bar docked bottom-right by
- * the rail (the diorama is a diamond, so that corner is empty backdrop). Both fade in
- * and out with the panel, so there's one view to switch, not two modes.
+ * a callout over each agent that needs you, fading in and out with the panel. (The
+ * composer floats bottom-right by the rail then; the diorama is a diamond, so that
+ * corner is empty backdrop. CafeApp places it.)
  *
  * Callouts follow their agent every frame. Positions are written straight to the
  * DOM from the render loop so the page doesn't re-render at 15 fps.
@@ -76,14 +75,6 @@ export function CafeStage({ theme, collapsed }: { theme: ThemeId; collapsed: boo
   return (
     <div className="relative grid min-h-0">
       <CafeScene theme={theme} onFrame={onFrame} overlay={overlay} />
-      <div
-        inert={!collapsed}
-        className={`absolute bottom-5 right-5 z-30 w-[min(480px,29vw)] min-w-[340px] transition-[opacity,transform] duration-300 ease-out ${
-          collapsed ? 'translate-x-0 opacity-100' : 'pointer-events-none translate-x-6 opacity-0'
-        }`}
-      >
-        <Composer variant="bar" />
-      </div>
     </div>
   );
 }
