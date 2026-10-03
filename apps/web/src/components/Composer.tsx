@@ -1,33 +1,39 @@
 'use client';
 
-import { HARNESS, type AgentPermission, type ProviderId } from '@agent-cafe/shared';
+import { HARNESS, offeredModel, type AgentPermission, type ProviderId } from '@agent-cafe/shared';
 import { useEffect, useId, useRef, useState } from 'react';
 import { api } from '@/lib/api';
-import { useModels } from '@/lib/models';
-import { useCafe } from '@/store/cafe';
-import { tasksFor } from '@/store/reduce';
+import { useModelOptions } from '@/lib/models';
+import { useAgentView, useCafe } from '@/store/cafe';
+import { Avatar } from './Avatar';
 import { ModelPicker, PermissionPicker, ProjectPicker, TargetPicker, type Target } from './pickers';
-import { Chip, PixelSend } from './ui';
+import { Chip, FolderIcon, PixelSend } from './ui';
+
+/** How long a success notice ("Sent to Steve.") stays up. */
+const NOTICE_MS = 4000;
 
 /**
- * The message box, docked at the bottom of the side panel (and Focus mode's bar).
+ * The message box. There's one: docked over the side panel's footer, or, with the
+ * panel folded away (café view), floating bottom-right by the rail. It moves between
+ * the two (same width, so only its place changes), and a draft and its choices come along.
  *
  * On the board it addresses whoever is free on a floor, or a named agent; with an
- * agent open it messages them. Model, permission and project are chosen per
- * message (defaulting to what that agent used last). A message to an agent
- * continues their latest conversation in that project unless "New thread" is on.
+ * agent open it follows the panel: inside a thread it replies there (same
+ * conversation, same project); on their thread list or a new thread it starts a
+ * fresh thread and opens it. Model and permission are chosen per message.
  */
-export function Composer({ variant }: { variant: 'panel' | 'bar' }) {
+export function Composer({ onDockedHeight }: { onDockedHeight?: (px: number) => void }) {
   const agents = useCafe((s) => s.agents);
   const providers = useCafe((s) => s.providers);
   const projects = useCafe((s) => s.projects);
   const tasks = useCafe((s) => s.tasks);
   const selectedAgentId = useCafe((s) => s.selectedAgentId);
   const selectAgent = useCafe((s) => s.selectAgent);
+  const floating = useCafe((s) => s.panelCollapsed);
+  const setPanelCollapsed = useCafe((s) => s.setPanelCollapsed);
 
   const [boardTarget, setBoardTarget] = useState<Target>({ kind: 'any', provider: 'anthropic' });
-  // The café view's bar always addresses the board, not whoever was open in the panel.
-  const selected = variant === 'panel' && selectedAgentId ? agents[selectedAgentId] : undefined;
+  const selected = selectedAgentId ? agents[selectedAgentId] : undefined;
   const target: Target = selected ? { kind: 'agent', agentId: selected.id } : boardTarget;
   const agent = target.kind === 'agent' ? agents[target.agentId] : undefined;
   const provider: ProviderId = agent?.providerId ?? (target.kind === 'any' ? target.provider : 'anthropic');
@@ -37,34 +43,54 @@ export function Composer({ variant }: { variant: 'panel' | 'bar' }) {
   const [anyPermission, setAnyPermission] = useState<AgentPermission>('ask');
   const [anyProject, setAnyProject] = useState<string | null | undefined>(undefined);
   const [override, setOverride] = useState<{ model?: string; permission?: AgentPermission; projectId?: string | null }>({});
-  const [newThread, setNewThread] = useState(false);
-  useEffect(() => {
-    setOverride({});
-    setNewThread(false);
-  }, [agent?.id]);
+  useEffect(() => setOverride({}), [agent?.id]);
+  const agentView = useAgentView();
+  const openThread = selected && agentView?.kind === 'thread' ? agentView.thread : undefined;
 
-  const models = useModels(provider);
-  // The harness's own default when signed in; otherwise what this floor's first agent used last.
-  const floorAgent = Object.values(agents)
-    .filter((a) => a.providerId === provider)
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0];
-  const floorDefault = models.find((m) => m.tag === 'Default')?.value ?? floorAgent?.model ?? models[0]?.value ?? '';
-  const model = agent ? (override.model ?? agent.model) : (anyModel[provider] ?? floorDefault);
+  const modelOptions = useModelOptions(provider);
+  const models = modelOptions.models;
+  const floorDefault = models.find((m) => m.tag === 'Default')?.value ?? models[0]?.value ?? '';
+  const preferredModel = agent ? (override.model ?? agent.model) : (anyModel[provider] ?? floorDefault);
+  const model = offeredModel(models, preferredModel)?.value ?? floorDefault;
   const permission = agent ? (override.permission ?? agent.permission) : anyPermission;
   const firstProject = Object.values(projects).sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0]?.id ?? null;
-  const rawProject = agent ? (override.projectId !== undefined ? override.projectId : agent.projectId) : anyProject !== undefined ? anyProject : firstProject;
+  // A reply stays in its thread's project; a new thread picks one.
+  const rawProject = openThread
+    ? openThread.projectId
+    : agent
+      ? override.projectId !== undefined ? override.projectId : agent.projectId
+      : anyProject !== undefined ? anyProject : firstProject;
   const projectId = rawProject && projects[rawProject] ? rawProject : null;
 
   const mode = providers[provider]?.mode;
   const live = mode === 'live';
-  const thread = agent ? tasksFor({ tasks }, agent.id).find((t) => t.projectId === projectId) : undefined;
-  const continuing = Boolean(thread) && !newThread;
+  // Continue from the newest message that has a harness session to resume (a failed
+  // first try may have none), so the reply keeps the thread's context.
+  const continueFrom = openThread
+    ? [...openThread.taskIds].reverse().map((id) => tasks[id]).find((t) => t?.sessionId) ?? openThread.last
+    : undefined;
 
   const [prompt, setPrompt] = useState('');
   const [sending, setSending] = useState(false);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
+  // "Sent to Steve." fades on its own; errors stay until the next edit or send.
+  useEffect(() => {
+    if (!notice?.ok) return;
+    const t = setTimeout(() => setNotice((n) => (n === notice ? null : n)), NOTICE_MS);
+    return () => clearTimeout(t);
+  }, [notice]);
   const promptId = useId();
   const box = useRef<HTMLTextAreaElement>(null);
+  const form = useRef<HTMLFormElement>(null);
+
+  // Docked, the panel keeps a footer slot as tall as the composer.
+  useEffect(() => {
+    const el = form.current;
+    if (!el || floating || !onDockedHeight) return;
+    const ro = new ResizeObserver(() => onDockedHeight(el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [floating, onDockedHeight]);
 
   // Grow with the text, up to a limit.
   useEffect(() => {
@@ -74,7 +100,7 @@ export function Composer({ variant }: { variant: 'panel' | 'bar' }) {
     el.style.height = `${Math.min(el.scrollHeight, 180)}px`;
   }, [prompt]);
 
-  const blocked = mode === 'off' ? 'That floor is switched off.' : live && !projectId ? 'Pick a project for live work.' : null;
+  const blocked = mode === 'off' ? 'That floor is switched off.' : modelOptions.loading ? 'Loading available models…' : !model ? modelOptions.error ?? 'Choose an available model first.' : live && !projectId ? 'Pick a project for live work.' : null;
 
   const send = async () => {
     const text = prompt.trim();
@@ -89,12 +115,14 @@ export function Composer({ variant }: { variant: 'panel' | 'bar' }) {
         model,
         permission,
         projectId,
-        ...(continuing && thread ? { continueTaskId: thread.id } : {}),
+        ...(continueFrom ? { continueTaskId: continueFrom.id } : {}),
       });
       setPrompt('');
-      setNewThread(false);
-      if (!agent) setNotice({ ok: true, text: `Sent to ${agents[task.agentId]?.name ?? 'an agent'}.` });
-      if (variant === 'panel' && !agent) selectAgent(task.agentId, task.id);
+      // Floating, there's no thread on screen to show it went, so say so.
+      if (!agent || floating) setNotice({ ok: true, text: `Sent to ${agents[task.agentId]?.name ?? 'an agent'}.` });
+      // In the panel a new thread opens, so you're reading what you just started;
+      // in café view you watch them get up and start instead.
+      if (!openThread && !floating) selectAgent(task.agentId, task.id);
     } catch (e) {
       setNotice({ ok: false, text: (e as Error).message });
     } finally {
@@ -103,13 +131,18 @@ export function Composer({ variant }: { variant: 'panel' | 'bar' }) {
   };
 
   const placeholder = agent
-    ? continuing
-      ? `Message ${agent.name}…`
-      : `Give ${agent.name} a new task…`
+    ? openThread
+      ? `Reply to ${agent.name}…`
+      : `Start a new thread with ${agent.name}…`
     : `Ask anyone ${provider === 'anthropic' ? 'upstairs' : 'downstairs'} to…`;
   const floorNote = mode === 'live' ? `Live · ${HARNESS[provider].name}` : mode === 'off' ? 'Floor is off' : 'Demo · no real calls';
 
-  const projectChip = (
+  const projectChip = openThread ? (
+    <Chip label={`Project: ${projectId ? projects[projectId]?.name : 'none'} (a thread stays in its project)`} title="A thread stays in its project. Start a new thread to work elsewhere." disabled>
+      <FolderIcon size={12} />
+      <span className="truncate">{projectId ? projects[projectId]?.name : 'No project'}</span>
+    </Chip>
+  ) : (
     <ProjectPicker
       projectId={projectId}
       required={live}
@@ -117,94 +150,101 @@ export function Composer({ variant }: { variant: 'panel' | 'bar' }) {
     />
   );
 
+  // Floating with an agent open (the panel was folded on them), name who it goes to,
+  // with a way back to addressing anyone.
+  const agentChip = floating && selected && (
+    <Chip label={`To ${selected.name}. Send to anyone instead`} title="Send to anyone instead" onClick={() => selectAgent(null)}>
+      <Avatar seed={selected.spriteSeed} providerId={selected.providerId} scale={1} />
+      <span className="truncate">{selected.name}</span>
+      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden><path d="M2 2l6 6M8 2L2 8" /></svg>
+    </Chip>
+  );
+
   return (
-    <form
-      aria-label={agent ? `Message ${agent.name}` : 'New task'}
-      onSubmit={(e) => {
-        e.preventDefault();
-        void send();
-      }}
-      className={variant === 'panel' ? 'flex flex-col gap-1 border-t border-slate-line px-3 pb-2.5 pt-3' : 'flex flex-col items-end gap-1.5'}
+    <div
+      className={`absolute z-30 settling:invisible transition-[right,bottom,width] duration-300 ease-[cubic-bezier(.2,.8,.2,1)] ${
+        floating ? 'bottom-4 right-4 w-[calc(100%-2rem)] lg:bottom-5 lg:right-[76px] lg:w-[519px]' : 'bottom-0 right-0 w-full lg:w-[519px]'
+      }`}
     >
-      {/* The café view's bar is one compact box; its messages float just above it. */}
-      {variant === 'bar' && notice && (
-        <p role="status" className={`rounded-lg bg-night-2/95 px-2.5 py-1 text-[12px] shadow-lg ${notice.ok ? 'text-mint' : 'text-coral'}`}>
+      {/* Floating, the result shows just above the box; docked, it's in the footer line. */}
+      {floating && notice && (
+        <p role="status" className={`absolute bottom-full right-0 mb-1.5 max-w-full truncate rounded-lg bg-night-2/95 px-2.5 py-1 text-[12px] shadow-lg ${notice.ok ? 'text-mint' : 'text-coral'}`}>
           {notice.text}
         </p>
       )}
-      <div
-        className={`w-full rounded-xl border border-slate-line bg-slate px-3 pb-1.5 pt-2.5 focus-within:border-[#434a58] ${
-          variant === 'bar' ? 'shadow-[0_18px_44px_rgba(0,0,0,.5)]' : ''
+      <form
+        ref={form}
+        aria-label={agent ? `Message ${agent.name}` : 'New task'}
+        onSubmit={(e) => {
+          e.preventDefault();
+          void send();
+        }}
+        className={`flex flex-col gap-1 border-slate-line bg-night-2 px-3 pb-2.5 pt-3 ${
+          floating ? 'rounded-2xl border shadow-[0_18px_44px_rgba(0,0,0,.45)]' : 'border-t'
         }`}
       >
-        <label htmlFor={promptId} className="sr-only">{placeholder}</label>
-        <textarea
-          id={promptId}
-          ref={box}
-          rows={2}
-          value={prompt}
-          onChange={(e) => {
-            setPrompt(e.target.value);
-            if (notice) setNotice(null);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-              e.preventDefault();
-              void send();
-            }
-          }}
-          placeholder={placeholder}
-          className="block w-full resize-none bg-transparent text-[14px] leading-snug text-chalk outline-none placeholder:text-chalk-faint"
-        />
-        {/* Chips wrap to a second line when they don't fit; send stays pinned bottom-right. */}
-        <div className="mt-1 flex min-w-0 items-end gap-1">
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-0.5">
-            {!selected && <TargetPicker target={boardTarget} onPick={setBoardTarget} />}
-            <ModelPicker
-              provider={provider}
-              model={model}
-              {...(agent ? { lockedTo: agent.providerId } : {})}
-              onPick={(p, m) => {
-                if (agent) setOverride((o) => ({ ...o, model: m }));
-                else {
-                  setAnyModel((a) => ({ ...a, [p]: m }));
-                  if (p !== provider) setBoardTarget({ kind: 'any', provider: p });
-                }
-              }}
-            />
-            {variant === 'bar' && projectChip}
-            {live && (
-              <PermissionPicker value={permission} onPick={(v) => (agent ? setOverride((o) => ({ ...o, permission: v })) : setAnyPermission(v))} />
-            )}
+        <div className="w-full rounded-xl border border-slate-line bg-slate px-3 pb-1.5 pt-2.5 focus-within:border-[#434a58]">
+          <label htmlFor={promptId} className="sr-only">{placeholder}</label>
+          <textarea
+            id={promptId}
+            ref={box}
+            rows={2}
+            value={prompt}
+            onChange={(e) => {
+              setPrompt(e.target.value);
+              if (notice) setNotice(null);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                void send();
+              }
+            }}
+            placeholder={placeholder}
+            className="block w-full resize-none bg-transparent text-[14px] leading-snug text-chalk outline-none placeholder:text-chalk-faint"
+          />
+          {/* The choices stay on one line (labels truncate if they run out of room); send stays right. */}
+          <div className="mt-1 flex min-w-0 items-center gap-1">
+            <div className="flex min-w-0 flex-1 items-center gap-0.5">
+              {/* On small screens there's no rail, so the floating box is the way back to the panel. */}
+              {floating && (
+                <button
+                  type="button"
+                  aria-label="Expand the panel"
+                  title="Expand the panel"
+                  onClick={() => setPanelCollapsed(false)}
+                  className="grid size-7 shrink-0 place-items-center rounded-full text-chalk-dim hover:bg-slate-2 hover:text-chalk lg:hidden"
+                >
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden><path d="M2 3.5h10M2 7h10M2 10.5h10" /></svg>
+                </button>
+              )}
+              {selected ? agentChip : <TargetPicker target={boardTarget} onPick={setBoardTarget} />}
+              <ModelPicker
+                provider={provider}
+                model={model}
+                {...(agent ? { lockedTo: agent.providerId } : {})}
+                onPick={(p, m) => {
+                  if (agent) setOverride((o) => ({ ...o, model: m }));
+                  else {
+                    setAnyModel((a) => ({ ...a, [p]: m }));
+                    if (p !== provider) setBoardTarget({ kind: 'any', provider: p });
+                  }
+                }}
+              />
+              {live && (
+                <PermissionPicker value={permission} onPick={(v) => (agent ? setOverride((o) => ({ ...o, permission: v })) : setAnyPermission(v))} />
+              )}
+            </div>
+            <PixelSend disabled={!prompt.trim() || sending || mode === 'off'} busy={sending} />
           </div>
-          <PixelSend disabled={!prompt.trim() || sending || mode === 'off'} busy={sending} />
         </div>
-      </div>
-      {variant === 'panel' && (
         <div className="flex min-w-0 items-center gap-0.5 px-0.5">
           {projectChip}
-          {agent && thread && (
-            <Chip
-              onClick={() => setNewThread((n) => !n)}
-              active={newThread}
-              label={newThread ? 'Starting a new thread. Click to continue the last one instead' : 'Continuing the last thread. Click to start a new one'}
-            >
-              {newThread ? (
-                <>
-                  <span aria-hidden>＋</span> New thread
-                </>
-              ) : (
-                <>
-                  <span aria-hidden>↳</span> Continuing
-                </>
-              )}
-            </Chip>
-          )}
-          <span role="status" className={`ml-auto truncate pl-2 text-[11px] ${notice ? (notice.ok ? 'text-mint' : 'text-coral') : 'text-chalk-faint'}`}>
-            {notice?.text ?? floorNote}
+          <span role={floating ? undefined : 'status'} className={`ml-auto truncate pl-2 text-[11px] ${!floating && notice ? (notice.ok ? 'text-mint' : 'text-coral') : 'text-chalk-faint'}`}>
+            {(!floating && notice?.text) || floorNote}
           </span>
         </div>
-      )}
-    </form>
+      </form>
+    </div>
   );
 }

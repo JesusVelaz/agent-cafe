@@ -45,6 +45,17 @@ body {
 
 
 
+/*
+ * Until the app has applied what this browser remembers (is the panel folded?),
+ * nothing animates, and `settling:` hides what would otherwise jump into place.
+ */
+@custom-variant settling (&:where([data-settling] *));
+[data-settling] *,
+[data-settling] *::before,
+[data-settling] *::after {
+  transition: none !important;
+}
+
 /* Blueprint dots behind the café: an operations-room hint, kept very faint. */
 @utility scene-backdrop {
   background-color: var(--color-night);

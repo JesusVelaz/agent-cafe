@@ -7,35 +7,111 @@
 import {
   query as sdkQuery,
   type CanUseTool,
+  type Options,
   type SDKMessage,
   type SDKRateLimitInfo,
 } from '@anthropic-ai/claude-agent-sdk';
-import { DEFAULTS, type AgentPermission, type FailureKind, type TaskEventData } from '@agent-cafe/shared';
+import { DEFAULTS, type FailureKind, type PlanUsageDTO } from '@agent-cafe/shared';
 import type { RunOutcome, RunResult, RunTotals } from '../orchestrator/runner.js';
-import { harnessEnv } from './harness.js';
+import { harnessEnv } from './live.js';
+import { epochToIso, type LiveRunContext } from './live.js';
+import { claudeCollaborationServer } from './collaborationTools.js';
+import { collaborationSpecs } from '../orchestrator/collaboration.js';
 
-export interface ApprovalAsk {
-  tool: string;
-  summary: string;
-  reason: string | null;
-}
+export type { ApprovalAsk } from './live.js';
 
-export interface ClaudeRunContext {
-  task: { prompt: string; model: string };
-  agent: { systemPrompt: string; workDir: string; permission: AgentPermission };
-  executable: string;
-  signal: AbortSignal;
-  emit: (event: TaskEventData) => void;
-  /** Resolves when the user answers (deny if the task is cancelled first). */
-  approve: (ask: ApprovalAsk, signal: AbortSignal) => Promise<'allow' | 'deny'>;
-  onRateLimit: (info: SDKRateLimitInfo) => void;
-  /** Called once with the harness session id, so a follow-up can resume it. */
-  onSession?: (sessionId: string) => void;
-  /** Resume this earlier session (a follow-up message). */
-  resume?: string;
+export interface ClaudeRunContext extends LiveRunContext {
   maxTurns?: number;
   /** Injected in tests. */
   query?: typeof sdkQuery;
+}
+
+/** Café sessions expose only explicitly supplied MCP tools, not personal integrations. */
+export function claudeSessionOptions(executable: string) {
+  return {
+    pathToClaudeCodeExecutable: executable,
+    env: harnessEnv(),
+    strictMcpConfig: true,
+    mcpServers: {},
+    // Cloud connectors have a separate auto-discovery path from local MCP configs.
+    settings: { disableClaudeAiConnectors: true },
+  } satisfies Options;
+}
+
+type Obj = Record<string, unknown>;
+const obj = (x: unknown): Obj | null => (typeof x === 'object' && x !== null && !Array.isArray(x) ? (x as Obj) : null);
+const num = (x: unknown): number | null => (typeof x === 'number' && Number.isFinite(x) ? x : null);
+
+/**
+ * Claude Code's rate-limit event as the café's plan usage. Claude Code 2.1 puts the
+ * per-window numbers in `unifiedWindows` (0..1, not in the SDK's types) and leaves the
+ * top-level `utilization` unset; older CLIs set only the top-level fields.
+ */
+export function planUsageFromClaude(info: SDKRateLimitInfo): PlanUsageDTO {
+  const fiveHour = obj(obj((info as unknown as Obj).unifiedWindows)?.five_hour);
+  const util = num(fiveHour?.utilization);
+  if (util !== null) {
+    return { status: info.status, window: 'five_hour', utilization: util, resetsAt: epochToIso(num(fiveHour!.resetsAt)) };
+  }
+  return {
+    status: info.status,
+    window: info.rateLimitType ?? null,
+    utilization: info.utilization ?? null,
+    resetsAt: epochToIso(info.resetsAt),
+  };
+}
+
+/**
+ * The 5-hour window from the data behind Claude Code's /usage (utilization 0..100,
+ * ISO reset time). It has no status of its own: a full window reads as rejected.
+ */
+export function planUsageFromClaudeUsage(reply: unknown): PlanUsageDTO | null {
+  const r = obj(reply);
+  if (r?.rate_limits_available !== true) return null;
+  const w = obj(obj(r.rate_limits)?.five_hour);
+  const pct = num(w?.utilization);
+  if (pct === null) return null;
+  const resets = typeof w!.resets_at === 'string' ? new Date(w!.resets_at) : null;
+  return {
+    status: pct >= 100 ? 'rejected' : 'allowed',
+    window: 'five_hour',
+    utilization: Math.min(1, Math.max(0, pct / 100)),
+    resetsAt: resets && !Number.isNaN(resets.getTime()) ? resets.toISOString() : null,
+  };
+}
+
+/** The SDK's /usage call. Experimental and expected to be renamed, so it's looked up, never assumed. */
+const USAGE_METHOD = 'usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET';
+const USAGE_TIMEOUT_MS = 20_000;
+
+/**
+ * The plan's 5-hour window, read through a session that never sends a prompt (as the
+ * model list is). Null when the SDK no longer offers the call, or it fails: the bar then
+ * waits for a live run's rate-limit event instead.
+ */
+export async function claudePlanUsage(executable: string, query: typeof sdkQuery = sdkQuery): Promise<PlanUsageDTO | null> {
+  let hold!: () => void;
+  const idle = new Promise<void>((r) => (hold = r));
+  async function* noPrompt(): AsyncGenerator<never> {
+    await idle;
+  }
+  const q = query({ prompt: noPrompt(), options: { ...claudeSessionOptions(executable), persistSession: false } });
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    const call = (q as unknown as Obj)[USAGE_METHOD];
+    if (typeof call !== 'function') return null;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error('timed out')), USAGE_TIMEOUT_MS);
+      timer.unref?.();
+    });
+    return planUsageFromClaudeUsage(await Promise.race([call.call(q, { skipBehaviors: true }), timeout]));
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+    hold();
+    q.close();
+  }
 }
 
 const MAX_TOOL_OUTPUT_CHARS = 16_000;
@@ -84,9 +160,12 @@ export async function runClaudeTask(ctx: ClaudeRunContext): Promise<RunOutcome> 
   const q = (ctx.query ?? sdkQuery)({
     prompt: task.prompt,
     options: {
-      pathToClaudeCodeExecutable: ctx.executable,
-      env: harnessEnv(),
+      ...claudeSessionOptions(ctx.executable),
       cwd: agent.workDir,
+      ...(ctx.collaboration ? {
+        mcpServers: { cafe: claudeCollaborationServer(ctx.collaboration) },
+        allowedTools: collaborationSpecs.map((s) => `mcp__cafe__${s.name}`),
+      } : {}),
       ...(task.model && task.model !== 'default' ? { model: task.model } : {}),
       permissionMode: agent.permission === 'acceptEdits' ? 'acceptEdits' : 'default',
       canUseTool,
@@ -173,7 +252,7 @@ export async function runClaudeTask(ctx: ClaudeRunContext): Promise<RunOutcome> 
           emit({ kind: 'status', status: 'running' });
         }
       } else if (m.type === 'rate_limit_event') {
-        ctx.onRateLimit(m.rate_limit_info);
+        ctx.onUsage(planUsageFromClaude(m.rate_limit_info));
       } else if (m.type === 'result') {
         result = m;
       }

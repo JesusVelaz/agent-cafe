@@ -1,6 +1,6 @@
 'use client';
 
-import { HARNESS, isActive, isTerminal, type AgentDTO, type TaskDTO, type TaskEventDTO } from '@agent-cafe/shared';
+import { HARNESS, exchangeMessage, isActive, isTerminal, type AgentDTO, type TaskDTO, type TaskEventDTO } from '@agent-cafe/shared';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '@/lib/api';
 import { ago, duration, FLOOR_NAME, taskDuration } from '@/lib/format';
@@ -8,14 +8,14 @@ import { modelLabel, useModels } from '@/lib/models';
 import { useNow } from '@/lib/useNow';
 import { activityLabel, deriveActivity } from '@/sim/activity';
 import { useCafe } from '@/store/cafe';
-import { activeTaskFor, latestTaskFor, tasksFor } from '@/store/reduce';
+import { activeTaskFor, latestTaskFor, type ThreadSummary } from '@/store/reduce';
 import { Avatar } from './Avatar';
 import { ACTIVITY_TONE } from './Panel';
 import { ApprovalCard, FAILURE_SHORT } from './SidePanel';
 import { FolderIcon } from './ui';
 
-/** How many of an agent's most recent tasks the thread shows. */
-const SHOWN = 12;
+/** How many of a thread's most recent messages it shows. */
+const SHOWN = 40;
 
 export function AgentHeader({ agent }: { agent: AgentDTO }) {
   const state = useCafe();
@@ -47,10 +47,13 @@ export function AgentHeader({ agent }: { agent: AgentDTO }) {
   );
 }
 
-/** The agent's recent tasks as one conversation: your messages, their steps and answers. */
-export function AgentThread({ agentId }: { agentId: string }) {
+/** One thread as a conversation: your messages, their steps and answers. */
+export function AgentThread({ thread }: { thread: ThreadSummary }) {
   const tasks = useCafe((s) => s.tasks);
-  const shown = useMemo(() => tasksFor({ tasks }, agentId).slice(0, SHOWN).reverse(), [tasks, agentId]);
+  const shown = useMemo(
+    () => thread.taskIds.slice(-SHOWN).map((id) => tasks[id]).filter((t): t is TaskDTO => t !== undefined),
+    [tasks, thread.taskIds],
+  );
   const loadHistory = useCafe((s) => s.loadHistory);
   const endRef = useRef<HTMLDivElement>(null);
   const events = useCafe((s) => s.events);
@@ -78,15 +81,15 @@ export function AgentThread({ agentId }: { agentId: string }) {
   const tail = last ? `${last.id}:${events[last.id]?.length ?? 0}:${stream[last.id]?.length ?? 0}:${last.status}` : '';
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end' });
-  }, [tail, agentId]);
+  }, [tail, thread.id]);
 
   if (shown.length === 0) {
-    return <p className="px-5 py-6 text-[13px] text-chalk-faint">No messages yet. Give them a task below.</p>;
+    return <p className="px-5 py-6 text-[13px] text-chalk-faint">No messages in this thread yet.</p>;
   }
   return (
     <div className="flex flex-col gap-4 px-4 py-4">
       {shown.map((t, i) => (
-        <TaskTurn key={t.id} task={t} startsThread={!t.continueOf || i === 0} />
+        <TaskTurn key={t.id} task={t} startsThread={i === 0} />
       ))}
       <div ref={endRef} />
     </div>
@@ -99,6 +102,11 @@ function TaskTurn({ task, startsThread }: { task: TaskDTO; startsThread: boolean
   const events = useCafe((s) => s.events[task.id]);
   const streamText = useCafe((s) => s.streamText[task.id]);
   const project = useCafe((s) => (task.projectId ? s.projects[task.projectId] : undefined));
+  const source = useCafe((s) => task.sourceTaskId ? s.tasks[task.sourceTaskId] : undefined);
+  const sender = useCafe((s) => source ? s.agents[source.agentId] : undefined);
+  const senderName = task.exchange?.senderName ?? sender?.name;
+  const senderProvider = task.exchange?.senderProviderId ?? sender?.providerId;
+  const resultStatus = task.exchangeKind === 'result' ? task.exchange?.status ?? source?.status : undefined;
   const models = useModels(task.providerId);
   const now = useNow(1000);
   const blocks = useMemo(() => toBlocks(events ?? []), [events]);
@@ -117,7 +125,14 @@ function TaskTurn({ task, startsThread }: { task: TaskDTO; startsThread: boolean
       )}
 
       <div className="flex flex-col items-end gap-0.5">
-        <div className="max-w-[88%] whitespace-pre-wrap break-words rounded-xl rounded-br-sm bg-mine px-3 py-2 text-[13px] leading-relaxed">{task.prompt}</div>
+        {task.exchangeKind && (
+          <span className="text-[11px] text-mint">
+            {task.exchangeKind === 'result' ? 'Result' : task.exchangeKind === 'delegation' ? 'Delegated task' : 'Message'}
+            {senderName ? ` from ${senderName}${senderProvider ? ` · ${HARNESS[senderProvider].name}` : ''}` : ' from a teammate'}
+            {resultStatus && resultStatus !== 'completed' ? ` · ${resultStatus}` : ''}
+          </span>
+        )}
+        <div className="max-w-[88%] whitespace-pre-wrap break-words rounded-xl rounded-br-sm bg-mine px-3 py-2 text-[13px] leading-relaxed">{exchangeMessage(task)}</div>
         <span className="text-[11px] text-chalk-faint">
           {modelLabel(models, task.model)}
           {task.isMock ? ' · demo' : ''} · {ago(task.createdAt, now)}
@@ -125,8 +140,8 @@ function TaskTurn({ task, startsThread }: { task: TaskDTO; startsThread: boolean
       </div>
 
       {blocks.map((b, i) =>
-        b.kind === 'text' ? (
-          <p key={i} className="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-chalk">{b.text}</p>
+        b.kind === 'text' || b.kind === 'exchange' ? (
+          <p key={i} className={`whitespace-pre-wrap break-words text-[13px] leading-relaxed ${b.kind === 'exchange' ? 'text-mint' : 'text-chalk'}`}>{b.text}</p>
         ) : b.kind === 'tools' ? (
           <div key={i} className="flex flex-col gap-0.5 border-l-2 border-slate-line py-1 pl-2.5 font-mono text-[12px]">
             {b.rows.map((r) => (
@@ -214,6 +229,7 @@ function TurnFooter({ task, now, onError }: { task: TaskDTO; now: number; onErro
 
 type Block =
   | { kind: 'text'; text: string }
+  | { kind: 'exchange'; text: string }
   | { kind: 'tools'; rows: Array<{ id: string; tool: string; summary: string; ok: boolean | null }> }
   | { kind: 'ask'; id: string; tool: string; summary: string; decision: 'allow' | 'deny' | null };
 
@@ -224,6 +240,7 @@ function toBlocks(events: TaskEventDTO[]): Block[] {
   const asks = new Map<string, { decision: 'allow' | 'deny' | null }>();
   for (const e of events) {
     if (e.kind === 'model.end' && e.text.trim()) out.push({ kind: 'text', text: e.text.trim() });
+    else if (e.kind === 'log' && e.message.startsWith('Café:')) out.push({ kind: 'exchange', text: e.message });
     else if (e.kind === 'tool.start') {
       const row = { id: e.callId, tool: e.tool, summary: summarize(e.input), ok: null as boolean | null };
       toolRow.set(e.callId, row);

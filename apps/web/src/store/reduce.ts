@@ -12,6 +12,7 @@ import type {
   TaskDTO,
   TaskEventDTO,
 } from '@agent-cafe/shared';
+import { exchangeMessage, isTerminal } from '@agent-cafe/shared';
 
 /** Per-task event history kept client-side (the inspector fetches the full log on demand). */
 export const MAX_EVENTS_PER_TASK = 300;
@@ -131,12 +132,191 @@ export function latestTaskFor(s: Pick<CafeData, 'tasks'>, agentId: string): Task
   return activeTaskFor(s, agentId) ?? tasksFor(s, agentId)[0];
 }
 
-/** Recently finished tasks, newest first (cups on the pickup counter). */
-export function recentFinished(s: Pick<CafeData, 'tasks'>, limit: number): TaskDTO[] {
-  return Object.values(s.tasks)
-    .filter((t) => t.finishedAt && (t.status === 'completed' || t.status === 'failed'))
-    .sort((a, b) => b.finishedAt!.localeCompare(a.finishedAt!))
-    .slice(0, limit);
+/** A conversation: one agent's chain of follow-ups (and retries). */
+export interface ThreadSummary {
+  /** The thread's first task. */
+  id: string;
+  agentId: string;
+  /** The first message, without any routing line. */
+  title: string;
+  projectId: string | null;
+  /** Its tasks, oldest first. */
+  taskIds: string[];
+  /** Messages in the thread, delegation results included. */
+  messages: number;
+  /** The newest task: its status is the thread's, and opening the thread shows it. */
+  last: TaskDTO;
+  /** When the thread or its delegated work last changed. */
+  at: string;
+  /** For delegated work: who asked for it. */
+  from: string | null;
+  /** Work this thread delegated to other agents. */
+  children: ThreadSummary[];
+}
+
+const LEGACY_SENDER = /^\[(?:Delegated task|Message) from ([^\s(\]]+)/;
+
+interface ThreadIndex {
+  threads: Map<string, ThreadSummary>;
+  rootOf: Map<string, string>;
+  /** Threads that aren't delegated work under another loaded thread. */
+  top: ThreadSummary[];
+}
+
+let cache: { tasks: Record<string, TaskDTO>; index: ThreadIndex } | null = null;
+
+/**
+ * Every thread in the loaded tasks. A task joins the thread of the task it continues
+ * (`continueOf`) or retries (`retryOf`); delegation results continue the asker's
+ * thread. Delegated work starts its own thread, filed under the one that asked.
+ */
+function threadIndex(s: Pick<CafeData, 'tasks'>): ThreadIndex {
+  if (cache?.tasks === s.tasks) return cache.index;
+  const tasks = s.tasks;
+  const rootOf = new Map<string, string>();
+  const parentOf = (t: TaskDTO) => {
+    const id = t.continueOf ?? t.retryOf;
+    return id ? tasks[id] : undefined;
+  };
+  const findRoot = (id: string): string => {
+    const known = rootOf.get(id);
+    if (known) return known;
+    const path: TaskDTO[] = [];
+    const seen = new Set<string>();
+    let cur = tasks[id]!;
+    while (cur) {
+      path.push(cur);
+      seen.add(cur.id);
+      const next = parentOf(cur);
+      if (!next) break;
+      if (rootOf.has(next.id)) {
+        cur = next;
+        break;
+      }
+      if (seen.has(next.id)) {
+        // A loop: settle on its oldest task, so every member agrees.
+        cur = path.reduce((a, b) => (b.createdAt < a.createdAt ? b : a));
+        break;
+      }
+      cur = next;
+    }
+    const root = rootOf.get(cur.id) ?? cur.id;
+    for (const t of path) rootOf.set(t.id, root);
+    return root;
+  };
+
+  const members = new Map<string, TaskDTO[]>();
+  for (const t of Object.values(tasks)) {
+    const root = findRoot(t.id);
+    const list = members.get(root);
+    if (list) list.push(t);
+    else members.set(root, [t]);
+  }
+
+  const threads = new Map<string, ThreadSummary>();
+  for (const [rootId, list] of members) {
+    list.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    const root = tasks[rootId]!;
+    const last = list.at(-1)!;
+    const delegated = root.exchangeKind === 'delegation' || root.exchangeKind === 'message';
+    threads.set(rootId, {
+      id: rootId,
+      agentId: root.agentId,
+      title: exchangeMessage(root).trim() || root.prompt,
+      projectId: root.projectId,
+      taskIds: list.map((t) => t.id),
+      messages: list.length,
+      last,
+      at: last.finishedAt ?? last.createdAt,
+      from: delegated ? root.exchange?.senderName ?? root.prompt.match(LEGACY_SENDER)?.[1] ?? null : null,
+      children: [],
+    });
+  }
+
+  // Delegated threads hang under the thread that asked; if that one isn't loaded, they stand alone.
+  const top: ThreadSummary[] = [];
+  for (const th of threads.values()) {
+    const root = tasks[th.id]!;
+    const parent = th.from && root.sourceTaskId && tasks[root.sourceTaskId] ? threads.get(findRoot(root.sourceTaskId)) : undefined;
+    if (parent && parent !== th) parent.children.push(th);
+    else top.push(th);
+  }
+  const updateActivity = (th: ThreadSummary): string => {
+    for (const child of th.children) {
+      const at = updateActivity(child);
+      if (at > th.at) th.at = at;
+    }
+    return th.at;
+  };
+  for (const th of top) updateActivity(th);
+  // In the order the work was handed out.
+  const sent = (th: ThreadSummary) => tasks[th.id]!.createdAt;
+  for (const th of threads.values()) th.children.sort((a, b) => sent(a).localeCompare(sent(b)));
+
+  const index = { threads, rootOf, top };
+  cache = { tasks, index };
+  return index;
+}
+
+const newestFirst = (a: ThreadSummary, b: ThreadSummary) => b.at.localeCompare(a.at);
+
+/** A coordinator may finish its turn while its delegated threads are still working. */
+function workingThreads(th: ThreadSummary): number {
+  return (isTerminal(th.last.status) ? 0 : 1) + th.children.reduce((n, child) => n + workingThreads(child), 0);
+}
+
+/** Threads at work first (in the order they started), then the rest, newest first. */
+function workingFirst(list: ThreadSummary[]): ThreadSummary[] {
+  const working = list.filter((th) => workingThreads(th) > 0).sort((a, b) => a.last.createdAt.localeCompare(b.last.createdAt));
+  const rest = list.filter((th) => workingThreads(th) === 0).sort(newestFirst);
+  return [...working, ...rest];
+}
+
+/** One project's threads on the board (projectId null: demo work, with no project). */
+export interface ProjectGroup {
+  projectId: string | null;
+  /** Working first, then newest. */
+  threads: ThreadSummary[];
+  /** Threads at work right now. */
+  working: number;
+  /** The group's latest activity. */
+  at: string;
+}
+
+/**
+ * The board's threads by project: projects with work under way first, then by latest
+ * activity; demo work (no project) last. Delegated work stays under its thread.
+ */
+export function projectGroups(s: Pick<CafeData, 'tasks'>): ProjectGroup[] {
+  const byProject = new Map<string | null, ThreadSummary[]>();
+  for (const th of threadIndex(s).top) {
+    const list = byProject.get(th.projectId);
+    if (list) list.push(th);
+    else byProject.set(th.projectId, [th]);
+  }
+  const groups = [...byProject].map(([projectId, list]): ProjectGroup => ({
+    projectId,
+    threads: workingFirst(list),
+    working: list.reduce((n, th) => n + workingThreads(th), 0),
+    at: list.reduce((a, th) => (th.at > a ? th.at : a), ''),
+  }));
+  return groups.sort((a, b) => {
+    if ((a.projectId === null) !== (b.projectId === null)) return a.projectId === null ? 1 : -1;
+    if ((a.working > 0) !== (b.working > 0)) return a.working > 0 ? -1 : 1;
+    return b.at.localeCompare(a.at);
+  });
+}
+
+/** All of one agent's threads (delegated work it did too), newest activity first. */
+export function agentThreads(s: Pick<CafeData, 'tasks'>, agentId: string): ThreadSummary[] {
+  return [...threadIndex(s).threads.values()].filter((th) => th.agentId === agentId).sort(newestFirst);
+}
+
+/** The thread a task belongs to. */
+export function threadOf(s: Pick<CafeData, 'tasks'>, taskId: string): ThreadSummary | undefined {
+  const { rootOf, threads } = threadIndex(s);
+  const root = rootOf.get(taskId);
+  return root ? threads.get(root) : undefined;
 }
 
 // ── Attention ────────────────────────────────────────────────────────────────

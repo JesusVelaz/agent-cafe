@@ -52,11 +52,11 @@ export const HARNESS: Record<ProviderId, {
   /** The account you connect it with. */
   account: string;
   login: string;
-  /** Agent Café can run live tasks on it (Codex is next). */
+  /** Agent Café can run live tasks on it. */
   live: boolean;
 }> = {
   anthropic: { id: 'claude-code', name: 'Claude Code', account: 'Claude', login: 'claude auth login', live: true },
-  openai: { id: 'codex', name: 'Codex', account: 'ChatGPT', login: 'codex login', live: false },
+  openai: { id: 'codex', name: 'Codex', account: 'ChatGPT', login: 'codex login', live: true },
 };
 
 /** How much an agent may do without asking. Commands always ask unless the harness allows them. */
@@ -111,6 +111,13 @@ export interface ApprovalDTO {
   requestedAt: string;
 }
 
+export interface ExchangeMetadata {
+  senderName: string;
+  senderProviderId: ProviderId;
+  /** Status of the delegated task whose result this carries. */
+  status?: TaskStatus;
+}
+
 export interface TaskDTO {
   id: string;
   agentId: string;
@@ -137,6 +144,13 @@ export interface TaskDTO {
   continueOf: string | null;
   /** The harness's session id, once known; follow-ups resume it. */
   sessionId: string | null;
+  /** Cross-agent provenance. Optional for older clients and stored snapshots. */
+  sourceTaskId?: string | null;
+  exchangeKind?: 'message' | 'delegation' | 'result' | null;
+  exchange?: ExchangeMetadata | null;
+  rootTaskId?: string | null;
+  exchangeDepth?: number;
+  resultForTaskId?: string | null;
   /** Set while the harness waits for the user to allow or deny an action. */
   pendingApproval: ApprovalDTO | null;
   createdAt: string;

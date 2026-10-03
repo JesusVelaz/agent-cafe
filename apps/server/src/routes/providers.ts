@@ -36,7 +36,7 @@ export const providerRoutes =
       return provider;
     });
 
-    /** Opens the vendor's own sign-in in a terminal window; poll /check afterwards. */
+    /** Opens the vendor's own sign-in in a terminal window; the sign-in watch pushes the result. */
     app.post('/api/providers/:id/connect', async (req) => {
       const { id } = idParam.parse(req.params);
       try {
@@ -44,7 +44,10 @@ export const providerRoutes =
       } catch (err) {
         throw new ConfigError((err as Error).message);
       }
-      return { ok: true };
+      // Pushed even when nothing changed, so a café showing a stale "Not connected" catches up.
+      const provider = await providers.status(id);
+      bus.publish({ type: 'provider.updated', provider });
+      return { ok: true, connected: provider.connection.state === 'ready' };
     });
 
     app.post('/api/providers/:id/disconnect', async (req) => {
@@ -55,21 +58,22 @@ export const providerRoutes =
       return provider;
     });
 
-    /**
-     * Every model for the floor, newest first, as full ids (the harness accepts them).
-     * When the harness is signed in, its default is tagged so the picker can say so.
-     */
-    app.get('/api/providers/:id/models', async (req): Promise<{ source: 'harness' | 'catalog'; models: HarnessModelDTO[] }> => {
+    /** Demo catalog and account-discovered live models never share a fallback. */
+    app.get('/api/providers/:id/models', async (req): Promise<{ source: 'harness' | 'catalog' | 'unavailable'; models: HarnessModelDTO[]; message?: string }> => {
       const { id } = idParam.parse(req.params);
-      const models: HarnessModelDTO[] = modelsFor(id).map((m) => ({
-        value: m.id,
-        label: m.label.replace(/^Claude /, ''),
-        description: TIER_NOTE[m.tier],
-      }));
-      const live = await providers.harnesses.models(id).catch(() => []);
-      if (!live.length) return { source: 'catalog', models };
-      const def = live.find((m) => m.value === 'default')?.resolved?.replace(/\[1m\]$/, '').replace(/-\d{8}$/, '');
-      return { source: 'harness', models: models.map((m) => (m.value === def ? { ...m, tag: 'Default' } : m)) };
+      const mode = await providers.mode(id);
+      if (mode === 'mock') return { source: 'catalog', models: modelsFor(id).map((m) => ({ value: m.id, label: m.label.replace(/^Claude /, ''), description: TIER_NOTE[m.tier] })) };
+      if (mode === 'off') return { source: 'unavailable', models: [], message: 'This floor is switched off.' };
+      const { refresh } = z.object({ refresh: z.enum(['true', 'false']).optional() }).parse(req.query);
+      try {
+        const connection = refresh === 'true' ? await providers.harnesses.check(id) : await providers.harnesses.ensure(id);
+        if (connection.state !== 'ready') return { source: 'unavailable', models: [], message: connection.message ?? `Connect ${id === 'openai' ? 'ChatGPT' : 'Claude'} to choose a live model.` };
+        const models = await providers.harnesses.models(id);
+        if (!models.length) return { source: 'unavailable', models: [], message: 'No available models were reported. Refresh to try again.' };
+        return { source: 'harness', models: models.map((m) => m.value === 'default' ? { ...m, tag: 'Default' } : m) };
+      } catch {
+        return { source: 'unavailable', models: [], message: 'Could not load available models. Refresh to try again.' };
+      }
     });
 
     app.get('/api/settings', () => settings.get());

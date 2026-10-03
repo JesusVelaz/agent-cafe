@@ -38,7 +38,7 @@ export function CafeScene({ theme, labels = true, reserveBottom = 0, onFrame, ov
     const ro = new ResizeObserver(([entry]) => {
       const { width, height } = entry!.contentRect;
       const f = Math.min((width - 16) / SCENE_W, (height - 16 - reserveBottom) / SCENE_H);
-      setScale(f >= 2 ? Math.floor(f) : Math.max(1, Math.round(f * 4) / 4));
+      setScale(f >= 2 ? Math.floor(f) : Math.max(0.25, f));
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -77,7 +77,7 @@ export function CafeScene({ theme, labels = true, reserveBottom = 0, onFrame, ov
   return (
     <div
       ref={wrapRef}
-      className="relative flex min-h-[320px] min-w-0 items-center justify-center overflow-hidden"
+      className="relative flex min-h-0 min-w-0 items-center justify-center overflow-hidden"
       style={{ background: `linear-gradient(${bg0}, ${bg1})`, paddingBottom: reserveBottom }}
     >
       <div className="relative" style={{ width: SCENE_W * scale, height: SCENE_H * scale }} data-scene-stage>

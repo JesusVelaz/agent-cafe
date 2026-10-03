@@ -297,7 +297,7 @@ function Browser({
             disabled={!current || busy || listing?.path === '::drives'}
             className="flex h-8 shrink-0 items-center gap-2 rounded-lg border border-slate-line bg-slate pl-3 pr-1.5 text-[13px] font-medium text-chalk hover:bg-slate-2 disabled:opacity-40"
           >
-            {busy ? 'Adding…' : actionLabel}
+            {busy ? 'Adding' : actionLabel}
             <kbd className="rounded-md bg-night px-1.5 py-0.5 font-sans text-[11px] font-normal text-chalk-faint">Enter</kbd>
           </button>
         }
@@ -411,7 +411,7 @@ function Clone({
             disabled={!url || busy}
             className="flex h-8 shrink-0 items-center gap-2 rounded-lg bg-accent pl-3 pr-1.5 text-[13px] font-medium text-white hover:bg-[#7f9bff] disabled:opacity-40"
           >
-            {busy ? 'Cloning…' : 'Clone'}
+            {busy ? 'Cloning' : 'Clone'}
             <kbd className="rounded-md bg-accent-dark px-1.5 py-0.5 font-sans text-[11px] font-normal text-white/80">Enter</kbd>
           </button>
         }

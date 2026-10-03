@@ -23,4 +23,8 @@ export function fakeProbe(state: HarnessState = 'ready'): HarnessProbe {
 }
 
 export const fakeHarnesses = (state: HarnessState = 'ready', opener: TerminalOpener = async () => {}) =>
-  new HarnessService({ anthropic: fakeProbe(state), openai: { ...fakeProbe('ready'), models: async () => [] } }, opener);
+  new HarnessService({ anthropic: fakeProbe(state), openai: { ...fakeProbe('ready'), models: async () => [
+    { value: 'gpt-6-astra', label: 'GPT-6-Astra', description: 'Default', tag: 'Default' },
+    { value: 'gpt-6-sol', label: 'GPT-6-Sol', description: 'Coding' },
+    { value: 'gpt-6-luna', label: 'GPT-6-Luna', description: 'Fast' },
+  ] } }, opener);

@@ -1,11 +1,12 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useEffect } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
 import { connectStream } from '@/lib/stream';
 import { useTheme } from '@/lib/theme';
 import { readFlag, useCafe } from '@/store/cafe';
+import { Composer } from './Composer';
 import { PanelRail, SidePanel } from './SidePanel';
 import { TopBar } from './TopBar';
 
@@ -18,14 +19,14 @@ const CafeStage = dynamic(() => import('./CafeStage').then((m) => m.CafeStage), 
 /**
  * The café on the left, the side panel (board and agent threads) on the right.
  * Folding the panel into its rail gives the café view: the café fills the screen,
- * with callouts for agents that need you and a message bar. The switch animates.
+ * with callouts for agents that need you, and the composer lifts out of the panel to
+ * float by the rail. The switch animates.
  */
 export function CafeApp() {
   useEffect(() => {
     const { apply, setConnection } = useCafe.getState();
     return connectStream(apply, setConnection);
   }, []);
-  useEffect(() => useCafe.setState({ panelCollapsed: readFlag('cafe.panelCollapsed') }), []);
   // Coming back to the window (say, after signing in elsewhere): re-check any provider that isn't connected.
   useEffect(() => {
     const recheck = () => {
@@ -46,22 +47,43 @@ export function CafeApp() {
   const hydrated = useCafe((s) => s.hydrated);
   const connection = useCafe((s) => s.connection);
   const collapsed = useCafe((s) => s.panelCollapsed);
+  // The panel's footer slot follows the docked composer's height.
+  const mainRef = useRef<HTMLElement>(null);
+  const onDockedHeight = useCallback((px: number) => mainRef.current?.style.setProperty('--composer-h', `${px}px`), []);
+  // The server can't know whether the panel was left folded, so its render has it
+  // open (kept hidden by `settling:`). Apply the remembered state, flush styles with
+  // transitions still off, then turn them on: all before paint, so a folded panel
+  // doesn't visibly fold on every load.
+  const [loaded, setLoaded] = useState(false);
+  const [settled, setSettled] = useState(false);
+  useLayoutEffect(() => {
+    useCafe.setState({ panelCollapsed: readFlag('cafe.panelCollapsed') });
+    setLoaded(true);
+  }, []);
+  useLayoutEffect(() => {
+    if (!loaded) return;
+    void mainRef.current?.offsetWidth;
+    setSettled(true);
+  }, [loaded]);
 
   return (
-    <div className="grid h-dvh grid-rows-[auto_minmax(0,1fr)] overflow-x-hidden bg-night text-chalk lg:overflow-hidden">
+    <div data-settling={settled ? undefined : ''} className="grid h-dvh grid-rows-[auto_minmax(0,1fr)] overflow-x-hidden bg-night text-chalk lg:overflow-hidden">
       <TopBar themeChoice={choice} theme={theme} onTheme={setChoice} />
       <div className="relative grid min-h-0">
         <main
-          className={`grid min-h-0 grid-rows-[minmax(360px,1fr)_auto] lg:grid-rows-1 lg:transition-[grid-template-columns] lg:duration-300 lg:ease-[cubic-bezier(.2,.8,.2,1)] ${
-            collapsed ? 'lg:grid-cols-[minmax(0,1fr)_56px]' : 'lg:grid-cols-[minmax(0,1fr)_440px]'
+          ref={mainRef}
+          className={`relative grid min-h-0 lg:grid-rows-1 lg:transition-[grid-template-columns] lg:duration-300 lg:ease-[cubic-bezier(.2,.8,.2,1)] ${
+            collapsed ? 'grid-rows-1 lg:grid-cols-[minmax(0,1fr)_56px]' : 'grid-rows-[minmax(180px,1fr)_minmax(0,2fr)] lg:grid-cols-[minmax(0,1fr)_520px]'
           }`}
         >
           <CafeStage theme={theme} collapsed={collapsed} />
-          {/* Both panel faces stay mounted; the column slides and they cross-fade. */}
-          <div className="relative min-h-0 overflow-hidden border-slate-line lg:border-l">
+          {/* Both panel faces stay mounted; the column slides and they cross-fade.
+              Clip, not hidden: a hidden box can still be scrolled, and the thread's
+              scrollIntoView would slide the folded rail sideways. */}
+          <div className={`relative min-h-0 overflow-clip border-slate-line settling:invisible lg:border-l ${collapsed ? 'hidden lg:block' : ''}`}>
             <div
               inert={collapsed}
-              className={`h-[70dvh] transition-[opacity,visibility] duration-200 lg:absolute lg:inset-y-0 lg:left-0 lg:h-auto lg:w-[440px] ${collapsed ? 'lg:invisible lg:opacity-0' : 'visible opacity-100 lg:delay-100'}`}
+              className={`h-full transition-[opacity,visibility] duration-200 lg:absolute lg:inset-y-0 lg:left-0 lg:h-auto lg:w-[520px] ${collapsed ? 'lg:invisible lg:opacity-0' : 'visible opacity-100'}`}
             >
               <SidePanel />
             </div>
@@ -72,6 +94,7 @@ export function CafeApp() {
               <PanelRail />
             </div>
           </div>
+          <Composer onDockedHeight={onDockedHeight} />
         </main>
         {!hydrated && connection === 'down' && <OfflineNotice />}
       </div>

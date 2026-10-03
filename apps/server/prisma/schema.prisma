@@ -58,6 +58,13 @@ model Task {
   permission   String      @default("ask")
   continueOf   String? // task whose conversation this continues
   sessionId    String? // harness session id (resumable)
+  sourceTaskId String? // task that sent this message or delegation
+  exchangeKind String? // message | delegation | result
+  exchangeData String? // JSON ExchangeMetadata; attribution separate from visible message
+  rootTaskId   String? // original user task; shared collaboration budget
+  exchangeDepth Int    @default(0)
+  resultForTaskId String? @unique // durable, idempotent result delivery
+  collaborationCancelled Boolean @default(false) // suppress descendants/results across restarts
   createdAt    DateTime    @default(now())
   startedAt    DateTime?
   finishedAt   DateTime?
@@ -66,6 +73,8 @@ model Task {
   @@index([agentId, status])
   @@index([status])
   @@index([createdAt])
+  @@index([rootTaskId])
+  @@index([sourceTaskId])
 }
 
 model TaskEvent {

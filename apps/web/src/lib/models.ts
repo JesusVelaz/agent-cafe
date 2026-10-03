@@ -1,43 +1,45 @@
 'use client';
 
 import type { HarnessModelDTO, ProviderId } from '@agent-cafe/shared';
-import { modelsFor } from '@agent-cafe/shared';
-import { useEffect, useState } from 'react';
+import { offeredModel } from '@agent-cafe/shared';
+import { useCallback, useEffect, useSyncExternalStore } from 'react';
 import { useCafe } from '@/store/cafe';
 import { api } from './api';
+import { EMPTY_MODELS, ModelOptionsStore } from './modelOptions';
 
-const cache = new Map<string, HarnessModelDTO[]>();
-
-const fallback = (p: ProviderId): HarnessModelDTO[] =>
-  modelsFor(p).map((m) => ({ value: m.id, label: m.label.replace(/^Claude /, ''), description: m.tier }));
+const options = new ModelOptionsStore();
 
 /**
- * Every model a floor's harness offers (refetched when its sign-in state changes),
- * with the demo catalog as an immediate fallback.
+ * Live options come only from the signed-in harness; Demo options come from its catalog.
  */
 export function useModels(p: ProviderId): HarnessModelDTO[] {
-  const state = useCafe((s) => s.providers[p]?.connection.state ?? 'checking');
-  const key = `${p}:${state}`;
-  const [models, setModels] = useState<HarnessModelDTO[]>(() => cache.get(key) ?? fallback(p));
+  return useModelOptions(p).models;
+}
+
+export function useModelOptions(p: ProviderId) {
+  const provider = useCafe((s) => s.providers[p]);
+  const mode = provider?.mode;
+  const c = provider?.connection;
+  const key = JSON.stringify([p, mode, c?.state, c?.account, c?.plan, c?.version, c?.checkedAt]);
+  const subscribe = useCallback((listener: () => void) => options.subscribe(key, listener), [key]);
+  const snapshot = useCallback(() => options.snapshot(key), [key]);
+  const current = useSyncExternalStore(subscribe, snapshot, () => EMPTY_MODELS);
+  const load = useCallback((refresh = false) => options.load(key, async () => {
+    if (!mode) return { models: [], message: 'Loading provider settings…' };
+    if (mode === 'off') return { models: [], message: 'This floor is switched off.' };
+    const reply = await api.models(p, refresh);
+    const expected = mode === 'mock' ? 'catalog' : 'harness';
+    return reply.source === expected ? reply : { models: [], message: reply.message ?? 'Models could not be verified. Refresh to try again.' };
+  }, refresh), [key, mode, p]);
   useEffect(() => {
-    const hit = cache.get(key);
-    if (hit) return setModels(hit);
-    let cancelled = false;
-    api
-      .models(p)
-      .then((r) => {
-        cache.set(key, r.models);
-        if (!cancelled) setModels(r.models);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [key, p]);
-  return models;
+    void load();
+    const interval = setInterval(() => { void load(true); }, 60_000);
+    return () => clearInterval(interval);
+  }, [load]);
+  return { ...current, refresh: () => { void load(true); } };
 }
 
 /** "claude-opus-5-5" → "Opus 5.5" when known; the raw id otherwise. */
 export function modelLabel(models: HarnessModelDTO[], value: string): string {
-  return models.find((m) => m.value === value)?.label ?? value.replace(/^claude-/, '');
+  return offeredModel(models, value)?.label ?? value.replace(/^claude-/, '');
 }

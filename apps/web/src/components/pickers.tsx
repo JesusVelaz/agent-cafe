@@ -1,10 +1,10 @@
 'use client';
 
-import { HARNESS, PROVIDER_IDS, type AgentPermission, type ProviderId } from '@agent-cafe/shared';
+import { HARNESS, PROVIDER_IDS, offeredModel, type AgentPermission, type ProviderId } from '@agent-cafe/shared';
 import { useId, useState } from 'react';
 import { api } from '@/lib/api';
 import { FLOOR_NAME } from '@/lib/format';
-import { modelLabel, useModels } from '@/lib/models';
+import { modelLabel, useModels, useModelOptions } from '@/lib/models';
 import { useCafe } from '@/store/cafe';
 import { AddProjectDialog } from './AddProjectDialog';
 import { Avatar } from './Avatar';
@@ -33,7 +33,7 @@ export function ModelPicker({
       trigger={({ open, toggle }) => (
         <Chip onClick={toggle} active={open} label={`Model: ${modelLabel(models, model)}`}>
           <HarnessIcon harness={HARNESS[provider].id} />
-          <span className="truncate">{modelLabel(models, model)}</span>
+          <span className="truncate">{offeredModel(models, model) ? modelLabel(models, model) : 'Choose model'}</span>
           <Caret />
         </Chip>
       )}
@@ -43,7 +43,8 @@ export function ModelPicker({
   );
 }
 
-function ModelList({
+/** The model list behind ModelPicker: a floor rail, search, and each model with its note. */
+export function ModelList({
   initial,
   model,
   lockedTo,
@@ -56,7 +57,8 @@ function ModelList({
 }) {
   const [tab, setTab] = useState<ProviderId>(initial);
   const [q, setQ] = useState('');
-  const models = useModels(tab);
+  const { models, loading, error, refresh } = useModelOptions(tab);
+  const demo = useCafe((s) => s.providers[tab]?.mode === 'mock');
   const searchId = useId();
   const shown = models.filter((m) => `${m.label} ${m.value}`.toLowerCase().includes(q.trim().toLowerCase()));
   // Upstairs first, like the café.
@@ -84,6 +86,10 @@ function ModelList({
         })}
       </div>
       <div className="flex max-h-80 flex-col p-1.5">
+        <div className="mb-1 flex items-center justify-between px-2.5 text-[11px] text-chalk-faint">
+          <span>{demo ? 'Demo models' : 'Available models'}</span>
+          <button type="button" disabled={loading} onClick={refresh} className="text-mint disabled:opacity-40">Refresh</button>
+        </div>
         <label htmlFor={searchId} className="sr-only">Search models</label>
         <input
           id={searchId}
@@ -95,7 +101,7 @@ function ModelList({
         />
         <div className="scroll-chalk flex flex-col overflow-y-auto">
           {shown.map((m) => {
-            const on = tab === initial && m.value === model;
+            const on = tab === initial && m.value === offeredModel(models, model)?.value;
             return (
               <button
                 key={m.value}
@@ -117,7 +123,7 @@ function ModelList({
               </button>
             );
           })}
-          {shown.length === 0 && <p className="px-2.5 py-3 text-[12px] text-chalk-faint">No models match.</p>}
+          {shown.length === 0 && <p role="status" className="px-2.5 py-3 text-[12px] text-chalk-faint">{loading ? 'Loading available models…' : error ?? 'No models match.'}</p>}
         </div>
       </div>
     </div>
@@ -183,7 +189,7 @@ export function ProjectPicker({ projectId, onPick, required }: { projectId: stri
               className="mt-1 flex items-center gap-2 rounded-lg border-t border-slate-line px-2.5 pb-1.5 pt-2 text-left text-[13px] text-chalk-dim hover:bg-slate-2 hover:text-chalk"
             >
               <span aria-hidden className="grid size-4 place-items-center text-[15px] leading-none">+</span>
-              Add project…
+              Add project
             </button>
           </div>
         )}

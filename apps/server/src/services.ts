@@ -23,7 +23,7 @@ export interface Services {
 export function createServices(
   config: ServerConfig,
   db: Db,
-  overrides: { harnesses?: HarnessService; resolveAdapter?: AdapterResolver; runClaude?: OrchestratorDeps['runClaude'] } = {},
+  overrides: { harnesses?: HarnessService; resolveAdapter?: AdapterResolver; runLive?: OrchestratorDeps['runLive'] } = {},
 ): Services {
   const bus = new EventBus();
   const providers = new ProviderConfigService(db, overrides.harnesses ?? new HarnessService());
@@ -36,7 +36,7 @@ export function createServices(
   const resolveAdapter = overrides.resolveAdapter ?? createAdapterResolver();
   const orchestrator = new Orchestrator({
     db, bus, providers, settings, tools, resolveAdapter,
-    ...(overrides.runClaude ? { runClaude: overrides.runClaude } : {}),
+    ...(overrides.runLive ? { runLive: overrides.runLive } : {}),
   });
   const ambient = new AmbientDriver({ db, orchestrator, providers, settings });
   return { db, bus, providers, settings, orchestrator, ambient, resolveAdapter };

@@ -6,7 +6,7 @@
  */
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
-import { query, type SDKRateLimitInfo } from '@anthropic-ai/claude-agent-sdk';
+import { query } from '@anthropic-ai/claude-agent-sdk';
 import {
   HARNESS,
   type HarnessConnectionDTO,
@@ -14,6 +14,9 @@ import {
   type PlanUsageDTO,
   type ProviderId,
 } from '@agent-cafe/shared';
+import { claudePlanUsage, claudeSessionOptions } from './claude.js';
+import { CODEX_MIN_VERSION, codexModels, codexPlanUsage, tooOldMessage, versionAtLeast } from './codex.js';
+import { harnessEnv } from './live.js';
 
 const run = promisify(execFile);
 
@@ -21,6 +24,8 @@ export interface HarnessProbe {
   /** Connection state plus the resolved executable path when installed. */
   check(): Promise<HarnessConnectionDTO & { executable: string | null }>;
   models(executable: string): Promise<HarnessModelDTO[]>;
+  /** The plan's usage window, when the harness can report it outside a run. */
+  usage?(executable: string): Promise<PlanUsageDTO | null>;
   /** CLI arguments that sign in (interactive, run in a terminal) and sign out. */
   loginArgs: string[];
   logoutArgs: string[];
@@ -33,13 +38,7 @@ const conn = (state: HarnessConnectionDTO['state'], extra: Partial<HarnessConnec
   state, version: null, account: null, plan: null, message: null, checkedAt: new Date().toISOString(), ...extra,
 });
 
-/** The child environment for harness processes: never an API key, so runs bill the user's plan. */
-export function harnessEnv(): Record<string, string | undefined> {
-  const env: Record<string, string | undefined> = { ...process.env, CLAUDE_AGENT_SDK_CLIENT_APP: 'agent-cafe/0.1.0' };
-  delete env.ANTHROPIC_API_KEY;
-  delete env.ANTHROPIC_AUTH_TOKEN;
-  return env;
-}
+export { harnessEnv };
 
 async function which(cmd: string): Promise<string | null> {
   try {
@@ -130,7 +129,7 @@ export const claudeCodeProbe: HarnessProbe = {
     async function* noPrompt() {
       await idle;
     }
-    const q = query({ prompt: noPrompt(), options: { pathToClaudeCodeExecutable: executable, env: harnessEnv(), persistSession: false } });
+    const q = query({ prompt: noPrompt(), options: { ...claudeSessionOptions(executable), persistSession: false } });
     try {
       const models = await q.supportedModels();
       return models.map((m) => ({
@@ -144,9 +143,12 @@ export const claudeCodeProbe: HarnessProbe = {
       q.close();
     }
   },
+
+  /** The plan's 5-hour window, from the data behind /usage (see claude.ts). */
+  usage: (executable) => claudePlanUsage(executable),
 };
 
-/** Codex, signed in with ChatGPT (`codex login`). Only its connection is used so far. */
+/** Codex, signed in with ChatGPT (`codex login`). Tasks run on its app-server (see codex.ts). */
 export const codexProbe: HarnessProbe = {
   loginArgs: ['login'],
   logoutArgs: ['logout'],
@@ -161,20 +163,27 @@ export const codexProbe: HarnessProbe = {
       if (/not logged in|logged out/i.test(status) || !/logged in/i.test(status)) {
         return { ...conn('signed_out', { version, message: 'Connect your ChatGPT account (`codex login`).' }), executable };
       }
+      // Signed in, but too old for the app-server protocol tasks run on.
+      if (version && !versionAtLeast(version, CODEX_MIN_VERSION)) {
+        return { ...conn('unsupported', { version, message: tooOldMessage(version) }), executable };
+      }
       const via = status.match(/logged in using ([^\r\n.]+)/i)?.[1]?.trim() ?? null;
       return { ...conn('ready', { version, plan: via }), executable };
     } catch (err) {
       return { ...conn('error', { message: `Couldn't ask Codex: ${(err as Error).message}` }), executable };
     }
   },
-  models: async () => [],
+  models: (executable) => codexModels(executable),
+  usage: (executable) => codexPlanUsage(executable),
 };
 
 export class HarnessService {
   private readonly probes: Record<ProviderId, HarnessProbe>;
   private readonly state = new Map<ProviderId, HarnessConnectionDTO & { executable: string | null }>();
   private readonly usage = new Map<ProviderId, PlanUsageDTO>();
-  private readonly modelCache = new Map<ProviderId, HarnessModelDTO[]>();
+  private readonly modelCache = new Map<ProviderId, { models: HarnessModelDTO[]; expiresAt: number }>();
+  private readonly modelInflight = new Map<ProviderId, Promise<HarnessModelDTO[]>>();
+  private readonly modelGeneration = new Map<ProviderId, number>();
   private readonly inflight = new Map<ProviderId, Promise<HarnessConnectionDTO>>();
   private readonly watchers = new Map<ProviderId, ReturnType<typeof setInterval>>();
   private readonly listeners = new Set<(id: ProviderId) => void>();
@@ -196,14 +205,18 @@ export class HarnessService {
   /**
    * Opens the vendor's sign-in in a terminal window, then keeps checking in the
    * background until it's connected (or the watch times out), so the UI updates
-   * by itself however long the sign-in takes.
+   * by itself however long the sign-in takes. Already signed in: nothing to open.
    */
-  async connect(id: ProviderId): Promise<void> {
+  async connect(id: ProviderId): Promise<HarnessConnectionDTO> {
     const c = await this.check(id);
+    if (c.state === 'ready') return c;
+    // Signed in but too old: signing in again won't help.
+    if (c.state === 'unsupported') throw new Error(c.message ?? `${HARNESS[id].name} needs an update.`);
     const exe = this.executable(id);
     if (!exe) throw new Error(c.message ?? `${HARNESS[id].name} isn't installed.`);
     await this.opener(`Connect ${HARNESS[id].account}`, exe, this.probes[id].loginArgs);
     this.watchSignIn(id);
+    return c;
   }
 
   private watchSignIn(id: ProviderId) {
@@ -253,10 +266,18 @@ export class HarnessService {
     if (running) return running;
     const p = this.probes[id]
       .check()
+      .then(async (s) => {
+        // Harnesses that can report plan limits outside a run refresh them on every check.
+        if (s.state === 'ready' && s.executable) await this.readUsage(id, s.executable);
+        return s;
+      })
       .then((s) => {
         const before = this.state.get(id);
         this.state.set(id, s);
-        if (s.state !== 'ready') this.modelCache.delete(id);
+        // A check can reflect a changed account, plan, CLI, or model entitlement.
+        this.modelCache.delete(id);
+        this.modelInflight.delete(id);
+        this.modelGeneration.set(id, (this.modelGeneration.get(id) ?? 0) + 1);
         const changed = !before || before.state !== s.state || before.account !== s.account || before.plan !== s.plan;
         if (changed) for (const fn of this.listeners) fn(id);
         return this.connection(id);
@@ -271,30 +292,45 @@ export class HarnessService {
     return this.state.has(id) ? this.connection(id) : this.check(id);
   }
 
-  async models(id: ProviderId): Promise<HarnessModelDTO[]> {
-    const cached = this.modelCache.get(id);
-    if (cached) return cached;
-    const c = await this.ensure(id);
+  async models(id: ProviderId, refresh = false): Promise<HarnessModelDTO[]> {
+    const c = refresh ? await this.check(id) : await this.ensure(id);
     const exe = this.executable(id);
     if (c.state !== 'ready' || !exe) return [];
-    const models = await this.probes[id].models(exe);
-    this.modelCache.set(id, models);
-    return models;
+    const cached = this.modelCache.get(id);
+    if (!refresh && cached && cached.expiresAt > Date.now()) return cached.models;
+    const pending = this.modelInflight.get(id);
+    if (pending) return pending;
+    const generation = this.modelGeneration.get(id) ?? 0;
+    const request = this.probes[id].models(exe).then((models) => {
+      if ((this.modelGeneration.get(id) ?? 0) !== generation) throw new Error('Connection changed while loading models. Refresh to try again.');
+      const unique = [...new Map(models.filter((m) => m.value.trim()).map((m) => [m.value, m])).values()];
+      if (unique.length) this.modelCache.set(id, { models: unique, expiresAt: Date.now() + 60_000 });
+      else this.modelCache.delete(id);
+      return unique;
+    }).catch((err) => { if ((this.modelGeneration.get(id) ?? 0) === generation) this.modelCache.delete(id); throw err; }).finally(() => {
+      if (this.modelInflight.get(id) === request) this.modelInflight.delete(id);
+    });
+    this.modelInflight.set(id, request);
+    return request;
   }
 
   planUsage(id: ProviderId): PlanUsageDTO | null {
     return this.usage.get(id) ?? null;
   }
 
-  /** Records a rate-limit report from a live run. Returns true if it changed. */
-  recordUsage(id: ProviderId, info: SDKRateLimitInfo): boolean {
-    const next: PlanUsageDTO = {
-      status: info.status,
-      window: info.rateLimitType ?? null,
-      utilization: info.utilization ?? null,
-      // Epoch seconds (tolerate milliseconds too).
-      resetsAt: info.resetsAt ? new Date(info.resetsAt < 1e12 ? info.resetsAt * 1000 : info.resetsAt).toISOString() : null,
-    };
+  /** Re-reads the plan's usage window (after a run, say). Returns true if it changed. */
+  async refreshUsage(id: ProviderId): Promise<boolean> {
+    const exe = this.connection(id).state === 'ready' ? this.executable(id) : null;
+    return exe ? this.readUsage(id, exe) : false;
+  }
+
+  private async readUsage(id: ProviderId, executable: string): Promise<boolean> {
+    const u = await this.probes[id].usage?.(executable).catch(() => null);
+    return u ? this.recordUsage(id, u) : false;
+  }
+
+  /** Records the plan's rate-limit window (from a live run or a check). Returns true if it changed. */
+  recordUsage(id: ProviderId, next: PlanUsageDTO): boolean {
     const prev = this.usage.get(id);
     this.usage.set(id, next);
     return JSON.stringify(prev) !== JSON.stringify(next);

@@ -1,19 +1,19 @@
 'use client';
 
-import { HARNESS, type AgentDTO, type ProviderId, type ProviderMode, type ProviderStatusDTO } from '@agent-cafe/shared';
+import { HARNESS, offeredModel, type AgentDTO, type ProviderId } from '@agent-cafe/shared';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { api } from '@/lib/api';
-import { FLOOR_NAME } from '@/lib/format';
-import { modelLabel, useModels } from '@/lib/models';
+import { useModels } from '@/lib/models';
 import type { ThemeChoice } from '@/lib/theme';
 import type { ThemeId } from '@/scene/atmosphere';
 import { useCafe } from '@/store/cafe';
 import { AddProjectDialog } from './AddProjectDialog';
 import { Avatar } from './Avatar';
 import { THEME_LABELS, ThemeIcon } from './ThemePicker';
-import { FolderIcon, HarnessIcon } from './ui';
+import { ModelList } from './pickers';
+import { Caret, FolderIcon, HarnessIcon, Popover } from './ui';
 
-type Section = 'general' | 'agents' | 'providers' | 'projects';
+export type Section = 'general' | 'agents' | 'providers' | 'projects';
 
 const SECTIONS: Array<{ id: Section; label: string }> = [
   { id: 'general', label: 'General' },
@@ -150,15 +150,16 @@ function General({ themeChoice, theme, onTheme }: { themeChoice: ThemeChoice; th
   );
 }
 
-function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (on: boolean) => void; label: string }) {
+function Toggle({ checked, onChange, label, disabled }: { checked: boolean; onChange: (on: boolean) => void; label: string; disabled?: boolean }) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
       aria-label={label}
+      disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={`relative h-6 w-10 rounded-full transition-colors ${checked ? 'bg-accent' : 'bg-slate-line'}`}
+      className={`relative h-6 w-10 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${checked ? 'bg-accent' : 'bg-slate-line'}`}
     >
       <span className={`absolute top-0.5 size-5 rounded-full bg-white shadow transition-[left] ${checked ? 'left-[18px]' : 'left-0.5'}`} />
     </button>
@@ -229,7 +230,7 @@ function AgentRow({ agent }: { agent: AgentDTO }) {
     if (!n) return setName(agent.name);
     if (n !== agent.name) save({ name: n });
   };
-  const known = models.some((m) => m.value === agent.model);
+  const current = offeredModel(models, agent.model);
   // The seed the grid was built from stays put while you try looks, so the options don't jump.
   const [base, setBase] = useState(agent.spriteSeed);
   const choices = lookChoices(base, page);
@@ -267,21 +268,45 @@ function AgentRow({ agent }: { agent: AgentDTO }) {
           }}
           className="h-9 w-40 min-w-0 rounded-lg border border-transparent bg-transparent px-2 font-display text-[22px] leading-none text-chalk outline-none hover:border-slate-line focus:border-accent focus:bg-night-2"
         />
-        <label className="sr-only" htmlFor={`model-${agent.id}`}>Model</label>
-        <select
-          id={`model-${agent.id}`}
-          value={agent.model}
-          onChange={(e) => save({ model: e.target.value })}
-          className="h-9 min-w-0 flex-1 rounded-lg border border-slate-line bg-night-2 px-2 text-[13px] text-chalk outline-none focus:border-accent"
-        >
-          {!known && <option value={agent.model}>{modelLabel(models, agent.model)}</option>}
-          {models.map((m) => (
-            <option key={m.value} value={m.value}>
-              {m.label}
-              {m.tag ? ` · ${m.tag}` : ''}
-            </option>
-          ))}
-        </select>
+        {/* The same list as the composer's model picker; agents stay on their own floor. */}
+        <div className="min-w-0 flex-1">
+          <Popover
+            label={`${agent.name}'s model`}
+            side="auto"
+            align="end"
+            className="w-[320px]"
+            trigger={({ open, toggle }) => (
+              <button
+                type="button"
+                onClick={toggle}
+                aria-expanded={open}
+                aria-label={`Model: ${current ? current.label : 'Choose model'}`}
+                className={`flex h-9 w-full items-center gap-2 rounded-full border bg-night-2 pl-3.5 pr-4 text-left text-[13px] text-chalk transition-colors ${
+                  open ? 'border-accent' : 'border-slate-line hover:border-chalk-faint'
+                }`}
+              >
+                <HarnessIcon harness={HARNESS[agent.providerId].id} />
+                <span className="min-w-0 flex-1 truncate">
+                  {current ? current.label : 'Choose model'}
+                  {current?.tag && <span className="text-chalk-faint"> · {current.tag}</span>}
+                </span>
+                <Caret />
+              </button>
+            )}
+          >
+            {(close) => (
+              <ModelList
+                initial={agent.providerId}
+                model={agent.model}
+                lockedTo={agent.providerId}
+                onPick={(_p, m) => {
+                  close();
+                  if (m !== agent.model) save({ model: m });
+                }}
+              />
+            )}
+          </Popover>
+        </div>
       </div>
 
       {picking && (
@@ -343,12 +368,6 @@ function Providers({ active }: { active: boolean }) {
 const FLOOR_ROLE: Record<ProviderId, string> = { anthropic: 'runs upstairs', openai: 'runs the ground floor' };
 const FLOOR_LABEL: Record<ProviderId, string> = { anthropic: 'Upstairs', openai: 'Ground floor' };
 
-const MODES: Array<{ mode: ProviderMode; label: string }> = [
-  { mode: 'live', label: 'Live' },
-  { mode: 'mock', label: 'Demo' },
-  { mode: 'off', label: 'Off' },
-];
-
 const WINDOW_NAME: Record<string, string> = {
   five_hour: '5-hour limit',
   seven_day: 'Weekly limit',
@@ -356,6 +375,7 @@ const WINDOW_NAME: Record<string, string> = {
   seven_day_sonnet: 'Weekly Sonnet limit',
 };
 
+/** A connected provider has one switch: on runs live on your plan, off runs demo tasks. */
 function ProviderCard({ id, active }: { id: ProviderId; active: boolean }) {
   const p = useCafe((s) => s.providers[id]);
   const h = HARNESS[id];
@@ -365,14 +385,16 @@ function ProviderCard({ id, active }: { id: ProviderId; active: boolean }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const connected = c?.state === 'ready';
+  const live = p?.mode === 'live';
+  const floor = FLOOR_LABEL[id];
 
   // After "Connect" the server watches for the sign-in and pushes the change; this only clears the note.
   useEffect(() => {
     if (connected) setWaiting(false);
   }, [connected]);
-  // Opening Settings refreshes anything not yet connected.
+  // Opening Settings re-checks each provider: its sign-in, and its plan usage bar.
   useEffect(() => {
-    if (active && c && c.state !== 'ready' && c.state !== 'checking') void api.checkProvider(id).catch(() => {});
+    if (active && c && c.state !== 'checking') void api.checkProvider(id).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per opening
   }, [active, id]);
 
@@ -387,21 +409,36 @@ function ProviderCard({ id, active }: { id: ProviderId; active: boolean }) {
       setBusy(false);
     }
   };
+  const setMode = (mode: 'live' | 'mock') => run(() => api.updateProvider(id, { mode }));
 
-  const status = !c || c.state === 'checking'
-    ? { text: 'Checking…', tone: 'text-chalk-faint' }
-    : connected
-      ? { text: 'Connected', tone: 'text-mint' }
-      : c.state === 'not_installed'
-        ? { text: 'Not installed', tone: 'text-coral' }
-        : c.state === 'error'
-          ? { text: 'Couldn’t reach it', tone: 'text-coral' }
-          : { text: 'Not connected', tone: 'text-amber' };
+  // Until the first check answers it reads as not connected: that's usually right, and it flips the moment it isn't.
+  const status = connected
+    ? { text: 'Connected', tone: 'text-mint' }
+    : c?.state === 'not_installed'
+      ? { text: 'Not installed', tone: 'text-coral' }
+      : c?.state === 'error'
+        ? { text: 'Couldn’t reach it', tone: 'text-coral' }
+        : c?.state === 'unsupported'
+          ? { text: 'Update needed', tone: 'text-amber' }
+          : { text: 'Not connected', tone: 'text-chalk-faint' };
+  // A floor left on Live (or the old Off) without an account can't take tasks; offer the way back to demo.
+  const stranded = !connected && p !== undefined && p.mode !== 'mock';
+  const note = connected
+    ? !h.live
+      ? `Live ${h.name} runs are coming next. ${floor} agents run demo tasks for now.`
+      : live
+        ? `${floor} agents run real tasks on your ${h.account} plan.`
+        : `Off: ${floor.toLowerCase()} agents run demo tasks. Turn on to use your ${h.account} plan.`
+    : stranded
+      ? `${floor} is set to ${live ? 'Live' : 'closed'}, so its agents can’t take tasks until you connect.`
+      : c?.state === 'unsupported'
+        ? `${floor} agents run demo tasks until you update ${h.name}.`
+        : `${floor} agents run demo tasks until you connect ${h.account}.`;
   const pct = p?.usage?.utilization != null ? Math.round(p.usage.utilization * 100) : null;
 
   return (
     <section aria-label={h.account} className="rounded-xl border border-slate-line bg-slate p-4">
-      <div className="flex items-start gap-3">
+      <div className="flex items-center gap-3">
         <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-night-2">
           <HarnessIcon harness={h.id} size={18} />
         </span>
@@ -416,39 +453,51 @@ function ProviderCard({ id, active }: { id: ProviderId; active: boolean }) {
               .join(' · ')}
           </p>
         </div>
-        <div className="flex shrink-0 gap-1.5">
-          {!connected && c?.state !== 'not_installed' && (
-            <button
-              type="button"
-              disabled={busy || waiting}
-              onClick={() => run(async () => {
-                await api.connectProvider(id);
-                setWaiting(true);
-              })}
-              className="h-8 rounded-lg bg-accent px-3.5 text-[13px] font-medium text-white hover:bg-[#7f9bff] disabled:opacity-60"
-            >
-              {waiting ? 'Waiting…' : 'Connect'}
-            </button>
-          )}
-          {c?.state === 'not_installed' && (
+        <div className="shrink-0">
+          {connected ? (
+            <Toggle
+              checked={live && h.live}
+              disabled={busy || !h.live}
+              onChange={(on) => setMode(on ? 'live' : 'mock')}
+              label={`Use ${h.account} for live runs`}
+            />
+          ) : c?.state === 'not_installed' ? (
             <a
               href={id === 'anthropic' ? 'https://code.claude.com' : 'https://developers.openai.com/codex'}
               target="_blank"
               rel="noreferrer"
-              className="grid h-8 place-items-center rounded-lg bg-accent px-3.5 text-[13px] font-medium text-white"
+              className="grid h-8 place-items-center rounded-lg bg-accent px-3.5 text-[13px] font-medium text-white hover:bg-[#7f9bff]"
             >
               Install {h.name}
             </a>
+          ) : c?.state === 'unsupported' ? null : (
+            <button
+              type="button"
+              disabled={busy || waiting}
+              onClick={() => run(async () => {
+                const r = await api.connectProvider(id);
+                if (!r.connected) setWaiting(true);
+              })}
+              className="h-8 rounded-lg bg-accent px-3.5 text-[13px] font-medium text-white hover:bg-[#7f9bff] disabled:opacity-60"
+            >
+              {waiting ? 'Waiting' : 'Connect'}
+            </button>
           )}
+        </div>
+      </div>
+
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <p className={`text-[12px] ${stranded ? 'text-amber' : 'text-chalk-dim'}`}>{note}</p>
+        {stranded && (
           <button
             type="button"
             disabled={busy}
-            onClick={() => run(() => api.checkProvider(id))}
-            className="h-8 rounded-lg border border-slate-line px-3 text-[13px] text-chalk-dim hover:bg-slate-2 hover:text-chalk disabled:opacity-50"
+            onClick={() => setMode('mock')}
+            className="h-8 shrink-0 rounded-lg border border-slate-line px-3 text-[13px] text-chalk-dim hover:bg-slate-2 hover:text-chalk disabled:opacity-50"
           >
-            Check again
+            Use demo
           </button>
-        </div>
+        )}
       </div>
 
       {waiting && !connected && (
@@ -457,17 +506,7 @@ function ProviderCard({ id, active }: { id: ProviderId; active: boolean }) {
         </p>
       )}
       {error && <p role="alert" className="mt-3 text-[12px] text-coral">{error}</p>}
-      {c?.state === 'error' && c.message && <p className="mt-3 text-[12px] text-coral">{c.message}</p>}
-
-      <div className="mt-4 flex items-center justify-between gap-4 border-t border-slate-line pt-3">
-        <div className="min-w-0">
-          <p className="text-[13px]">{FLOOR_LABEL[id]}</p>
-          <p className="text-[12px] text-chalk-faint">
-            {!h.live ? `Live ${h.name} runs are coming next. Demo works now.` : p?.liveAvailable ? 'Live runs use your subscription.' : `Connect ${h.account} to go live.`}
-          </p>
-        </div>
-        <Modes id={id} p={p} />
-      </div>
+      {(c?.state === 'error' || c?.state === 'unsupported') && c.message && <p className="mt-3 text-[12px] text-coral">{c.message}</p>}
 
       {pct !== null && (
         <div className="mt-3" title={p?.usage?.resetsAt ? `Resets ${new Date(p.usage.resetsAt).toLocaleString()}` : undefined}>
@@ -482,64 +521,43 @@ function ProviderCard({ id, active }: { id: ProviderId; active: boolean }) {
       )}
 
       {connected && (
-        <div className="mt-3 flex items-center justify-end gap-2 text-[12px]">
+        <div className="mt-3 flex items-center justify-end gap-1.5 border-t border-slate-line pt-3">
           {confirmOut ? (
             <>
-              <span className="text-chalk-dim">Sign out of {h.name} on this computer? Your terminal sessions sign out too.</span>
-              <button type="button" onClick={() => setConfirmOut(false)} className="rounded-md px-2 py-1 text-chalk-dim hover:bg-slate-2">Cancel</button>
+              <span className="mr-1 text-[12px] text-chalk-dim">Sign out of {h.name} on this computer? Your terminal sessions sign out too.</span>
+              <button
+                type="button"
+                onClick={() => setConfirmOut(false)}
+                className="h-8 shrink-0 rounded-lg border border-slate-line px-3 text-[13px] text-chalk-dim hover:bg-slate-2 hover:text-chalk"
+              >
+                Cancel
+              </button>
               <button
                 type="button"
                 disabled={busy}
                 onClick={() => run(async () => {
                   await api.disconnectProvider(id);
+                  // Without the account a live floor can't run; fall back to demo like a fresh install.
+                  if (live) await api.updateProvider(id, { mode: 'mock' });
                   setConfirmOut(false);
                 })}
-                className="rounded-md border border-[#5a3128] px-2 py-1 text-coral hover:bg-[#231817]"
+                className="h-8 shrink-0 rounded-lg border border-[#5a3128] bg-[#2a1915] px-3 text-[13px] text-coral hover:bg-[#3a1f1a] disabled:opacity-50"
               >
                 Sign out
               </button>
             </>
           ) : (
-            <button type="button" onClick={() => setConfirmOut(true)} className="rounded-md px-2 py-1 text-chalk-faint hover:bg-slate-2 hover:text-chalk">
-              Sign out…
+            <button
+              type="button"
+              onClick={() => setConfirmOut(true)}
+              className="h-8 rounded-lg border border-slate-line px-3 text-[13px] text-chalk-dim hover:border-[#5a3128] hover:bg-[#231817] hover:text-coral"
+            >
+              Sign out
             </button>
           )}
         </div>
       )}
     </section>
-  );
-}
-
-function Modes({ id, p }: { id: ProviderId; p: ProviderStatusDTO | undefined }) {
-  const [error, setError] = useState<string | null>(null);
-  return (
-    <div className="flex flex-col items-end gap-1">
-      <div role="radiogroup" aria-label={`${FLOOR_NAME[id]} mode`} className="grid grid-cols-3 gap-1 rounded-lg bg-night-2 p-1">
-        {MODES.map((m) => {
-          const on = p?.mode === m.mode;
-          const disabled = m.mode === 'live' && !p?.liveAvailable && !on;
-          return (
-            <button
-              key={m.mode}
-              type="button"
-              role="radio"
-              aria-checked={on}
-              disabled={disabled}
-              onClick={() => {
-                setError(null);
-                if (!on) api.updateProvider(id, { mode: m.mode }).catch((e: Error) => setError(e.message));
-              }}
-              className={`h-7 min-w-14 rounded-md px-2 text-[12px] disabled:cursor-not-allowed disabled:opacity-35 ${
-                on ? 'bg-slate-2 text-chalk shadow-[inset_0_-2px_0_var(--color-accent)]' : 'text-chalk-dim hover:text-chalk'
-              }`}
-            >
-              {m.label}
-            </button>
-          );
-        })}
-      </div>
-      {error && <p role="alert" className="max-w-64 text-right text-[11px] text-coral">{error}</p>}
-    </div>
   );
 }
 
@@ -559,7 +577,7 @@ function Projects() {
         ))}
       </div>
       <button type="button" onClick={() => setAdding(true)} className="mt-4 h-9 rounded-lg bg-accent px-4 text-[13px] font-medium text-white hover:bg-[#7f9bff]">
-        Add project…
+        Add project
       </button>
       <p className="mt-1.5 text-[12px] text-chalk-faint">Browse to a folder on this computer, or clone a Git or GitHub repository.</p>
       <AddProjectDialog open={adding} onClose={() => setAdding(false)} />
