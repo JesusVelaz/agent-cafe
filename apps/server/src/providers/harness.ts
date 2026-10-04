@@ -342,7 +342,8 @@ export class HarnessService {
         argumentHint: '',
         kind: 'catalog',
       };
-      const unique = [...new Map([catalog, ...commands].filter((command) => command.name.trim()).map((command) => [command.invocation.toLowerCase(), command])).values()];
+      const discovered = commands.filter((command) => command.name.trim() && command.invocation.toLowerCase() !== catalog.invocation);
+      const unique = [catalog, ...new Map(discovered.map((command) => [command.invocation.toLowerCase(), command])).values()];
       this.commandCache.set(key, { commands: unique, expiresAt: Date.now() + 60_000 });
       return unique;
     }).catch((err) => {

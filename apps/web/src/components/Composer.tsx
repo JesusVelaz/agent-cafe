@@ -272,10 +272,17 @@ export function Composer({ onDockedHeight }: { onDockedHeight?: (px: number) => 
                   return;
                 }
                 if ((e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) || e.key === 'Tab') {
-                  e.preventDefault();
                   const command = menuCommands[Math.min(activeCommand, menuCommands.length - 1)];
-                  if (command) pickCommand(command);
-                  return;
+                  if (command) {
+                    e.preventDefault();
+                    pickCommand(command);
+                    return;
+                  }
+                  if (e.key === 'Tab') return;
+                  if (commandsLoading || commandProblem) {
+                    e.preventDefault();
+                    return;
+                  }
                 }
               }
               if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {

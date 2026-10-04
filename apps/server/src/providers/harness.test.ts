@@ -21,15 +21,20 @@ afterEach(() => vi.restoreAllMocks());
 
 describe('HarnessService', () => {
   it('discovers commands per project and prepends the local skills catalog command', async () => {
-    const read = vi.fn(async (_exe: string, cwd: string) => [{
-      name: cwd.endsWith('one') ? 'one-only' : 'two-only',
-      invocation: cwd.endsWith('one') ? '/one-only' : '/two-only',
-      description: '',
-      argumentHint: '',
-      kind: 'command' as const,
-    }]);
+    const read = vi.fn(async (_exe: string, cwd: string) => [
+      { name: 'skills', invocation: '/skills', description: 'Harness duplicate', argumentHint: '', kind: 'command' as const },
+      {
+        name: cwd.endsWith('one') ? 'one-only' : 'two-only',
+        invocation: cwd.endsWith('one') ? '/one-only' : '/two-only',
+        description: '',
+        argumentHint: '',
+        kind: 'command' as const,
+      },
+    ]);
     const h = new HarnessService({ anthropic: { ...fakeProbe('ready'), commands: read } });
-    expect((await h.commands('anthropic', '/work/one')).map((command) => command.invocation)).toEqual(['/skills', '/one-only']);
+    const one = await h.commands('anthropic', '/work/one');
+    expect(one.map((command) => command.invocation)).toEqual(['/skills', '/one-only']);
+    expect(one[0]).toMatchObject({ kind: 'catalog', description: expect.stringContaining('Claude Code') });
     expect((await h.commands('anthropic', '/work/two')).map((command) => command.invocation)).toEqual(['/skills', '/two-only']);
     await h.commands('anthropic', '/work/one');
     expect(read).toHaveBeenCalledTimes(2);
