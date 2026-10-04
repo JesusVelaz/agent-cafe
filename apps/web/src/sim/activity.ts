@@ -32,7 +32,8 @@ export function deriveActivity({ activeTask, latestTask, lastEvent, lastActivity
     if (activeTask.pendingApproval) return { kind: 'approval', tool: activeTask.pendingApproval.tool };
     const since = lastActivityAt ?? (activeTask.startedAt ? Date.parse(activeTask.startedAt) : now);
     const quietSec = (now - since) / 1000;
-    if (quietSec > DEFAULTS.stuckAfterSec) return { kind: 'stuck', quietSec };
+    // Live harness silence can be normal thinking or a long-running tool.
+    if (activeTask.isMock && quietSec > DEFAULTS.stuckAfterSec) return { kind: 'stuck', quietSec };
     if (lastEvent?.kind === 'tool.start') return { kind: 'tool', tool: lastEvent.tool };
     const step = lastEvent && 'step' in lastEvent ? lastEvent.step : 1;
     return { kind: 'thinking', step };

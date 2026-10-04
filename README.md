@@ -137,13 +137,14 @@ windows, never a price, so live tasks show no cost.
 | `?` bubble | Waiting for you to allow or deny an action |
 | Green ✓ bubble | Just finished |
 | Red `!` | Failed |
-| `zzz` | Running but silent for over 60 s: probably stuck |
+| `zzz` | Demo task silent for over 60 s: probably stuck |
 | Hoodie / office wear | Ground floor (OpenAI) / upstairs (Anthropic) |
 | "Usage limit reached" sign | That floor's plan limit is used up for now |
 
 The top bar answers the at-a-glance questions: how many are working, need you and are queued,
 plus **Settings** (general, providers, projects); its gear shows a dot when a live floor can't run. **Needs you** lists
-approvals first, then stuck agents and failures; allow, deny, retry, stop or dismiss them there.
+approvals first, then stuck demo agents and failures; allow, deny, retry, stop or dismiss them there.
+Live harnesses stay working during silent thinking or long commands; silence alone does not mean they need you.
 
 **Café view:** fold the side panel away (» at its top) and the café fills the screen. Agents that
 need you get a callout, the message box floats bottom-right by the rail (it keeps your

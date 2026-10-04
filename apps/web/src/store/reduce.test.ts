@@ -82,6 +82,20 @@ describe('needsAttention', () => {
   it('honours dismissals', () => {
     expect(needsAttention({ tasks, lastActivityAt }, now, new Set(['fail'])).map((a) => a.task.id)).toEqual(['quiet']);
   });
+
+  it.each(['running', 'tool_wait'] as const)('does not ask for help just because a live %s task is silent', (status) => {
+    const live = task({ id: 'live', isMock: false, status, startedAt: '2026-09-27T11:50:00Z' });
+    expect(needsAttention({ tasks: { live }, lastActivityAt: { live: now - 600_000 } }, now)).toEqual([]);
+  });
+
+  it('still surfaces explicit approvals and failures from live harnesses', () => {
+    const live = task({ id: 'live', isMock: false, status: 'tool_wait', pendingApproval: {
+      id: 'ap', tool: 'Bash', summary: 'npm test', reason: null, requestedAt: '2026-09-27T11:51:00Z',
+    } });
+    const failed = task({ id: 'failed', agentId: 'a2', isMock: false, status: 'failed', finishedAt: '2026-09-27T11:59:00Z' });
+    expect(needsAttention({ tasks: { live, failed }, lastActivityAt: { live: now - 600_000 } }, now)
+      .map((a) => `${a.kind}:${a.task.id}`)).toEqual(['approval:live', 'failed:failed']);
+  });
 });
 
 /** Every thread on the board, group by group. */

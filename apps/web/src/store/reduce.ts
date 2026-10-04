@@ -331,7 +331,7 @@ export const FAILURE_TTL_MS = 60 * 60_000;
 
 /**
  * What needs the user: actions waiting for approval (oldest first), running
- * tasks gone quiet past the stuck threshold, and
+ * demo tasks gone quiet past the stuck threshold, and
  * failures/interruptions that are still the agent's latest finished task (once
  * the agent finishes something newer, it has recovered), not yet retried or
  * dismissed, and under an hour old. Stuck first, then newest failures.
@@ -359,7 +359,9 @@ export function needsAttention(
     } else if (t.status === 'running' || t.status === 'tool_wait') {
       const since = s.lastActivityAt[t.id] ?? (t.startedAt ? Date.parse(t.startedAt) : now);
       const quietSec = (now - since) / 1000;
-      if (quietSec > stuckAfterSec) stuck.push({ kind: 'stuck', agentId: t.agentId, task: t, quietSec });
+      // Live harnesses can think or run a command silently for minutes. No output
+      // isn't evidence that they need the user; their approval/failure state is.
+      if (t.isMock && quietSec > stuckAfterSec) stuck.push({ kind: 'stuck', agentId: t.agentId, task: t, quietSec });
     } else if (
       (t.status === 'failed' || t.status === 'interrupted') &&
       t.finishedAt &&

@@ -59,6 +59,26 @@ describe('deriveActivity', () => {
     expect(a.kind).toBe('stuck');
   });
 
+  it('keeps a silent live model thinking rather than stuck', () => {
+    const live = task({ isMock: false });
+    expect(deriveActivity({
+      activeTask: live, latestTask: live, lastActivityAt: T0, now: T0 + 600_000,
+      lastEvent: ev({ kind: 'model.start', step: 2, maxOutputTokens: 1 }),
+    })).toEqual({ kind: 'thinking', step: 2 });
+  });
+
+  it('keeps a long live command at work but still shows an approval when requested', () => {
+    const live = task({ isMock: false, status: 'tool_wait' });
+    const input = {
+      activeTask: live, latestTask: live, lastActivityAt: T0, now: T0 + 600_000,
+      lastEvent: ev({ kind: 'tool.start', step: 1, callId: 'c', tool: 'Bash', input: {} }),
+    };
+    expect(deriveActivity(input)).toEqual({ kind: 'tool', tool: 'Bash' });
+    expect(deriveActivity({ ...input, activeTask: { ...live, pendingApproval: {
+      id: 'ap', tool: 'Bash', summary: 'npm test', reason: null, requestedAt: '2026-09-27T10:00:01Z',
+    } } })).toEqual({ kind: 'approval', tool: 'Bash' });
+  });
+
   it('shows done/failed briefly after finishing, then idle', () => {
     const done = task({ status: 'completed', finishedAt: '2026-09-27T10:00:10Z' });
     const base = { activeTask: undefined, latestTask: done, lastEvent: undefined, lastActivityAt: undefined };
