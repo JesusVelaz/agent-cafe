@@ -30,10 +30,10 @@
  */
 import { lstatSync, realpathSync } from 'node:fs';
 import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path';
-import type { FailureKind, HarnessModelDTO, PlanUsageDTO } from '@agent-cafe/shared';
+import type { FailureKind, HarnessCommandDTO, HarnessModelDTO, PlanUsageDTO } from '@agent-cafe/shared';
 import type { RunOutcome, RunResult, RunTotals } from '../orchestrator/runner.js';
 import { CodexRpc, CodexRpcError, RpcReplyError, exitMessage, spawnCodex, type CodexRpcHandlers, type CodexSpawner } from './codexRpc.js';
-import { epochToIso, type ApprovalAsk, type LiveRunContext } from './live.js';
+import { epochToIso, formatCommandCatalog, type ApprovalAsk, type LiveRunContext } from './live.js';
 import { codexCollaborationTools } from './collaborationTools.js';
 
 /** The oldest Codex whose app-server this was verified against. */
@@ -141,6 +141,39 @@ async function listModels(rpc: CodexRpc): Promise<HarnessModelDTO[]> {
 
 /** The models this ChatGPT account can use in Codex. */
 export const codexModels = (exe: string, spawn?: CodexSpawner) => withCodex(exe, listModels, spawn);
+
+interface CodexSkillCommand extends HarnessCommandDTO {
+  path: string;
+}
+
+/** Enabled skills Codex discovers for one project folder. */
+async function listSkills(rpc: CodexRpc, cwd: string): Promise<CodexSkillCommand[]> {
+  const reply = obj(await rpc.request('skills/list', { cwds: [cwd] }));
+  const entry = (Array.isArray(reply?.data) ? reply.data : []).map(obj).find((candidate) => candidate && str(candidate.cwd) === cwd)
+    ?? (Array.isArray(reply?.data) ? obj(reply.data[0]) : null);
+  const out: CodexSkillCommand[] = [];
+  for (const raw of Array.isArray(entry?.skills) ? entry.skills : []) {
+    const skill = obj(raw);
+    if (!skill) continue;
+    const name = str(skill.name);
+    const path = str(skill.path);
+    if (!name || !path || skill.enabled === false) continue;
+    const ui = obj(skill.interface);
+    out.push({
+      name,
+      invocation: `$${name}`,
+      description: str(ui?.shortDescription) ?? str(skill.description) ?? str(skill.shortDescription) ?? '',
+      argumentHint: '',
+      kind: 'skill',
+      path,
+    });
+  }
+  return out;
+}
+
+/** Public command metadata never exposes the skill's absolute on-disk path. */
+export const codexCommands = (exe: string, cwd: string, spawn?: CodexSpawner): Promise<HarnessCommandDTO[]> =>
+  withCodex(exe, async (rpc) => (await listSkills(rpc, cwd)).map(({ path: _, ...command }) => command), spawn);
 
 /** The plan's usage window right now, or null if Codex doesn't report one. */
 export const codexPlanUsage = (exe: string, spawn?: CodexSpawner) =>
@@ -526,6 +559,21 @@ export async function runCodexTask(ctx: CodexRunContext): Promise<RunOutcome> {
     }
     if (signal.aborted) return done({ status: 'cancelled' });
 
+    const commandMatch = task.prompt.trim().match(/^([/$])([^\s]+)(?:\s+([\s\S]*))?$/);
+    let skills: CodexSkillCommand[] = [];
+    if (commandMatch) {
+      try {
+        skills = await listSkills(rpc, agent.workDir);
+      } catch (err) {
+        if (commandMatch[2]?.toLowerCase() === 'skills') throw err;
+      }
+    }
+    if (commandMatch?.[1] === '/' && commandMatch[2]?.toLowerCase() === 'skills') {
+      return done({ status: 'completed', output: formatCommandCatalog('Codex', skills) });
+    }
+    const selectedSkill = commandMatch ? skills.find((skill) => skill.name.toLowerCase() === commandMatch[2]?.toLowerCase()) : undefined;
+    const prompt = selectedSkill ? `${selectedSkill.invocation}${commandMatch?.[3] ? ` ${commandMatch[3]}` : ''}` : task.prompt;
+
     const params = {
       cwd: agent.workDir,
       ...THREAD_POLICY,
@@ -558,7 +606,13 @@ export async function runCodexTask(ctx: CodexRunContext): Promise<RunOutcome> {
     }
     ctx.onSession?.(threadId);
 
-    const started = obj(await rpc.request('turn/start', { threadId, input: [{ type: 'text', text: task.prompt, text_elements: [] }] }));
+    const started = obj(await rpc.request('turn/start', {
+      threadId,
+      input: [
+        { type: 'text', text: prompt, text_elements: [] },
+        ...(selectedSkill ? [{ type: 'skill', name: selectedSkill.name, path: selectedSkill.path }] : []),
+      ],
+    }));
     turnId = idOf(field(started, 'turn', 'turn reply'), 'turn');
 
     const aborted = new Promise<void>((r) => (signal.aborted ? r() : signal.addEventListener('abort', () => r(), { once: true })));

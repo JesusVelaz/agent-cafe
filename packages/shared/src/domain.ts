@@ -205,6 +205,19 @@ export interface HarnessModelDTO {
   resolved?: string;
 }
 
+/** A command the selected live harness can run from the composer. */
+export interface HarnessCommandDTO {
+  /** Stable command name without its leading slash or dollar sign. */
+  name: string;
+  /** Exact text inserted into the composer, e.g. `/review` or `$imagegen`. */
+  invocation: string;
+  description: string;
+  argumentHint: string;
+  aliases?: string[];
+  /** Catalog is Agent Café's `/skills`; the other kinds come from the harness. */
+  kind: 'catalog' | 'command' | 'skill';
+}
+
 export interface SettingsDTO {
   /** Idle mock agents pick up canned tasks by themselves. Never touches live providers. */
   ambient: boolean;
