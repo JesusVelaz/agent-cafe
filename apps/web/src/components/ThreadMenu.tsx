@@ -11,7 +11,7 @@ function delegatedCount(th: ThreadSummary): number {
 }
 
 /**
- * A thread's ⋯ menu: rename, pin, archive, delete. Changes go to the server, and
+ * A thread's ⋮ menu: rename, pin, archive, delete. Changes go to the server, and
  * come back to every open café on the stream.
  */
 export function ThreadMenu({ thread, onRename, className = '' }: { thread: ThreadSummary; onRename: () => void; className?: string }) {
@@ -56,9 +56,9 @@ export function ThreadMenu({ thread, onRename, className = '' }: { thread: Threa
           className={`grid size-7 place-items-center rounded-lg text-chalk-dim hover:bg-slate-2 hover:text-chalk ${open ? 'bg-slate-2 text-chalk opacity-100' : ''} ${className}`}
         >
           <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor" aria-hidden>
-            <circle cx="3" cy="7" r="1.3" />
+            <circle cx="7" cy="3" r="1.3" />
             <circle cx="7" cy="7" r="1.3" />
-            <circle cx="11" cy="7" r="1.3" />
+            <circle cx="7" cy="11" r="1.3" />
           </svg>
         </button>
       )}
@@ -100,7 +100,7 @@ export function ThreadMenu({ thread, onRename, className = '' }: { thread: Threa
             </button>
             <span aria-hidden className="mx-2 my-1 h-px bg-slate-line" />
             <button type="button" className={`${item} text-coral`} onClick={() => setConfirming(true)}>
-              Delete…
+              Delete
             </button>
             {error && <p role="alert" className="px-2.5 pb-1 pt-1.5 text-[12px] text-coral">{error}</p>}
           </div>
@@ -163,7 +163,7 @@ export function ThreadTitleEditor({ thread, onDone, className = '' }: { thread: 
 }
 
 /**
- * A thread row with its ⋯ menu over the row's top-right corner, shown on hover or
+ * A thread row with its ⋮ menu at the row's right edge, vertically centred, shown on hover or
  * focus in place of the row's time (rows hide it with `group-hover:invisible`).
  * On touch screens, the open thread's top bar has the same menu. Renaming swaps
  * the row for the name field.
@@ -180,7 +180,8 @@ export function ThreadRowActions({ thread, children }: { thread: ThreadSummary; 
   return (
     <div className="group relative">
       {children}
-      <div className="invisible absolute right-1.5 top-1.5 group-focus-within:visible group-hover:visible has-[[aria-expanded=true]]:visible">
+      {/* Centred with flex, not a transform: a transformed ancestor would misplace the fixed menu. */}
+      <div className="invisible absolute inset-y-0 right-1.5 flex items-center group-focus-within:visible group-hover:visible has-[[aria-expanded=true]]:visible">
         <ThreadMenu thread={thread} onRename={() => setRenaming(true)} className="bg-slate" />
       </div>
     </div>

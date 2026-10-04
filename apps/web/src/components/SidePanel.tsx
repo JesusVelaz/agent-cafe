@@ -80,7 +80,7 @@ export function SidePanel() {
   );
 }
 
-/** The open thread's name in the top bar, renamed in place, and its ⋯ menu. */
+/** The open thread's name in the top bar, renamed in place, and its ⋮ menu. */
 function OpenThreadTitle({ thread }: { thread: ThreadSummary }) {
   const [renaming, setRenaming] = useState(false);
   return (
