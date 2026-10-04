@@ -350,3 +350,71 @@ describe('Orchestrator', () => {
     await orch.idle();
   });
 });
+
+describe('deleting a thread while new work is joining it', () => {
+  /** Live Claude whose model list waits on a gate, so an enqueue can be held after it checked its thread. */
+  async function heldEnqueue(runClaude: LiveRunners['anthropic']) {
+    let open!: () => void;
+    const gate = new Promise<void>((r) => (open = r));
+    let asked = false;
+    const probe = fakeProbe('ready');
+    const harnesses = new HarnessService({ anthropic: { ...probe, models: async (exe) => ((asked = true), await gate, probe.models(exe)) } });
+    const ctx = await setup({ harnesses, runLive: { anthropic: runClaude } });
+    await ctx.providers.update('anthropic', { mode: 'live' });
+    const earl = await ctx.agent('Earl');
+    const project = await ctx.db.project.create({ data: { name: 'app', path: '/tmp/project' } });
+    return { ...ctx, earl, project, release: () => open(), held: () => waitFor(() => asked) };
+  }
+  const done = async (): Promise<RunOutcome> => ({ status: 'completed', output: 'ran', totals: { inputTokens: 0, outputTokens: 0, costUsd: null, steps: 0 } });
+
+  it('refuses a follow-up that was checked before its thread was deleted', async () => {
+    const ran: string[] = [];
+    const { orch, db, earl, project, release, held } = await heldEnqueue(async (c) => (ran.push(c.task.prompt), done()));
+    const first = await db.task.create({
+      data: { agentId: earl.id, providerId: 'anthropic', model: 'default', prompt: 'first', maxCostUsd: 1, status: 'completed', projectId: project.id },
+    });
+    const followUp = orch.enqueue({ prompt: 'and then?', target: { agentId: earl.id }, projectId: project.id, continueTaskId: first.id });
+    await held();
+    await orch.deleteThread(first.id);
+    release();
+    await expect(followUp).rejects.toThrow(/deleted/);
+    await orch.idle();
+    expect(await db.task.count({ where: { agentId: earl.id } })).toBe(0);
+    expect(ran).toEqual([]);
+  });
+
+  it('refuses a follow-up that arrives while the thread’s running work is stopping', async () => {
+    let stopping!: () => void;
+    const stopped = new Promise<void>((r) => (stopping = r));
+    const ran: string[] = [];
+    let aborted = false;
+    const { orch, db, earl, project, release, held } = await heldEnqueue(async (c) => {
+      ran.push(c.task.prompt);
+      if (c.task.prompt === 'and then?') return done();
+      await new Promise((r) => c.signal.addEventListener('abort', r, { once: true }));
+      aborted = true;
+      await stopped; // still winding down when the follow-up gets through
+      return { status: 'cancelled', totals: { inputTokens: 0, outputTokens: 0, costUsd: null, steps: 0 } };
+    });
+    const first = await db.task.create({
+      data: { agentId: earl.id, providerId: 'anthropic', model: 'default', prompt: 'first', maxCostUsd: 1, status: 'completed', projectId: project.id },
+    });
+    // A queued follow-up runs first, so the thread has running work when it's deleted.
+    const running = await db.task.create({
+      data: { agentId: earl.id, providerId: 'anthropic', model: 'default', prompt: 'long job', maxCostUsd: 1, status: 'queued', projectId: project.id, continueOf: first.id },
+    });
+    const late = orch.enqueue({ prompt: 'and then?', target: { agentId: earl.id }, projectId: project.id, continueTaskId: running.id });
+    await held();
+    await orch.recover(); // picks up the queued task
+    await waitFor(async () => (await statusOf(db, running.id)) === 'running');
+    const deleting = orch.deleteThread(first.id);
+    await waitFor(() => aborted); // the delete has found the thread and is stopping its work
+    release();
+    await expect(late).rejects.toThrow(/deleted/);
+    stopping();
+    expect((await deleting).removed.sort()).toEqual([first.id, running.id].sort());
+    await orch.idle();
+    expect(await db.task.count({ where: { agentId: earl.id } })).toBe(0);
+    expect(ran).toEqual(['long job']);
+  });
+});

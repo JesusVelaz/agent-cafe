@@ -100,6 +100,8 @@ export class Orchestrator {
   private readonly drains = new Set<Promise<void>>();
   /** Each task being executed, until it has finished (and its result went out). */
   private readonly runs = new Map<string, Promise<void>>();
+  /** Tasks of threads being deleted, or deleted: nothing new may continue, retry or be sent from them. */
+  private readonly closedTasks = new Set<string>();
   private readonly seq = new Map<string, number>();
   private readonly approvals = new Map<string, PendingApproval>();
   private stopped = false;
@@ -156,6 +158,8 @@ export class Orchestrator {
     const { db, providers } = this.deps;
     const prompt = input.prompt.trim();
     if (!prompt) throw new OrchestratorError('Prompt is empty.', 'invalid');
+    // Checked first for a quick answer, and again just before the task is created (see below).
+    this.assertOpenThread(input);
     const agent = await this.route(input.target);
     const mode = await providers.mode(agent.providerId as ProviderId);
     if (mode === 'off') {
@@ -171,7 +175,8 @@ export class Orchestrator {
     let continueOf: string | null = null;
     if (input.continueTaskId) {
       const prev = await db.task.findUnique({ where: { id: input.continueTaskId } });
-      if (!prev || prev.agentId !== agent.id) throw new OrchestratorError('That conversation belongs to another agent.', 'invalid');
+      if (!prev) throw new OrchestratorError('That conversation no longer exists. Start a new thread.', 'not_found');
+      if (prev.agentId !== agent.id) throw new OrchestratorError('That conversation belongs to another agent.', 'invalid');
       if (prev.projectId !== projectId) throw new OrchestratorError('Follow-ups stay in the same project. Start a new thread to switch.', 'invalid');
       continueOf = prev.id;
     }
@@ -194,6 +199,9 @@ export class Orchestrator {
         model = replacement.value;
       }
     }
+    // No await between this check and the insert: a thread deleted while this task was being
+    // checked (the live checks above can take seconds) can't gain a task that outlives it.
+    this.assertOpenThread(input);
     const row = await db.task.create({
       data: {
         agentId: agent.id,
@@ -296,23 +304,47 @@ export class Orchestrator {
   }
 
   /**
-   * Delete the thread `taskId` belongs to, with the threads it delegated. Work still
-   * queued or running is cancelled first, and removed once it has fully stopped.
+   * Delete the thread `taskId` belongs to, with the threads it delegated. Each task is
+   * closed as soon as it's found, so nothing new can join from it; work still queued or
+   * running is cancelled, and everything is removed once it has fully stopped. Tasks
+   * that joined before being closed are found by looking again, until nothing new turns up.
    */
   async deleteThread(taskId: string): Promise<{ removed: string[] }> {
     const { db, bus } = this.deps;
     const rootId = await threadRootId(db, taskId);
     if (!rootId) throw new OrchestratorError('Thread not found.', 'not_found');
-    const ids = await threadWithDelegations(db, rootId);
-    const open = await db.task.findMany({ where: { id: { in: ids }, status: { in: ['queued', 'running', 'tool_wait'] } } });
-    for (const t of open) await this.cancel(t.id);
-    await Promise.allSettled(ids.flatMap((id) => [this.runs.get(id), this.records.get(id)]).filter(Boolean));
-    await db.$transaction([
-      db.taskEvent.deleteMany({ where: { taskId: { in: ids } } }),
-      db.task.deleteMany({ where: { id: { in: ids } } }),
-    ]);
-    bus.publish({ type: 'task.removed', taskIds: ids });
-    return { removed: ids };
+    const ids = new Set<string>();
+    try {
+      for (;;) {
+        const found = (await threadWithDelegations(db, rootId)).filter((id) => !ids.has(id));
+        if (!found.length) break;
+        for (const id of found) {
+          ids.add(id);
+          this.closedTasks.add(id);
+        }
+        const open = await db.task.findMany({ where: { id: { in: found }, status: { in: ['queued', 'running', 'tool_wait'] } } });
+        for (const t of open) await this.cancel(t.id);
+        await Promise.allSettled(found.flatMap((id) => [this.runs.get(id), this.records.get(id)]).filter(Boolean));
+      }
+      await db.$transaction([
+        db.taskEvent.deleteMany({ where: { taskId: { in: [...ids] } } }),
+        db.task.deleteMany({ where: { id: { in: [...ids] } } }),
+      ]);
+    } catch (err) {
+      // Nothing was removed: the thread stays usable.
+      for (const id of ids) this.closedTasks.delete(id);
+      throw err;
+    }
+    bus.publish({ type: 'task.removed', taskIds: [...ids] });
+    return { removed: [...ids] };
+  }
+
+  /** New work can't continue, retry or be sent from a thread that's being (or was) deleted. */
+  private assertOpenThread(input: EnqueueInput): void {
+    const from = [input.continueTaskId, input.retryOf, input.collaboration?.sourceTaskId];
+    if (from.some((id) => id && this.closedTasks.has(id))) {
+      throw new OrchestratorError('That thread was deleted. Start a new thread.', 'conflict');
+    }
   }
 
   /** A thread that gets new work comes back out of the archive. */
