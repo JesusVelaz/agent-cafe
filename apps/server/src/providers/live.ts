@@ -3,7 +3,7 @@
  * in the agent's project on the user's signed-in CLI, translate its activity into
  * café task events, and route its permission prompts through `approve`.
  */
-import type { AgentPermission, PlanUsageDTO, ProviderId, TaskEventData } from '@agent-cafe/shared';
+import type { AgentPermission, HarnessCommandDTO, PlanUsageDTO, ProviderId, TaskEventData } from '@agent-cafe/shared';
 import type { RunOutcome } from '../orchestrator/runner.js';
 import type { CollaborationTools } from '../orchestrator/collaboration.js';
 
@@ -39,6 +39,17 @@ export function harnessEnv(): Record<string, string | undefined> {
   delete env.OPENAI_API_KEY;
   delete env.CODEX_API_KEY;
   return env;
+}
+
+/** Plain Markdown that reads well in either harness transcript. */
+export function formatCommandCatalog(harness: string, commands: HarnessCommandDTO[]): string {
+  const available = commands.filter((command) => command.kind !== 'catalog');
+  if (!available.length) return `No ${harness} skills or commands are available in this project.`;
+  return [
+    `${harness} skills and commands available in this project:`,
+    '',
+    ...available.map((command) => `- \`${command.invocation}${command.argumentHint ? ` ${command.argumentHint}` : ''}\`${command.description ? ` — ${command.description}` : ''}`),
+  ].join('\n');
 }
 
 export type LiveRunner = (ctx: LiveRunContext) => Promise<RunOutcome>;

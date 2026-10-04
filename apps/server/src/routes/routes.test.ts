@@ -65,6 +65,24 @@ describe('HTTP API', () => {
     expect(demo.source).toBe('catalog');
   });
 
+  it('reports project-scoped commands only for the selected live harness', async () => {
+    const { app, db } = await setup('ready');
+    const project = await db.project.create({ data: { name: 'Cafe', path: process.cwd() } });
+    expect((await app.inject(`/api/providers/anthropic/commands?projectId=${project.id}`)).json()).toMatchObject({
+      source: 'unavailable',
+      commands: [],
+      message: expect.stringMatching(/Live mode/),
+    });
+    await app.inject({ method: 'PATCH', url: '/api/providers/anthropic', payload: { mode: 'live' } });
+    const result = (await app.inject(`/api/providers/anthropic/commands?projectId=${project.id}`)).json();
+    expect(result.source).toBe('harness');
+    expect(result.commands).toEqual([
+      expect.objectContaining({ name: 'skills', invocation: '/skills', kind: 'catalog' }),
+      expect.objectContaining({ name: 'review', invocation: '/review', kind: 'command' }),
+    ]);
+    expect((await app.inject('/api/providers/anthropic/commands')).json()).toMatchObject({ source: 'unavailable', commands: [] });
+  });
+
   it('offers Codex’s own model list on the ground floor once it’s signed in', async () => {
     const db = await testDb({ seed: true });
     const codexList = [{ value: 'gpt-6-astra', label: 'GPT-6-Astra', description: 'Flagship', tag: 'Default' }];

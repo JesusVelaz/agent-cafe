@@ -1,6 +1,7 @@
 import type {
   AgentDTO,
   AgentPermission,
+  HarnessCommandDTO,
   HarnessModelDTO,
   ProjectDTO,
   ModelInfo,
@@ -93,6 +94,11 @@ export const api = {
   connectProvider: (id: ProviderId) => post<{ ok: true; connected: boolean }>(`/api/providers/${id}/connect`),
   disconnectProvider: (id: ProviderId) => post<ProviderStatusDTO>(`/api/providers/${id}/disconnect`),
   models: (id: ProviderId, refresh = false) => request<{ source: 'harness' | 'catalog' | 'unavailable'; models: HarnessModelDTO[]; message?: string }>(`/api/providers/${id}/models${refresh ? '?refresh=true' : ''}`),
+  commands: (id: ProviderId, projectId: string, refresh = false) => {
+    const params = new URLSearchParams({ projectId });
+    if (refresh) params.set('refresh', 'true');
+    return request<{ source: 'harness' | 'unavailable'; commands: HarnessCommandDTO[]; message?: string }>(`/api/providers/${id}/commands?${params}`);
+  },
   updateSettings: (s: Partial<SettingsDTO>) => patch<SettingsDTO>('/api/settings', s),
   addProject: (p: { path: string; name?: string }) => post<ProjectDTO>('/api/projects', p),
   renameProject: (id: string, name: string) => patch<ProjectDTO>(`/api/projects/${id}`, { name }),

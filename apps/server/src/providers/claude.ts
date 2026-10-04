@@ -11,10 +11,10 @@ import {
   type SDKMessage,
   type SDKRateLimitInfo,
 } from '@anthropic-ai/claude-agent-sdk';
-import { DEFAULTS, type FailureKind, type PlanUsageDTO } from '@agent-cafe/shared';
+import { DEFAULTS, type FailureKind, type HarnessCommandDTO, type PlanUsageDTO } from '@agent-cafe/shared';
 import type { RunOutcome, RunResult, RunTotals } from '../orchestrator/runner.js';
 import { harnessEnv } from './live.js';
-import { epochToIso, type LiveRunContext } from './live.js';
+import { epochToIso, formatCommandCatalog, type LiveRunContext } from './live.js';
 import { claudeCollaborationServer } from './collaborationTools.js';
 import { collaborationSpecs } from '../orchestrator/collaboration.js';
 
@@ -114,6 +114,39 @@ export async function claudePlanUsage(executable: string, query: typeof sdkQuery
   }
 }
 
+/** Commands and skills Claude Code discovers for one project folder. */
+export async function claudeCommands(
+  executable: string,
+  cwd: string,
+  query: typeof sdkQuery = sdkQuery,
+): Promise<HarnessCommandDTO[]> {
+  let hold!: () => void;
+  const idle = new Promise<void>((resolve) => (hold = resolve));
+  async function* noPrompt(): AsyncGenerator<never> {
+    await idle;
+  }
+  const q = query({
+    prompt: noPrompt(),
+    options: { ...claudeSessionOptions(executable), cwd, persistSession: false },
+  });
+  try {
+    const commands = await q.supportedCommands();
+    return commands
+      .filter((command) => command.name.trim())
+      .map((command) => ({
+        name: command.name,
+        invocation: `/${command.name}`,
+        description: command.description,
+        argumentHint: command.argumentHint,
+        ...(command.aliases?.length ? { aliases: command.aliases } : {}),
+        kind: command.builtin ? 'command' as const : 'skill' as const,
+      }));
+  } finally {
+    hold();
+    q.close();
+  }
+}
+
 const MAX_TOOL_OUTPUT_CHARS = 16_000;
 const NO_QUESTIONS =
   'You are running unattended in Agent Café and cannot ask questions. Make a sensible choice, say what you assumed, and continue.';
@@ -141,6 +174,15 @@ export async function runClaudeTask(ctx: ClaudeRunContext): Promise<RunOutcome> 
   const { task, agent, signal, emit } = ctx;
   const totals: RunTotals = { inputTokens: 0, outputTokens: 0, costUsd: null, steps: 0 };
   const done = (r: RunResult): RunOutcome => ({ ...r, totals });
+
+  if (task.prompt.trim().toLowerCase() === '/skills') {
+    try {
+      const commands = await claudeCommands(ctx.executable, agent.workDir, ctx.query ?? sdkQuery);
+      return done({ status: 'completed', output: formatCommandCatalog('Claude Code', commands) });
+    } catch (err) {
+      return done({ status: 'failed', failureKind: 'provider_error', error: err instanceof Error ? err.message : String(err) });
+    }
+  }
 
   const ac = new AbortController();
   const onAbort = () => ac.abort();

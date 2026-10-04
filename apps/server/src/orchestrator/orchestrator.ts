@@ -379,13 +379,15 @@ export class Orchestrator {
       return agent;
     }
     // "Any idle": prefer a free agent, else the shortest queue. Ties go to the oldest agent.
+    // `default` is a harness-level alias, not a concrete model saved on an agent.
+    const routedModel = target.model && target.model !== 'default' ? target.model : undefined;
     const candidates = await db.agent.findMany({
-      where: { providerId: target.providerId, archivedAt: null, ...(target.model ? { model: target.model } : {}) },
+      where: { providerId: target.providerId, archivedAt: null, ...(routedModel ? { model: routedModel } : {}) },
       orderBy: { createdAt: 'asc' },
       include: { _count: { select: { tasks: { where: { status: 'queued' } } } } },
     });
     if (candidates.length === 0) {
-      const what = target.model ? `${target.providerId} agent using ${target.model}` : `${target.providerId} agent`;
+      const what = routedModel ? `${target.providerId} agent using ${routedModel}` : `${target.providerId} agent`;
       throw new OrchestratorError(`No ${what} in the café. Hire one first.`, 'not_found');
     }
     const load = (a: (typeof candidates)[number]) => a._count.tasks + (this.isBusy(a.id) ? 1 : 0);

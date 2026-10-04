@@ -1,11 +1,13 @@
 'use client';
 
-import { HARNESS, offeredModel, type AgentPermission, type ProviderId } from '@agent-cafe/shared';
+import { HARNESS, offeredModel, type AgentPermission, type HarnessCommandDTO, type ProviderId } from '@agent-cafe/shared';
 import { useEffect, useId, useRef, useState } from 'react';
 import { api } from '@/lib/api';
+import { filterHarnessCommands, slashCommandQuery } from '@/lib/commands';
 import { useModelOptions } from '@/lib/models';
 import { useAgentView, useCafe } from '@/store/cafe';
 import { Avatar } from './Avatar';
+import { CommandMenu } from './CommandMenu';
 import { ModelPicker, PermissionPicker, ProjectPicker, TargetPicker, type Target } from './pickers';
 import { Chip, FolderIcon, PixelSend } from './ui';
 
@@ -73,6 +75,11 @@ export function Composer({ onDockedHeight }: { onDockedHeight?: (px: number) => 
   const [prompt, setPrompt] = useState('');
   const [sending, setSending] = useState(false);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
+  const [commands, setCommands] = useState<HarnessCommandDTO[]>([]);
+  const [commandsLoading, setCommandsLoading] = useState(false);
+  const [commandsError, setCommandsError] = useState<string | null>(null);
+  const [commandMenuDismissed, setCommandMenuDismissed] = useState(false);
+  const [activeCommand, setActiveCommand] = useState(0);
   // "Sent to Steve." fades on its own; errors stay until the next edit or send.
   useEffect(() => {
     if (!notice?.ok) return;
@@ -80,8 +87,43 @@ export function Composer({ onDockedHeight }: { onDockedHeight?: (px: number) => 
     return () => clearTimeout(t);
   }, [notice]);
   const promptId = useId();
+  const commandListId = useId();
   const box = useRef<HTMLTextAreaElement>(null);
   const form = useRef<HTMLFormElement>(null);
+  const commandQuery = slashCommandQuery(prompt);
+  const commandMenuOpen = commandQuery !== null && !commandMenuDismissed;
+  const shownCommands = commandQuery === null ? [] : filterHarnessCommands(commands, commandQuery);
+  const commandProblem = !live
+    ? 'Slash commands are available in Live mode.'
+    : !projectId
+      ? 'Pick a project to load its slash commands.'
+      : commandsError;
+  const menuCommands = commandProblem ? [] : shownCommands;
+
+  useEffect(() => {
+    if (!commandMenuOpen || !live || !projectId) return;
+    let current = true;
+    setCommands([]);
+    setCommandsError(null);
+    setCommandsLoading(true);
+    void api.commands(provider, projectId).then(
+      (result) => {
+        if (!current) return;
+        setCommands(result.commands);
+        setCommandsError(result.source === 'unavailable' ? result.message ?? 'No slash commands are available.' : null);
+      },
+      (error: Error) => {
+        if (!current) return;
+        setCommands([]);
+        setCommandsError(error.message);
+      },
+    ).finally(() => {
+      if (current) setCommandsLoading(false);
+    });
+    return () => { current = false; };
+  }, [commandMenuOpen, live, projectId, provider]);
+
+  useEffect(() => setActiveCommand(0), [commandQuery, commands]);
 
   // Docked, the panel keeps a footer slot as tall as the composer.
   useEffect(() => {
@@ -130,6 +172,13 @@ export function Composer({ onDockedHeight }: { onDockedHeight?: (px: number) => 
     }
   };
 
+  const pickCommand = (command: HarnessCommandDTO) => {
+    setPrompt(`${command.invocation} `);
+    setCommandMenuDismissed(true);
+    setActiveCommand(0);
+    requestAnimationFrame(() => box.current?.focus());
+  };
+
   const placeholder = agent
     ? openThread
       ? `Reply to ${agent.name}…`
@@ -167,10 +216,22 @@ export function Composer({ onDockedHeight }: { onDockedHeight?: (px: number) => 
       }`}
     >
       {/* Floating, the result shows just above the box; docked, it's in the footer line. */}
-      {floating && notice && (
+      {floating && notice && !commandMenuOpen && (
         <p role="status" className={`absolute bottom-full right-0 mb-1.5 max-w-full truncate rounded-lg bg-night-2/95 px-2.5 py-1 text-[12px] shadow-lg ${notice.ok ? 'text-mint' : 'text-coral'}`}>
           {notice.text}
         </p>
+      )}
+      {commandMenuOpen && (
+        <CommandMenu
+          id={commandListId}
+          provider={provider}
+          commands={menuCommands}
+          active={Math.min(activeCommand, Math.max(0, menuCommands.length - 1))}
+          loading={commandsLoading && !commandProblem}
+          error={commandProblem}
+          onActive={setActiveCommand}
+          onPick={pickCommand}
+        />
       )}
       <form
         ref={form}
@@ -192,15 +253,49 @@ export function Composer({ onDockedHeight }: { onDockedHeight?: (px: number) => 
             value={prompt}
             onChange={(e) => {
               setPrompt(e.target.value);
+              setCommandMenuDismissed(false);
               if (notice) setNotice(null);
             }}
             onKeyDown={(e) => {
+              if (commandMenuOpen) {
+                if (e.key === 'Escape') {
+                  e.preventDefault();
+                  setCommandMenuDismissed(true);
+                  return;
+                }
+                if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                  e.preventDefault();
+                  if (menuCommands.length) {
+                    const delta = e.key === 'ArrowDown' ? 1 : -1;
+                    setActiveCommand((index) => (index + delta + menuCommands.length) % menuCommands.length);
+                  }
+                  return;
+                }
+                if ((e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) || e.key === 'Tab') {
+                  const command = menuCommands[Math.min(activeCommand, menuCommands.length - 1)];
+                  if (command) {
+                    e.preventDefault();
+                    pickCommand(command);
+                    return;
+                  }
+                  if (e.key === 'Tab') return;
+                  if (commandsLoading || commandProblem) {
+                    e.preventDefault();
+                    return;
+                  }
+                }
+              }
               if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault();
                 void send();
               }
             }}
             placeholder={placeholder}
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded={commandMenuOpen}
+            aria-controls={commandMenuOpen ? commandListId : undefined}
+            aria-activedescendant={commandMenuOpen && menuCommands.length ? `${commandListId}-${Math.min(activeCommand, menuCommands.length - 1)}` : undefined}
             className="block w-full resize-none bg-transparent text-[14px] leading-snug text-chalk outline-none placeholder:text-chalk-faint"
           />
           {/* The choices stay on one line (labels truncate if they run out of room); send stays right. */}

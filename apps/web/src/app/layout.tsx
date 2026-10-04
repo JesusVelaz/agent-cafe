@@ -6,7 +6,8 @@ import './globals.css';
 const jersey = Jersey_10({ weight: '400', subsets: ['latin'], variable: '--font-jersey' });
 const silk = Silkscreen({ weight: ['400', '700'], subsets: ['latin'], variable: '--font-silk' });
 const plex = IBM_Plex_Mono({ weight: ['400', '500', '600'], subsets: ['latin'], variable: '--font-plex' });
-const plexSans = IBM_Plex_Sans({ weight: ['400', '500', '600'], subsets: ['latin'], variable: '--font-plex-sans' });
+// Use the variable face; static-weight URLs can contain queries Turbopack cannot resolve.
+const plexSans = IBM_Plex_Sans({ weight: 'variable', subsets: ['latin'], variable: '--font-plex-sans' });
 
 export const metadata: Metadata = {
   title: 'Agent Café',
