@@ -65,6 +65,10 @@ model Task {
   exchangeDepth Int    @default(0)
   resultForTaskId String? @unique // durable, idempotent result delivery
   collaborationCancelled Boolean @default(false) // suppress descendants/results across restarts
+  // Thread settings, kept on the thread's first task.
+  threadTitle      String?
+  threadPinnedAt   DateTime?
+  threadArchivedAt DateTime?
   createdAt    DateTime    @default(now())
   startedAt    DateTime?
   finishedAt   DateTime?

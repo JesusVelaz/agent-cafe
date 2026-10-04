@@ -74,6 +74,21 @@ export function reduce(s: CafeData, e: CafeEvent, now: number = Date.now()): Caf
     }
     case 'task.upserted':
       return { ...s, tasks: { ...s.tasks, [e.task.id]: e.task } };
+    case 'task.removed': {
+      const without = <T,>(rec: Record<string, T>) => {
+        const next = { ...rec };
+        for (const id of e.taskIds) delete next[id];
+        return next;
+      };
+      return {
+        ...s,
+        tasks: without(s.tasks),
+        events: without(s.events),
+        lastEvent: without(s.lastEvent),
+        lastActivityAt: without(s.lastActivityAt),
+        streamText: without(s.streamText),
+      };
+    }
     case 'provider.updated':
       return { ...s, providers: { ...s.providers, [e.provider.id]: e.provider } };
     case 'settings.updated':
@@ -137,8 +152,12 @@ export interface ThreadSummary {
   /** The thread's first task. */
   id: string;
   agentId: string;
-  /** The first message, without any routing line. */
+  /** The name given to the thread, else its first message without any routing line. */
   title: string;
+  /** Kept at the top of the lists. */
+  pinned: boolean;
+  /** Hidden from the board and tucked under the agent's archived threads. */
+  archived: boolean;
   projectId: string | null;
   /** Its tasks, oldest first. */
   taskIds: string[];
@@ -222,7 +241,9 @@ function threadIndex(s: Pick<CafeData, 'tasks'>): ThreadIndex {
     threads.set(rootId, {
       id: rootId,
       agentId: root.agentId,
-      title: exchangeMessage(root).trim() || root.prompt,
+      title: root.threadTitle || exchangeMessage(root).trim() || root.prompt,
+      pinned: !!root.threadPinnedAt,
+      archived: !!root.threadArchivedAt,
       projectId: root.projectId,
       taskIds: list.map((t) => t.id),
       messages: list.length,
@@ -261,7 +282,7 @@ function threadIndex(s: Pick<CafeData, 'tasks'>): ThreadIndex {
 const newestFirst = (a: ThreadSummary, b: ThreadSummary) => b.at.localeCompare(a.at);
 
 /** A coordinator may finish its turn while its delegated threads are still working. */
-function workingThreads(th: ThreadSummary): number {
+export function workingThreads(th: ThreadSummary): number {
   return (isTerminal(th.last.status) ? 0 : 1) + th.children.reduce((n, child) => n + workingThreads(child), 0);
 }
 
@@ -271,6 +292,9 @@ function workingFirst(list: ThreadSummary[]): ThreadSummary[] {
   const rest = list.filter((th) => workingThreads(th) === 0).sort(newestFirst);
   return [...working, ...rest];
 }
+
+/** Pinned threads first, each part keeping its order. */
+const pinnedFirst = (list: ThreadSummary[]) => [...list.filter((th) => th.pinned), ...list.filter((th) => !th.pinned)];
 
 /** One project's threads on the board (projectId null: demo work, with no project). */
 export interface ProjectGroup {
@@ -286,17 +310,19 @@ export interface ProjectGroup {
 /**
  * The board's threads by project: projects with work under way first, then by latest
  * activity; demo work (no project) last. Delegated work stays under its thread.
+ * Archived threads are left off; pinned ones lead their project.
  */
 export function projectGroups(s: Pick<CafeData, 'tasks'>): ProjectGroup[] {
   const byProject = new Map<string | null, ThreadSummary[]>();
   for (const th of threadIndex(s).top) {
+    if (th.archived) continue;
     const list = byProject.get(th.projectId);
     if (list) list.push(th);
     else byProject.set(th.projectId, [th]);
   }
   const groups = [...byProject].map(([projectId, list]): ProjectGroup => ({
     projectId,
-    threads: workingFirst(list),
+    threads: pinnedFirst(workingFirst(list)),
     working: list.reduce((n, th) => n + workingThreads(th), 0),
     at: list.reduce((a, th) => (th.at > a ? th.at : a), ''),
   }));
@@ -307,9 +333,9 @@ export function projectGroups(s: Pick<CafeData, 'tasks'>): ProjectGroup[] {
   });
 }
 
-/** All of one agent's threads (delegated work it did too), newest activity first. */
+/** All of one agent's threads (delegated work it did too, archived ones included): pinned, then newest activity first. */
 export function agentThreads(s: Pick<CafeData, 'tasks'>, agentId: string): ThreadSummary[] {
-  return [...threadIndex(s).threads.values()].filter((th) => th.agentId === agentId).sort(newestFirst);
+  return pinnedFirst([...threadIndex(s).threads.values()].filter((th) => th.agentId === agentId).sort(newestFirst));
 }
 
 /** The thread a task belongs to. */

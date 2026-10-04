@@ -69,6 +69,11 @@ export const api = {
   cancelTask: (id: string) => post<TaskDTO>(`/api/tasks/${id}/cancel`),
   retryTask: (id: string) => post<TaskDTO>(`/api/tasks/${id}/retry`),
   task: (id: string) => request<{ task: TaskDTO; events: TaskEventDTO[] }>(`/api/tasks/${id}`),
+  /** A thread is addressed by any of its tasks. An empty title resets its name. */
+  updateThread: (taskId: string, t: { title?: string | null; pinned?: boolean; archived?: boolean }) =>
+    patch<TaskDTO>(`/api/threads/${taskId}`, t),
+  /** Stops anything still running in it, then removes it and the threads it delegated. */
+  deleteThread: (taskId: string) => request<{ removed: string[] }>(`/api/threads/${taskId}`, { method: 'DELETE' }),
   tasks: (q: { limit?: number; agentId?: string } = {}) => {
     const params = new URLSearchParams();
     if (q.limit) params.set('limit', String(q.limit));

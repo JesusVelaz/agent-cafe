@@ -23,6 +23,7 @@ import {
 } from '@agent-cafe/shared';
 import type { Db } from '../db/client.js';
 import { toAgentDTO, toProjectDTO, toTaskDTO, toTaskEventDTO } from '../db/mappers.js';
+import { threadRootId, threadTaskIds, threadWithDelegations } from '../db/threads.js';
 import type { EventBus } from '../events/bus.js';
 import type { Task } from '../generated/prisma/client.js';
 import { runClaudeTask } from '../providers/claude.js';
@@ -97,6 +98,10 @@ interface Slot {
 export class Orchestrator {
   private readonly slots = new Map<string, Slot>();
   private readonly drains = new Set<Promise<void>>();
+  /** Each task being executed, until it has finished (and its result went out). */
+  private readonly runs = new Map<string, Promise<void>>();
+  /** Tasks of threads being deleted, or deleted: nothing new may continue, retry or be sent from them. */
+  private readonly closedTasks = new Set<string>();
   private readonly seq = new Map<string, number>();
   private readonly approvals = new Map<string, PendingApproval>();
   private stopped = false;
@@ -153,6 +158,8 @@ export class Orchestrator {
     const { db, providers } = this.deps;
     const prompt = input.prompt.trim();
     if (!prompt) throw new OrchestratorError('Prompt is empty.', 'invalid');
+    // Checked first for a quick answer, and again just before the task is created (see below).
+    this.assertOpenThread(input);
     const agent = await this.route(input.target);
     const mode = await providers.mode(agent.providerId as ProviderId);
     if (mode === 'off') {
@@ -168,7 +175,8 @@ export class Orchestrator {
     let continueOf: string | null = null;
     if (input.continueTaskId) {
       const prev = await db.task.findUnique({ where: { id: input.continueTaskId } });
-      if (!prev || prev.agentId !== agent.id) throw new OrchestratorError('That conversation belongs to another agent.', 'invalid');
+      if (!prev) throw new OrchestratorError('That conversation no longer exists. Start a new thread.', 'not_found');
+      if (prev.agentId !== agent.id) throw new OrchestratorError('That conversation belongs to another agent.', 'invalid');
       if (prev.projectId !== projectId) throw new OrchestratorError('Follow-ups stay in the same project. Start a new thread to switch.', 'invalid');
       continueOf = prev.id;
     }
@@ -191,6 +199,9 @@ export class Orchestrator {
         model = replacement.value;
       }
     }
+    // No await between this check and the insert: a thread deleted while this task was being
+    // checked (the live checks above can take seconds) can't gain a task that outlives it.
+    this.assertOpenThread(input);
     const row = await db.task.create({
       data: {
         agentId: agent.id,
@@ -211,6 +222,7 @@ export class Orchestrator {
       const updated = await db.agent.update({ where: { id: agent.id }, data: { model, permission, projectId } });
       this.deps.bus.publish({ type: 'agent.upserted', agent: toAgentDTO(updated) });
     }
+    if (row.continueOf || row.retryOf) await this.unarchiveThread(row.id);
     const task = this.publishTask(row);
     await this.record(row.id, row.agentId, { kind: 'status', status: 'queued' });
     if (modelNote) await this.record(row.id, row.agentId, { kind: 'log', level: 'info', message: modelNote });
@@ -274,15 +286,95 @@ export class Orchestrator {
     });
   }
 
+  // ── Threads ──────────────────────────────────────────────────────────────
+
+  /** Rename, pin or archive the thread `taskId` belongs to. An empty title resets the name. */
+  async updateThread(taskId: string, change: { title?: string | null; pinned?: boolean; archived?: boolean }): Promise<TaskDTO> {
+    const rootId = await threadRootId(this.deps.db, taskId);
+    if (!rootId) throw new OrchestratorError('Thread not found.', 'not_found');
+    const row = await this.deps.db.task.update({
+      where: { id: rootId },
+      data: {
+        ...(change.title !== undefined ? { threadTitle: change.title?.trim() || null } : {}),
+        ...(change.pinned !== undefined ? { threadPinnedAt: change.pinned ? new Date() : null } : {}),
+        ...(change.archived !== undefined ? { threadArchivedAt: change.archived ? new Date() : null } : {}),
+      },
+    });
+    return this.publishTask(row);
+  }
+
+  /**
+   * Delete the thread `taskId` belongs to, with the threads it delegated. Each task is
+   * closed as soon as it's found, so nothing new can join from it; work still queued or
+   * running is cancelled, and everything is removed once it has fully stopped. Tasks
+   * that joined before being closed are found by looking again, until nothing new turns up.
+   */
+  async deleteThread(taskId: string): Promise<{ removed: string[] }> {
+    const { db, bus } = this.deps;
+    const rootId = await threadRootId(db, taskId);
+    if (!rootId) throw new OrchestratorError('Thread not found.', 'not_found');
+    const ids = new Set<string>();
+    try {
+      for (;;) {
+        const found = (await threadWithDelegations(db, rootId)).filter((id) => !ids.has(id));
+        if (!found.length) break;
+        for (const id of found) {
+          ids.add(id);
+          this.closedTasks.add(id);
+        }
+        const open = await db.task.findMany({ where: { id: { in: found }, status: { in: ['queued', 'running', 'tool_wait'] } } });
+        for (const t of open) await this.cancel(t.id);
+        await Promise.allSettled(found.flatMap((id) => [this.runs.get(id), this.records.get(id)]).filter(Boolean));
+      }
+      await db.$transaction([
+        db.taskEvent.deleteMany({ where: { taskId: { in: [...ids] } } }),
+        db.task.deleteMany({ where: { id: { in: [...ids] } } }),
+      ]);
+    } catch (err) {
+      // Nothing was removed: the thread stays usable.
+      for (const id of ids) this.closedTasks.delete(id);
+      throw err;
+    }
+    bus.publish({ type: 'task.removed', taskIds: [...ids] });
+    return { removed: [...ids] };
+  }
+
+  /** New work can't continue, retry or be sent from a thread that's being (or was) deleted. */
+  private assertOpenThread(input: EnqueueInput): void {
+    const from = [input.continueTaskId, input.retryOf, input.collaboration?.sourceTaskId];
+    if (from.some((id) => id && this.closedTasks.has(id))) {
+      throw new OrchestratorError('That thread was deleted. Start a new thread.', 'conflict');
+    }
+  }
+
+  /** A thread that gets new work comes back out of the archive. */
+  private async unarchiveThread(taskId: string): Promise<void> {
+    const rootId = await threadRootId(this.deps.db, taskId);
+    if (!rootId) return;
+    const unarchived = await this.deps.db.task.updateMany({ where: { id: rootId, threadArchivedAt: { not: null } }, data: { threadArchivedAt: null } });
+    if (unarchived.count) this.publishTask(await this.deps.db.task.findUniqueOrThrow({ where: { id: rootId } }));
+  }
+
   /** Full state for a newly connected client. */
   async snapshot(): Promise<Extract<CafeEvent, { type: 'snapshot' }>> {
     const { db, providers, settings } = this.deps;
-    const [agents, active, recent] = await Promise.all([
+    const [agents, active, recent, pinned] = await Promise.all([
       db.agent.findMany({ where: { archivedAt: null }, orderBy: { createdAt: 'asc' } }),
       db.task.findMany({ where: { status: { in: ['queued', 'running', 'tool_wait'] } } }),
       db.task.findMany({ orderBy: { createdAt: 'desc' }, take: 100 }),
+      db.task.findMany({ where: { threadPinnedAt: { not: null } }, select: { id: true } }),
     ]);
-    const tasks = new Map([...recent, ...active].map((t) => [t.id, toTaskDTO(t)]));
+    const rows = new Map([...recent, ...active].map((t) => [t.id, t]));
+    // Pinned threads stay on the board however old they are.
+    const pinnedIds = (await Promise.all(pinned.map((p) => threadTaskIds(db, p.id)))).flat().filter((id) => !rows.has(id));
+    for (const t of await db.task.findMany({ where: { id: { in: pinnedIds } } })) rows.set(t.id, t);
+    // Each thread back to its first task, which holds the thread's name and settings.
+    for (let missing = parentIds(rows); missing.length; missing = parentIds(rows)) {
+      const found = await db.task.findMany({ where: { id: { in: missing } } });
+      if (!found.length) break;
+      for (const t of found) rows.set(t.id, t);
+    }
+    const tasks = new Map([...rows.values()].map((t) => [t.id, toTaskDTO(t)]));
     const lastEvents: Record<string, TaskEventDTO> = {};
     for (const t of active.filter((t) => t.status !== 'queued')) {
       const e = await db.taskEvent.findFirst({ where: { taskId: t.id }, orderBy: { seq: 'desc' } });
@@ -367,7 +459,13 @@ export class Orchestrator {
       }
       slot.taskId = next.id;
       slot.ctrl = new AbortController();
-      await this.execute(next, slot.ctrl);
+      const run = this.execute(next, slot.ctrl);
+      this.runs.set(next.id, run);
+      try {
+        await run;
+      } finally {
+        this.runs.delete(next.id);
+      }
       slot.taskId = null;
     }
   }
@@ -583,6 +681,16 @@ export class Orchestrator {
     this.deps.bus.publish({ type: 'task.upserted', task });
     return task;
   }
+}
+
+/** Tasks that loaded tasks continue or retry, but that aren't loaded themselves. */
+function parentIds(rows: Map<string, Task>): string[] {
+  const ids = new Set<string>();
+  for (const t of rows.values()) {
+    const parent = t.continueOf ?? t.retryOf;
+    if (parent && !rows.has(parent)) ids.add(parent);
+  }
+  return [...ids];
 }
 
 interface FinishFields {
