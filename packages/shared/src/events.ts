@@ -57,6 +57,8 @@ export type CafeEvent =
   | { type: 'project.removed'; projectId: string }
   | { type: 'agent.upserted'; agent: AgentDTO }
   | { type: 'task.upserted'; task: TaskDTO }
+  /** A deleted thread's tasks (their events went with them). */
+  | { type: 'task.removed'; taskIds: string[] }
   | { type: 'task.event'; taskId: string; agentId: string; event: TaskEventDTO }
   | { type: 'provider.updated'; provider: ProviderStatusDTO }
   | { type: 'settings.updated'; settings: SettingsDTO };

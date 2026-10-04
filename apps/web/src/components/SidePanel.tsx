@@ -11,6 +11,7 @@ import { agentThreads, latestTaskFor, needsAttention, projectGroups, type Attent
 import { AgentHeader, AgentThread } from './AgentThread';
 import { Avatar } from './Avatar';
 import { ACTIVITY_TONE } from './Panel';
+import { PinMark, ThreadMenu, ThreadRowActions, ThreadTitleEditor } from './ThreadMenu';
 import { FolderIcon, SectionHeading } from './ui';
 
 export const FAILURE_SHORT: Record<FailureKind, string> = {
@@ -48,6 +49,7 @@ export function SidePanel() {
           ) : (
             <h2 className="px-2 font-label text-[11px] font-normal tracking-wide text-chalk-dim">WORK BOARD</h2>
           )}
+          {agent && view?.kind === 'thread' && <OpenThreadTitle key={view.thread.id} thread={view.thread} />}
           <button
             type="button"
             aria-label="Collapse the panel"
@@ -78,14 +80,68 @@ export function SidePanel() {
   );
 }
 
-/** One agent's threads, newest first, and a way to start another. */
+/** The open thread's name in the top bar, renamed in place, and its ⋯ menu. */
+function OpenThreadTitle({ thread }: { thread: ThreadSummary }) {
+  const [renaming, setRenaming] = useState(false);
+  return (
+    <div className="flex min-w-0 flex-1 items-center gap-1 px-1">
+      {renaming ? (
+        <ThreadTitleEditor thread={thread} onDone={() => setRenaming(false)} className="flex-1" />
+      ) : (
+        <button
+          type="button"
+          onDoubleClick={() => setRenaming(true)}
+          title={`${thread.title} (double-click to rename)`}
+          className="flex min-w-0 flex-1 items-center justify-end gap-1.5 text-[13px] text-chalk-dim"
+        >
+          {thread.pinned && <PinMark />}
+          <span className="truncate">{thread.title}</span>
+          {thread.archived && <span className="shrink-0 rounded-full border border-slate-line px-1.5 text-[11px] text-chalk-faint">Archived</span>}
+        </button>
+      )}
+      <ThreadMenu thread={thread} onRename={() => setRenaming(true)} />
+    </div>
+  );
+}
+
+/** One agent's threads: pinned, then newest; archived ones folded away; and a way to start another. */
 function ThreadList({ agentId }: { agentId: string }) {
   const tasks = useCafe((s) => s.tasks);
   const projects = useCafe((s) => s.projects);
   const selectAgent = useCafe((s) => s.selectAgent);
   const startThread = useCafe((s) => s.startThread);
   const now = useNow(1000);
-  const threads = agentThreads({ tasks }, agentId);
+  const all = agentThreads({ tasks }, agentId);
+  const threads = all.filter((th) => !th.archived);
+  const archived = all.filter((th) => th.archived);
+  const [showArchived, setShowArchived] = useState(false);
+  const row = (th: ThreadSummary) => {
+    const project = th.projectId ? projects[th.projectId]?.name : null;
+    return (
+      <ThreadRowActions key={th.id} thread={th}>
+        <button
+          type="button"
+          onClick={() => selectAgent(agentId, th.last.id)}
+          className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2.5 rounded-lg px-2 py-2 text-left hover:bg-slate"
+        >
+          <span className="min-w-0">
+            <span className="flex min-w-0 items-center gap-1.5">
+              {th.pinned && <PinMark />}
+              <span className="truncate text-[13px] text-chalk" title={th.title}>{th.title}</span>
+            </span>
+            <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[12px] text-chalk-faint">
+              <span className="truncate">
+                {[th.from && `from ${th.from}`, project, `${th.messages} ${th.messages === 1 ? 'message' : 'messages'}`].filter(Boolean).join(' · ')}
+              </span>
+              <span aria-hidden>·</span>
+              <ThreadStatus task={th.last} now={now} />
+            </span>
+          </span>
+          <span className="pt-px text-[12px] text-chalk-faint group-focus-within:invisible group-hover:invisible">{ago(th.at, now)}</span>
+        </button>
+      </ThreadRowActions>
+    );
+  };
   return (
     <section aria-labelledby="t-list" className="flex flex-col gap-2 px-4 py-4">
       <SectionHeading
@@ -103,32 +159,28 @@ function ThreadList({ agentId }: { agentId: string }) {
       >
         THREADS
       </SectionHeading>
-      {threads.length === 0 && <p className="px-2 py-1 text-[13px] text-chalk-faint">No threads yet. Send a message below to start one.</p>}
-      <div className="flex flex-col gap-0.5">
-        {threads.map((th) => {
-          const project = th.projectId ? projects[th.projectId]?.name : null;
-          return (
-            <button
-              key={th.id}
-              type="button"
-              onClick={() => selectAgent(agentId, th.last.id)}
-              className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2.5 rounded-lg px-2 py-2 text-left hover:bg-slate"
-            >
-              <span className="min-w-0">
-                <span className="block truncate text-[13px] text-chalk" title={th.title}>{th.title}</span>
-                <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[12px] text-chalk-faint">
-                  <span className="truncate">
-                    {[th.from && `from ${th.from}`, project, `${th.messages} ${th.messages === 1 ? 'message' : 'messages'}`].filter(Boolean).join(' · ')}
-                  </span>
-                  <span aria-hidden>·</span>
-                  <ThreadStatus task={th.last} now={now} />
-                </span>
-              </span>
-              <span className="pt-px text-[12px] text-chalk-faint">{ago(th.at, now)}</span>
-            </button>
-          );
-        })}
-      </div>
+      {threads.length === 0 && (
+        <p className="px-2 py-1 text-[13px] text-chalk-faint">
+          {archived.length ? 'No open threads.' : 'No threads yet.'} Send a message below to start one.
+        </p>
+      )}
+      <div className="flex flex-col gap-0.5">{threads.map(row)}</div>
+      {archived.length > 0 && (
+        <>
+          <button
+            type="button"
+            aria-expanded={showArchived}
+            onClick={() => setShowArchived((v) => !v)}
+            className="flex h-7 items-center gap-1.5 self-start rounded-full px-2 text-[12px] text-chalk-faint hover:bg-slate hover:text-chalk"
+          >
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden className={showArchived ? '' : '-rotate-90'}>
+              <path d="M2.5 4l2.5 2.5L7.5 4" />
+            </svg>
+            Archived ({archived.length})
+          </button>
+          {showArchived && <div className="flex flex-col gap-0.5 opacity-80">{archived.map(row)}</div>}
+        </>
+      )}
     </section>
   );
 }
@@ -368,29 +420,34 @@ function ThreadRow({ thread, now }: { thread: ThreadSummary; now: number }) {
   const working = !isTerminal(thread.last.status);
   return (
     <div className="flex flex-col">
-      <button
-        type="button"
-        onClick={() => selectAgent(thread.agentId, thread.last.id)}
-        className="grid grid-cols-[28px_minmax(0,1fr)_auto] items-start gap-x-2.5 rounded-lg px-2 py-2 text-left hover:bg-slate"
-      >
-        {agent ? <Avatar seed={agent.spriteSeed} providerId={agent.providerId} scale={2} /> : <span />}
-        <span className="min-w-0">
-          <span className="block truncate text-[13px] text-chalk" title={thread.title}>{thread.title}</span>
-          <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[12px] text-chalk-faint">
-            <span className={working ? 'shrink-0' : 'truncate'}>
-              <b className="font-semibold text-chalk-dim">{agent?.name ?? 'Someone'}</b>
-              {!working && (
-                <>
-                  {thread.from && <> · from {thread.from}</>} · {thread.messages} {thread.messages === 1 ? 'message' : 'messages'}
-                </>
-              )}
+      <ThreadRowActions thread={thread}>
+        <button
+          type="button"
+          onClick={() => selectAgent(thread.agentId, thread.last.id)}
+          className="grid w-full grid-cols-[28px_minmax(0,1fr)_auto] items-start gap-x-2.5 rounded-lg px-2 py-2 text-left hover:bg-slate"
+        >
+          {agent ? <Avatar seed={agent.spriteSeed} providerId={agent.providerId} scale={2} /> : <span />}
+          <span className="min-w-0">
+            <span className="flex min-w-0 items-center gap-1.5">
+              {thread.pinned && <PinMark />}
+              <span className="truncate text-[13px] text-chalk" title={thread.title}>{thread.title}</span>
             </span>
-            <span aria-hidden>·</span>
-            <ThreadStatus task={thread.last} now={now} />
+            <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[12px] text-chalk-faint">
+              <span className={working ? 'shrink-0' : 'truncate'}>
+                <b className="font-semibold text-chalk-dim">{agent?.name ?? 'Someone'}</b>
+                {!working && (
+                  <>
+                    {thread.from && <> · from {thread.from}</>} · {thread.messages} {thread.messages === 1 ? 'message' : 'messages'}
+                  </>
+                )}
+              </span>
+              <span aria-hidden>·</span>
+              <ThreadStatus task={thread.last} now={now} />
+            </span>
           </span>
-        </span>
-        <span className="pt-px text-[12px] text-chalk-faint">{working ? 'now' : ago(thread.at, now)}</span>
-      </button>
+          <span className="pt-px text-[12px] text-chalk-faint group-focus-within:invisible group-hover:invisible">{working ? 'now' : ago(thread.at, now)}</span>
+        </button>
+      </ThreadRowActions>
       {thread.children.map((c) => {
         const who = agents[c.agentId];
         return (

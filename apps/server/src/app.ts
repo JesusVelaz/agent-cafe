@@ -10,6 +10,7 @@ import { projectRoutes } from './routes/projects.js';
 import { providerRoutes } from './routes/providers.js';
 import { streamRoutes } from './routes/stream.js';
 import { taskRoutes } from './routes/tasks.js';
+import { threadRoutes } from './routes/threads.js';
 import type { Services } from './services.js';
 
 
@@ -45,6 +46,7 @@ export async function buildApp(services?: Services): Promise<FastifyInstance> {
   if (services) {
     await app.register(agentRoutes(services));
     await app.register(taskRoutes(services));
+    await app.register(threadRoutes(services));
     await app.register(providerRoutes(services));
     await app.register(projectRoutes(services));
     await app.register(folderRoutes());

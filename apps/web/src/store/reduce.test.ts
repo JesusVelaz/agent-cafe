@@ -27,6 +27,16 @@ describe('reduce', () => {
     expect(queuedFor(s, 'a1')).toHaveLength(1);
   });
 
+  it('drops removed tasks and everything kept about them', () => {
+    let s = reduce(emptyData(), { type: 'task.upserted', task: task() });
+    s = reduce(s, { type: 'task.upserted', task: task({ id: 'keep' }) });
+    s = reduce(s, ev({ kind: 'model.start', step: 1, maxOutputTokens: 100 }), 5000);
+    s = reduce(s, ev({ kind: 'model.delta', step: 1, text: 'Hel' }, -1), 6000);
+    s = reduce(s, { type: 'task.removed', taskIds: ['t1'] });
+    expect(Object.keys(s.tasks)).toEqual(['keep']);
+    expect([s.events.t1, s.lastEvent.t1, s.lastActivityAt.t1, s.streamText.t1]).toEqual([undefined, undefined, undefined, undefined]);
+  });
+
   it('merges task upserts', () => {
     let s = reduce(emptyData(), { type: 'task.upserted', task: task() });
     s = reduce(s, { type: 'task.upserted', task: task({ status: 'running' }) });
@@ -205,6 +215,20 @@ describe('agentThreads / threadOf', () => {
     );
     expect(agentThreads(s, 'ben').map((t) => [t.id, t.taskIds, t.last.id])).toEqual([['a', ['a', 'a2'], 'a2']]);
   });
+
+  it('names a thread by its custom title and lists pinned threads first', () => {
+    const s = tasks(
+      task({ id: 'pin', agentId: 'ben', prompt: 'Pinned work', status: 'completed', threadTitle: 'Login fix', threadPinnedAt: at(9), createdAt: at(1), finishedAt: at(2) }),
+      task({ id: 'pin2', agentId: 'ben', prompt: 'more', status: 'completed', continueOf: 'pin', createdAt: at(3), finishedAt: at(4) }),
+      task({ id: 'new', agentId: 'ben', prompt: 'Newer work', status: 'completed', createdAt: at(5), finishedAt: at(6) }),
+      task({ id: 'gone', agentId: 'ben', prompt: 'Archived work', status: 'completed', threadArchivedAt: at(9), createdAt: at(7), finishedAt: at(8) }),
+    );
+    expect(agentThreads(s, 'ben').map((t) => [t.id, t.title, t.pinned, t.archived])).toEqual([
+      ['pin', 'Login fix', true, false],
+      ['gone', 'Archived work', false, true],
+      ['new', 'Newer work', false, false],
+    ]);
+  });
 });
 
 describe('projectGroups', () => {
@@ -253,6 +277,17 @@ describe('projectGroups', () => {
     expect(cafe!.threads.map((th) => th.id)).toEqual(['ask', 'recent']);
     expect(shop!.projectId).toBe('shop');
     expect(threadOf(s, 'ask')!.at).toBe(at(4));
+  });
+
+  it('puts pinned threads first and leaves archived ones off the board', () => {
+    const s = tasks(
+      done('pinned', 'cafe', 1, { threadPinnedAt: at(30) }),
+      task({ id: 'busy', agentId: 'ben', prompt: 'busy', projectId: 'cafe', status: 'running', createdAt: at(2) }),
+      done('recent', 'cafe', 10),
+      done('archived', 'cafe', 20, { threadArchivedAt: at(30) }),
+      done('shelved', 'shop', 40, { threadArchivedAt: at(41) }),
+    );
+    expect(projectGroups(s).map((g) => [g.projectId, g.threads.map((t) => t.id)])).toEqual([['cafe', ['pinned', 'busy', 'recent']]]);
   });
 
   it('uses delegated completion time when sorting quiet projects', () => {

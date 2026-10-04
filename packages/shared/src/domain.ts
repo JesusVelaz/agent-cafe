@@ -153,6 +153,10 @@ export interface TaskDTO {
   resultForTaskId?: string | null;
   /** Set while the harness waits for the user to allow or deny an action. */
   pendingApproval: ApprovalDTO | null;
+  /** Thread settings, set on a thread's first task only. Optional for older snapshots. */
+  threadTitle?: string | null;
+  threadPinnedAt?: string | null;
+  threadArchivedAt?: string | null;
   createdAt: string;
   startedAt: string | null;
   finishedAt: string | null;
