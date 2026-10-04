@@ -21,10 +21,6 @@ export function CommandMenu({
 }) {
   return (
     <div className="absolute bottom-full left-3 right-3 mb-2 overflow-hidden rounded-xl border border-slate-line bg-night-2 shadow-[0_18px_44px_rgba(0,0,0,.45)]">
-      <div className="flex items-center justify-between border-b border-slate-line px-3 py-2 font-label text-[10px] uppercase tracking-[.08em] text-chalk-dim">
-        <span>{HARNESS[provider].name} commands</span>
-        <span aria-hidden className="hidden sm:inline">↑↓ navigate · Enter choose · Esc close</span>
-      </div>
       <div id={id} role="listbox" aria-label={`${HARNESS[provider].name} commands`} className="scroll-chalk flex max-h-72 flex-col overflow-y-auto p-1.5">
         {commands.map((command, index) => (
           <button
