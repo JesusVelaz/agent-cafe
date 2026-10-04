@@ -20,7 +20,13 @@ function fakeQuery(script: Array<Msg | { ask: [string, Record<string, unknown>] 
         } else yield step;
       }
     }
-    return Object.assign(gen(), { close: () => {} });
+    return Object.assign(gen(), {
+      close: () => {},
+      supportedCommands: async () => [
+        { name: 'review', description: 'Review changes', argumentHint: '[focus]', builtin: true },
+        { name: 'frontend-design', description: 'Design a frontend', argumentHint: '' },
+      ],
+    });
   }) as unknown as typeof query;
   return { q, calls };
 }
@@ -39,7 +45,7 @@ async function run(script: Parameters<typeof fakeQuery>[0], decision: 'allow' | 
   const outcome = await runClaudeTask({
     ...extra,
     onSession: (id) => sessions.push(id),
-    task: { prompt: 'fix the bug', model: 'sonnet' },
+    task: extra.task ?? { prompt: 'fix the bug', model: 'sonnet' },
     agent: { systemPrompt: 'Be tidy.', workDir: '/work', permission: 'ask' },
     executable: '/bin/claude',
     signal: new AbortController().signal,
@@ -52,6 +58,18 @@ async function run(script: Parameters<typeof fakeQuery>[0], decision: 'allow' | 
 }
 
 describe('runClaudeTask', () => {
+  it('implements /skills from Claude Code discovery without spending a model turn', async () => {
+    const { outcome, events, sessions, options } = await run([], 'allow', { task: { prompt: '/skills', model: 'sonnet' } });
+    expect(outcome).toMatchObject({
+      status: 'completed',
+      output: expect.stringMatching(/\/review.*Review changes[\s\S]*\/frontend-design.*Design a frontend/),
+      totals: { steps: 0, inputTokens: 0, outputTokens: 0 },
+    });
+    expect(events).toEqual([]);
+    expect(sessions).toEqual([]);
+    expect(options).toMatchObject({ cwd: '/work', persistSession: false });
+  });
+
   it('adds only the Café tools to allowedTools and leaves file/command approvals in place', async () => {
     const { options, asks } = await run([{ ask: ['Bash', { command: 'npm test' }] }, { type: 'result', subtype: 'success', is_error: false, result: 'ok' }], 'deny', {
       collaboration: { call: async () => [] },

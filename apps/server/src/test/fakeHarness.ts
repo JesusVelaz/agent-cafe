@@ -19,6 +19,9 @@ export function fakeProbe(state: HarnessState = 'ready'): HarnessProbe {
       { value: 'default', label: 'Default', description: 'Recommended', resolved: 'claude-sonnet-5-20260101' },
       { value: 'sonnet', label: 'Sonnet', description: 'Balanced', resolved: 'claude-sonnet-5' },
     ],
+    commands: async () => [
+      { name: 'review', invocation: '/review', description: 'Review the current changes', argumentHint: '[focus]', kind: 'command' },
+    ],
   };
 }
 

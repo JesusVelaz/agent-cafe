@@ -106,6 +106,9 @@ describe('Orchestrator', () => {
     expect(routed.providerId).toBe('openai');
     const byModel = await orch.enqueue({ prompt: 'astra', target: { providerId: 'openai', model: 'gpt-6-astra' } });
     expect(byModel.agentId).toBe((await agent('Biscotti')).id);
+    const byDefault = await orch.enqueue({ prompt: 'default', target: { providerId: 'openai', model: 'default' }, model: 'default' });
+    expect(byDefault.providerId).toBe('openai');
+    expect(byDefault.model).toBe('default');
     await expect(orch.enqueue({ prompt: 'x', target: { providerId: 'openai', model: 'nope' } })).rejects.toThrow(/No openai agent/);
     gated.release();
     await orch.idle();
