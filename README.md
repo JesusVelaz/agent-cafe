@@ -49,6 +49,11 @@ thread's project; each agent remembers the model, permission and project it used
 
 Live runs count against your plan's normal usage limits; the top bar shows the current window.
 
+Type `/` at the start of the message box to open the selected agent harness's command menu.
+The list is scoped to the chosen project, so project-local skills appear alongside global ones.
+`/skills` prints the current catalog without spending a model turn. Claude Code commands keep
+their `/name` syntax; Codex skills are inserted with Codex's native `$name` syntax.
+
 ### Agents working together
 
 Live Claude and Codex agents can discover teammates, send messages, delegate tasks, and read

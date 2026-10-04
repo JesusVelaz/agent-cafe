@@ -20,6 +20,21 @@ const until = async (ok: () => boolean, ms = 2000) => {
 afterEach(() => vi.restoreAllMocks());
 
 describe('HarnessService', () => {
+  it('discovers commands per project and prepends the local skills catalog command', async () => {
+    const read = vi.fn(async (_exe: string, cwd: string) => [{
+      name: cwd.endsWith('one') ? 'one-only' : 'two-only',
+      invocation: cwd.endsWith('one') ? '/one-only' : '/two-only',
+      description: '',
+      argumentHint: '',
+      kind: 'command' as const,
+    }]);
+    const h = new HarnessService({ anthropic: { ...fakeProbe('ready'), commands: read } });
+    expect((await h.commands('anthropic', '/work/one')).map((command) => command.invocation)).toEqual(['/skills', '/one-only']);
+    expect((await h.commands('anthropic', '/work/two')).map((command) => command.invocation)).toEqual(['/skills', '/two-only']);
+    await h.commands('anthropic', '/work/one');
+    expect(read).toHaveBeenCalledTimes(2);
+  });
+
   it('expires model lists and invalidates them after a check even if the account stays ready', async () => {
     let list = [{ value: 'first', label: 'First', description: '' }];
     const read = vi.fn(async () => list);

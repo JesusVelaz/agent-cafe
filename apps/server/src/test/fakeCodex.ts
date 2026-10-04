@@ -42,6 +42,7 @@ export class FakeCodexServer {
       ],
       nextCursor: null,
     }));
+    this.on('skills/list', (params) => ({ data: (params.cwds ?? []).map((cwd: string) => ({ cwd, skills: [], errors: [] })) }));
     this.on('windowsSandbox/readiness', () => ({ status: opts.sandbox ?? 'ready' }));
     const thread = (p: Record<string, unknown>, id: string) => ({
       thread: { id },

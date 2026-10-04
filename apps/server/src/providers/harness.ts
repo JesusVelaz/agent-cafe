@@ -9,13 +9,14 @@ import { promisify } from 'node:util';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import {
   HARNESS,
+  type HarnessCommandDTO,
   type HarnessConnectionDTO,
   type HarnessModelDTO,
   type PlanUsageDTO,
   type ProviderId,
 } from '@agent-cafe/shared';
-import { claudePlanUsage, claudeSessionOptions } from './claude.js';
-import { CODEX_MIN_VERSION, codexModels, codexPlanUsage, tooOldMessage, versionAtLeast } from './codex.js';
+import { claudeCommands, claudePlanUsage, claudeSessionOptions } from './claude.js';
+import { CODEX_MIN_VERSION, codexCommands, codexModels, codexPlanUsage, tooOldMessage, versionAtLeast } from './codex.js';
 import { harnessEnv } from './live.js';
 
 const run = promisify(execFile);
@@ -24,6 +25,8 @@ export interface HarnessProbe {
   /** Connection state plus the resolved executable path when installed. */
   check(): Promise<HarnessConnectionDTO & { executable: string | null }>;
   models(executable: string): Promise<HarnessModelDTO[]>;
+  /** Project-scoped commands and skills advertised by the harness. */
+  commands?(executable: string, cwd: string): Promise<HarnessCommandDTO[]>;
   /** The plan's usage window, when the harness can report it outside a run. */
   usage?(executable: string): Promise<PlanUsageDTO | null>;
   /** CLI arguments that sign in (interactive, run in a terminal) and sign out. */
@@ -146,6 +149,7 @@ export const claudeCodeProbe: HarnessProbe = {
 
   /** The plan's 5-hour window, from the data behind /usage (see claude.ts). */
   usage: (executable) => claudePlanUsage(executable),
+  commands: (executable, cwd) => claudeCommands(executable, cwd),
 };
 
 /** Codex, signed in with ChatGPT (`codex login`). Tasks run on its app-server (see codex.ts). */
@@ -175,6 +179,7 @@ export const codexProbe: HarnessProbe = {
   },
   models: (executable) => codexModels(executable),
   usage: (executable) => codexPlanUsage(executable),
+  commands: (executable, cwd) => codexCommands(executable, cwd),
 };
 
 export class HarnessService {
@@ -184,6 +189,8 @@ export class HarnessService {
   private readonly modelCache = new Map<ProviderId, { models: HarnessModelDTO[]; expiresAt: number }>();
   private readonly modelInflight = new Map<ProviderId, Promise<HarnessModelDTO[]>>();
   private readonly modelGeneration = new Map<ProviderId, number>();
+  private readonly commandCache = new Map<string, { commands: HarnessCommandDTO[]; expiresAt: number }>();
+  private readonly commandInflight = new Map<string, Promise<HarnessCommandDTO[]>>();
   private readonly inflight = new Map<ProviderId, Promise<HarnessConnectionDTO>>();
   private readonly watchers = new Map<ProviderId, ReturnType<typeof setInterval>>();
   private readonly listeners = new Set<(id: ProviderId) => void>();
@@ -277,6 +284,8 @@ export class HarnessService {
         // A check can reflect a changed account, plan, CLI, or model entitlement.
         this.modelCache.delete(id);
         this.modelInflight.delete(id);
+        for (const key of this.commandCache.keys()) if (key.startsWith(`${id}\0`)) this.commandCache.delete(key);
+        for (const key of this.commandInflight.keys()) if (key.startsWith(`${id}\0`)) this.commandInflight.delete(key);
         this.modelGeneration.set(id, (this.modelGeneration.get(id) ?? 0) + 1);
         const changed = !before || before.state !== s.state || before.account !== s.account || before.plan !== s.plan;
         if (changed) for (const fn of this.listeners) fn(id);
@@ -311,6 +320,38 @@ export class HarnessService {
       if (this.modelInflight.get(id) === request) this.modelInflight.delete(id);
     });
     this.modelInflight.set(id, request);
+    return request;
+  }
+
+  async commands(id: ProviderId, cwd: string, refresh = false): Promise<HarnessCommandDTO[]> {
+    const c = refresh ? await this.check(id) : await this.ensure(id);
+    const exe = this.executable(id);
+    if (c.state !== 'ready' || !exe || !this.probes[id].commands) return [];
+    const key = `${id}\0${cwd}`;
+    const cached = this.commandCache.get(key);
+    if (!refresh && cached && cached.expiresAt > Date.now()) return cached.commands;
+    const pending = this.commandInflight.get(key);
+    if (pending) return pending;
+    const generation = this.modelGeneration.get(id) ?? 0;
+    const request = this.probes[id].commands!(exe, cwd).then((commands) => {
+      if ((this.modelGeneration.get(id) ?? 0) !== generation) throw new Error('Connection changed while loading commands. Refresh to try again.');
+      const catalog: HarnessCommandDTO = {
+        name: 'skills',
+        invocation: '/skills',
+        description: `List the skills and commands ${HARNESS[id].name} can use in this project`,
+        argumentHint: '',
+        kind: 'catalog',
+      };
+      const unique = [...new Map([catalog, ...commands].filter((command) => command.name.trim()).map((command) => [command.invocation.toLowerCase(), command])).values()];
+      this.commandCache.set(key, { commands: unique, expiresAt: Date.now() + 60_000 });
+      return unique;
+    }).catch((err) => {
+      if ((this.modelGeneration.get(id) ?? 0) === generation) this.commandCache.delete(key);
+      throw err;
+    }).finally(() => {
+      if (this.commandInflight.get(key) === request) this.commandInflight.delete(key);
+    });
+    this.commandInflight.set(key, request);
     return request;
   }
 

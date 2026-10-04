@@ -111,6 +111,35 @@ describe('runCodexTask', () => {
     expect(srv.killed).toBe(false); // closed by ending stdin
   });
 
+  it('lists project skills locally without spending a model turn', async () => {
+    const srv = new FakeCodexServer().on('skills/list', ({ cwds }) => ({
+      data: [{ cwd: cwds[0], skills: [{ name: 'imagegen', description: 'Generate images', path: 'C:\\skills\\imagegen\\SKILL.md', scope: 'user', enabled: true, pluginId: null }], errors: [] }],
+    }));
+    const { outcome, sessions } = await run(srv, { ctx: { task: { prompt: '/skills', model: 'gpt-6-astra' } } });
+    expect(outcome).toMatchObject({ status: 'completed', output: expect.stringMatching(/\$imagegen.*Generate images/) });
+    expect(srv.requests('skills/list')[0]?.params).toEqual({ cwds: [WORK] });
+    expect(srv.requests('thread/start')).toEqual([]);
+    expect(srv.requests('turn/start')).toEqual([]);
+    expect(sessions).toEqual([]);
+  });
+
+  it('turns a slash-selected Codex skill into native text and a skill input item', async () => {
+    const srv = new FakeCodexServer().on('skills/list', ({ cwds }) => ({
+      data: [{ cwd: cwds[0], skills: [{ name: 'imagegen', description: 'Generate images', path: 'C:\\skills\\imagegen\\SKILL.md', scope: 'user', enabled: true, pluginId: null }], errors: [] }],
+    }));
+    await run(srv, {
+      ctx: { task: { prompt: '/imagegen a quiet café', model: 'gpt-6-astra' } },
+      turn: (server) => server.completeTurn('completed'),
+    });
+    expect(srv.requests('turn/start')[0]?.params).toEqual({
+      threadId: 'thr_new',
+      input: [
+        { type: 'text', text: '$imagegen a quiet café', text_elements: [] },
+        { type: 'skill', name: 'imagegen', path: 'C:\\skills\\imagegen\\SKILL.md' },
+      ],
+    });
+  });
+
   it('translates streaming text, tools and token usage into café events', async () => {
     const srv = new FakeCodexServer();
     const { outcome, events } = await run(srv, {
