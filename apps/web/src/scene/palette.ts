@@ -37,12 +37,24 @@ export const K = {
   rug: '#b0563f',
   rugL: '#d98a5f',
   rugD: '#7e3a2b',
+  rugBorder: '#e6c99a',
   slab: '#5a3a2a',
   slabTop: '#6b4632',
   screen: '#9fe3dc',
   white: '#fffaf0',
   coral: '#e76f51',
   amber: '#f2c14e',
+  // Furniture materials.
+  ceramic: '#efe6d6',
+  ceramicD: '#9b8f7f',
+  marble: '#f0e9de',
+  vein: '#cbc2b4',
+  velvet: '#3f6b5a',
+  mustard: '#d39a3a',
+  slat: '#a9b98f',
+  slatD: '#86966f',
+  chrome: '#d7dde2',
+  chromeD: '#8d969e',
 } as const;
 
 export type RGB = [number, number, number];

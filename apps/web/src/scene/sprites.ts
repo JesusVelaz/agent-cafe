@@ -187,10 +187,31 @@ export const CAT_FURS: ReadonlyArray<Record<string, string>> = [
   { o: K.ink, k: '#e3924a', d: '#bf6d2e', w: '#f7e6c8', y: '#6aa35a', n: '#d9706a' },
   { o: K.ink, k: '#9aa0aa', d: '#767c87', w: '#e8eaee', y: '#f2c14e', n: '#d98a8a' },
 ];
-export const PLANT_BIG: Grid = ['....L.l....', '..lLl.lLl..', '.lLllLllLl.', 'lLl.lLl.lLl', '.lLlllLllL.', 'lLllL.lLlLl', '.llLlLllLl.', '..lLlllLl..', '...lLlLl...', '....lLl....', '.....L.....'];
 export const PLANT_SMALL: Grid = ['.l.L.', 'lLlLl', '.lLl.', '..L..'];
 export const PLANT_HANG: Grid = ['.lLlLl.', 'lLlLlLl', 'l.L.l.L', 'L.l...l', 'l.....L', 'L......', 'l......'];
 export const PLANT_PAL = { l: K.leaf, L: K.leafD };
+/** Fiddle-leaf fig (13×15): g highlight · l leaf · L dark leaf · t stem. */
+export const FIG: Grid = [
+  '.....gLg.....',
+  '...glLLlg....',
+  '..gLLlLLLl...',
+  '..lLl.lLLg.g.',
+  '.g.gLlLl.glLg',
+  'glLlLL.LllLLl',
+  '.lLLlg.lLLLl.',
+  '..lLl..glLl..',
+  '.gLlLg..t....',
+  'glLLLl..t.gLg',
+  '.lLLl..ttlLLl',
+  '..gl...t.lLl.',
+  '.......t.....',
+  '......tt.....',
+  '......t......',
+];
+export const FIG_PAL = { g: '#9fd07a', l: K.leaf, L: '#3f7a3a', t: '#6b4a33' };
+/** Trailing pothos (7×7) for hanging pots and shelf tops. */
+export const POTHOS: Grid = ['.gLlLg.', 'gLlLlLg', 'L.lLl.L', 'l..L..l', 'L..l..g', 'g..L...', '...g...'];
+export const POTHOS_PAL = { g: '#9fd07a', l: K.leaf, L: '#3f7a3a' };
 export const CLOCK: Grid = ['..kkkkk..', '.kwwwwwk.', 'kwwwkwwwk', 'kwwwkwwwk', 'kwwwkkwwk', 'kwwwwwwwk', '.kwwwwwk.', '..kkkkk..'];
 export const CLOCK_PAL = { k: K.ink, w: '#fbf6e8' };
 /** Tree canopy (15×13): L dark leaf · l leaf · g highlight. */

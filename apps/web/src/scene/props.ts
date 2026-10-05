@@ -10,7 +10,7 @@ import { box, disc, plane, planePt, quad, type Plane, type Proj } from './iso';
 import { hash, K, mix, shade } from './palette';
 import type { Raster } from './raster';
 import { drawOutdoor } from './outdoor';
-import { CLOCK, CLOCK_PAL, PLANT_BIG, PLANT_HANG, PLANT_PAL, PLANT_SMALL } from './sprites';
+import { CLOCK, CLOCK_PAL, FIG, FIG_PAL, PLANT_HANG, PLANT_PAL, PLANT_SMALL, POTHOS, POTHOS_PAL } from './sprites';
 
 export interface DrawCtx {
   R: Raster;
@@ -24,28 +24,99 @@ const warm = (x: number, y: number, r: number, s: number): Light => ({ x, y, r, 
 
 // ── small pieces ────────────────────────────────────────────────────────────
 
+/** Dark frame wood for chairs; cast iron for table feet and stools. */
+const FRAME = '#4a2f22';
+const IRON = '#2f3a3f';
+
 function plantPot(c: DrawCtx, x: number, y: number, z: number, big: boolean) {
   const { R, P } = c;
-  box(R, P, x - 0.18, y - 0.18, z, 0.36, 0.36, big ? 9 : 6, K.pot, { line: K.potD });
-  const at = P(x, y, z + (big ? 9 : 6));
-  const g = big ? PLANT_BIG : PLANT_SMALL;
-  R.grid(g, PLANT_PAL, at[0] - Math.floor(g[0]!.length / 2), at[1] - g.length + 1);
+  if (!big) {
+    box(R, P, x - 0.13, y - 0.13, z, 0.26, 0.26, 5, K.ceramic, { line: K.ceramicD });
+    const at = P(x, y, z + 5);
+    R.grid(PLANT_SMALL, PLANT_PAL, at[0] - 2, at[1] - PLANT_SMALL.length + 1);
+    return;
+  }
+  // Fiddle-leaf fig in a white ceramic pot with a terracotta band.
+  box(R, P, x - 0.2, y - 0.2, z, 0.4, 0.4, 9, K.ceramic, { line: K.ceramicD });
+  box(R, P, x - 0.21, y - 0.21, z + 6, 0.42, 0.42, 2, K.pot);
+  quad(R, P, x - 0.17, y - 0.17, 0.34, 0.34, z + 9, '#5a3a2a');
+  const at = P(x, y, z + 9);
+  R.grid(FIG, FIG_PAL, at[0] - Math.floor(FIG[0]!.length / 2), at[1] - FIG.length + 1);
 }
 
+/** Cup on a saucer, with optional steam. */
+function cup(c: DrawCtx, x: number, y: number, z: number, steam: boolean, seed = 0) {
+  const { R, P, t } = c;
+  disc(R, P, x, y, 0.13, z, '#e4dccd');
+  disc(R, P, x, y, 0.12, z + 0.6, K.white);
+  box(R, P, x - 0.06, y - 0.06, z + 1, 0.12, 0.12, 3, K.white, { line: '#a69c8c' });
+  const q = P(x, y, z + 4);
+  R.px(q[0], q[1], '#6b3f22');
+  if (!steam) return;
+  const f = Math.floor(t * 3 + seed) % 3;
+  R.px(q[0] + (f === 0 ? 0 : 1), q[1] - 2, '#ffffff', 0.7);
+  R.px(q[0] + (f === 1 ? 1 : 0), q[1] - 4, '#ffffff', 0.45);
+  R.px(q[0] + (f === 2 ? 0 : -1), q[1] - 6, '#ffffff', 0.25);
+}
+
+function mug(c: DrawCtx, x: number, y: number, z: number, col: string = K.white) {
+  box(c.R, c.P, x - 0.06, y - 0.06, z, 0.12, 0.12, 3, col, { line: '#a69c8c' });
+}
+
+function vase(c: DrawCtx, x: number, y: number, z: number) {
+  const { R, P } = c;
+  box(R, P, x - 0.04, y - 0.04, z, 0.08, 0.08, 4, K.glass, { a: 0.85 });
+  const q = P(x, y, z + 4);
+  R.px(q[0], q[1] - 1, K.leafD); R.px(q[0], q[1] - 2, K.leafD);
+  R.px(q[0] - 1, q[1] - 3, '#e0475a'); R.px(q[0], q[1] - 3, '#f07a8a'); R.px(q[0] + 1, q[1] - 2, K.amber);
+}
+
+function cupStack(c: DrawCtx, x: number, y: number, z: number, n: number) {
+  for (let i = 0; i < n; i++) box(c.R, c.P, x, y, z + i * 2, 0.15, 0.15, 2, i % 2 ? '#efe6d6' : K.white, { line: '#a69c8c' });
+}
+
+/** Bentwood café chair: four legs, a cushioned seat, and a curved back behind the sitter. */
 function chairSeat(c: DrawCtx, x: number, y: number, z: number, face: string) {
   const { R, P } = c;
-  box(R, P, x - 0.2, y - 0.2, z + 6, 0.4, 0.4, 2, K.woodL, { line: true });
-  box(R, P, x - 0.17, y + 0.14, z, 0.05, 0.05, 6, K.woodD);
-  box(R, P, x + 0.13, y + 0.14, z, 0.05, 0.05, 6, K.woodD);
-  if (face === 'x+') box(R, P, x - 0.22, y - 0.2, z + 8, 0.06, 0.4, 9, K.woodD, { line: true });
-  if (face === 'y+') box(R, P, x - 0.2, y - 0.22, z + 8, 0.4, 0.06, 9, K.woodD, { line: true });
+  for (const [lx, ly] of [[-0.15, -0.15], [0.11, -0.15], [-0.15, 0.11], [0.11, 0.11]] as const) box(R, P, x + lx, y + ly, z, 0.04, 0.04, 7, FRAME);
+  disc(R, P, x, y, 0.2, z + 7, FRAME);
+  disc(R, P, x, y, 0.19, z + 8, K.rug);
+  disc(R, P, x - 0.03, y - 0.03, 0.1, z + 8.5, shade(K.rug, 0.15));
+  if (face === 'x+' || face === 'y+') chairBack(c, x, y, z, face);
+}
+
+function chairBack(c: DrawCtx, x: number, y: number, z: number, face: string) {
+  const { R, P } = c;
+  const rail = '#7a4a32';
+  const alongY = face === 'x+' || face === 'x-';
+  const off = face === 'x+' || face === 'y+' ? -0.19 : 0.15;
+  if (alongY) {
+    for (const s of [-0.15, 0.11]) box(R, P, x + off, y + s, z + 8, 0.04, 0.04, 11, FRAME);
+    box(R, P, x + off, y - 0.05, z + 9, 0.04, 0.04, 8, FRAME);
+    box(R, P, x + off, y - 0.15, z + 12, 0.04, 0.3, 1, rail);
+    box(R, P, x + off - 0.01, y - 0.17, z + 17, 0.06, 0.34, 3, rail, { line: FRAME });
+  } else {
+    for (const s of [-0.15, 0.11]) box(R, P, x + s, y + off, z + 8, 0.04, 0.04, 11, FRAME);
+    box(R, P, x - 0.05, y + off, z + 9, 0.04, 0.04, 8, FRAME);
+    box(R, P, x - 0.15, y + off, z + 12, 0.3, 0.04, 1, rail);
+    box(R, P, x - 0.17, y + off - 0.01, z + 17, 0.34, 0.06, 3, rail, { line: FRAME });
+  }
 }
 
 /** Backrest on the viewer's side: drawn after whoever sits in the chair. */
 export function chairBackFront(c: DrawCtx, x: number, y: number, z: number, face: string) {
+  if (face === 'x-' || face === 'y-') chairBack(c, x, y, z, face);
+}
+
+/** Desk chair: five-star base, gas lift, seat and a back behind the sitter. */
+function officeChair(c: DrawCtx, x: number, y: number, z: number) {
   const { R, P } = c;
-  if (face === 'x-') box(R, P, x + 0.16, y - 0.2, z + 8, 0.06, 0.4, 9, K.woodD, { line: true });
-  if (face === 'y-') box(R, P, x - 0.2, y + 0.16, z + 8, 0.4, 0.06, 9, K.woodD, { line: true });
+  box(R, P, x - 0.22, y - 0.03, z, 0.44, 0.06, 1, IRON);
+  box(R, P, x - 0.03, y - 0.22, z, 0.06, 0.44, 1, IRON);
+  box(R, P, x - 0.03, y - 0.03, z + 1, 0.06, 0.06, 6, K.metalD);
+  disc(R, P, x, y, 0.2, z + 7, '#20242b');
+  disc(R, P, x, y, 0.19, z + 8, '#3b4350');
+  box(R, P, x - 0.18, y - 0.24, z + 9, 0.36, 0.07, 11, '#3b4350', { line: '#20242b' });
 }
 
 function candle(c: DrawCtx, x: number, y: number, z: number) {
@@ -56,60 +127,146 @@ function candle(c: DrawCtx, x: number, y: number, z: number) {
   c.lights.push({ x: f[0], y: f[1] + 4, r: 18, col: [1, 0.75, 0.4], s: 0.9 });
 }
 
+/** Marble bistro table on a cast-iron cross foot. */
 function roundTable(c: DrawCtx, x: number, y: number, z: number, seed: number) {
-  const { R, P, t } = c;
-  box(R, P, x - 0.06, y - 0.06, z, 0.12, 0.12, 11, K.woodD);
-  disc(R, P, x, y, 0.5, z + 10, K.woodD);
-  disc(R, P, x, y, 0.5, z + 12, K.woodL);
-  box(R, P, x - 0.2, y - 0.05, z + 12, 0.14, 0.14, 3, K.white, { line: K.metalD });
-  const m = P(x - 0.13, y + 0.02, z + 16);
-  const f = Math.floor(t * 3 + seed) % 3;
-  R.px(m[0] + (f === 0 ? 0 : 1), m[1] - 1, '#ffffff', 0.6);
-  R.px(m[0] + (f === 1 ? 1 : 0), m[1] - 3, '#ffffff', 0.4);
-  box(R, P, x + 0.08, y - 0.12, z + 12, 0.2, 0.26, 1, '#f0d7a8');
-  box(R, P, x + 0.12, y - 0.06, z + 13, 0.12, 0.12, 2, '#c47a3a');
-  if (c.theme === 'night') candle(c, x + 0.15, y + 0.15, z + 12);
+  const { R, P } = c;
+  box(R, P, x - 0.3, y - 0.04, z, 0.6, 0.08, 1, IRON);
+  box(R, P, x - 0.04, y - 0.3, z, 0.08, 0.6, 1, IRON);
+  box(R, P, x - 0.045, y - 0.045, z + 1, 0.09, 0.09, 10, '#3d3a38');
+  disc(R, P, x, y, 0.46, z + 11, '#7b6f60');
+  disc(R, P, x, y, 0.46, z + 12, '#b9ad9b');
+  disc(R, P, x, y, 0.44, z + 13, K.marble);
+  const q = P(x, y, z + 13);
+  for (const [dx, dy] of [[-6, -1], [-5, 0], [-4, 0], [3, 1], [4, 1], [5, 2], [1, -2]] as const) R.px(q[0] + dx, q[1] + dy, K.vein);
+  cup(c, x - 0.14, y + 0.04, z + 13, true, seed);
+  if (hash(Math.round(seed * 10)) > 0.5) {
+    // A croissant on a plate.
+    disc(R, P, x + 0.18, y - 0.04, 0.13, z + 13, K.white);
+    box(R, P, x + 0.12, y - 0.08, z + 13, 0.12, 0.08, 2, '#c47a3a', { top: '#d99a52' });
+  }
+  vase(c, x + 0.06, y - 0.24, z + 13);
+  if (isDim(c.theme)) candle(c, x + 0.16, y + 0.2, z + 13);
 }
 
 function espresso(c: DrawCtx, x: number, y: number, z: number) {
   const { R, P } = c;
-  box(R, P, x, y, z, 0.8, 0.5, 12, K.metal, { top: '#dfe4e8', line: K.metalD });
-  box(R, P, x + 0.1, y + 0.5, z + 5, 0.6, 0.06, 3, K.ink);
-  box(R, P, x + 0.15, y + 0.35, z + 12, 0.5, 0.2, 2, '#c24a3a');
-  const l = P(x + 0.7, y + 0.5, z + 10);
+  box(R, P, x, y, z, 1.25, 0.5, 2, K.chromeD);
+  box(R, P, x + 0.02, y, z + 2, 1.21, 0.48, 11, K.chrome, { line: K.chromeD, top: '#eef1f3' });
+  plane(R, P, { y: y + 0.48 }, x + 0.05, x + 1.18, z + 9, z + 11, '#c24a3a');
+  // Two group heads with portafilters, cups waiting under them.
+  for (const gx of [0.25, 0.8]) {
+    box(R, P, x + gx, y + 0.42, z + 5, 0.18, 0.12, 3, '#5b636b', { line: K.ink });
+    const h0 = P(x + gx + 0.09, y + 0.55, z + 5), h1 = P(x + gx + 0.09, y + 0.85, z + 5);
+    R.line(h0[0], h0[1], h1[0], h1[1], K.ink);
+    box(R, P, x + gx + 0.02, y + 0.46, z + 2, 0.12, 0.12, 2, K.white);
+  }
+  const g = P(x + 0.6, y + 0.48, z + 9);
+  R.rect(g[0] - 1, g[1] - 1, 3, 3, '#fbf6ec');
+  R.px(g[0], g[1], '#c24a3a');
+  const w0 = P(x + 1.15, y + 0.5, z + 8), w1 = P(x + 1.25, y + 0.7, z + 3);
+  R.line(w0[0], w0[1], w1[0], w1[1], K.chromeD); // steam wand
+  for (let i = 0; i < 4; i++) mug(c, x + 0.22 + i * 0.25, y + 0.22, z + 13, i % 2 ? '#efe6d6' : K.white); // cup warmer
+  const l = P(x + 0.1, y + 0.48, z + 10);
   R.px(l[0], l[1], '#ff5a4a', 1, true);
 }
 
-function register(c: DrawCtx, x: number, y: number, z: number) {
+function grinder(c: DrawCtx, x: number, y: number, z: number) {
   const { R, P } = c;
-  box(R, P, x, y, z, 0.5, 0.45, 5, '#3c3f44', { line: K.ink });
-  box(R, P, x + 0.05, y + 0.05, z + 5, 0.4, 0.1, 5, '#2b2e33');
-  const s = P(x + 0.1, y + 0.15, z + 9);
-  R.rect(s[0], s[1], 4, 2, K.screen, 1, true);
+  box(R, P, x, y, z, 0.32, 0.32, 9, '#3b3f45', { line: K.ink });
+  box(R, P, x + 0.04, y + 0.04, z + 9, 0.24, 0.24, 6, '#d5f0f4', { a: 0.5 });
+  box(R, P, x + 0.06, y + 0.06, z + 9, 0.2, 0.2, 3, '#5a3520'); // beans
+  box(R, P, x + 0.04, y + 0.04, z + 15, 0.24, 0.24, 1, '#2b2e33');
 }
 
+function syrups(c: DrawCtx, x: number, y: number, z: number, n: number) {
+  const cols = ['#c24a3a', '#e0a84a', '#7a4a2a', '#8fae3a', '#e8b4b8', '#6b8cb8'];
+  for (let i = 0; i < n; i++) {
+    const col = cols[i % cols.length]!;
+    box(c.R, c.P, x + i * 0.17, y, z, 0.11, 0.11, 8, col, { top: shade(col, 0.25) });
+    box(c.R, c.P, x + i * 0.17 + 0.03, y + 0.03, z + 8, 0.05, 0.05, 2, K.ink);
+  }
+}
+
+/** Card terminal on a stand, screen toward the customer. */
+function register(c: DrawCtx, x: number, y: number, z: number) {
+  const { R, P } = c;
+  box(R, P, x, y, z, 0.18, 0.18, 4, '#3c3f44');
+  box(R, P, x - 0.06, y + 0.1, z + 4, 0.34, 0.06, 6, '#2b2e33', { line: K.ink });
+  const s = P(x - 0.02, y + 0.16, z + 9);
+  R.rect(s[0], s[1], 4, 3, K.screen, 1, true);
+}
+
+function bell(c: DrawCtx, x: number, y: number, z: number) {
+  const { R, P } = c;
+  const q = P(x, y, z);
+  R.rect(q[0] - 2, q[1], 5, 1, '#8d6a2a');
+  R.rect(q[0] - 1, q[1] - 2, 3, 2, K.brass);
+  R.px(q[0], q[1] - 3, K.bulb);
+}
+
+function tipJar(c: DrawCtx, x: number, y: number, z: number) {
+  const { R, P } = c;
+  box(R, P, x - 0.07, y - 0.07, z, 0.14, 0.14, 5, '#cfeef2', { a: 0.6 });
+  const q = P(x, y, z + 1);
+  R.px(q[0], q[1], K.amber);
+  R.px(q[0] - 1, q[1] + 1, '#8fae3a');
+}
+
+/** Pastries on two tiers behind glass. */
 function displayCase(c: DrawCtx, x: number, y: number, z: number, w: number) {
   const { R, P } = c;
-  box(R, P, x, y, z, w, 0.7, 11, '#e9dcc3', { line: true, top: '#f3e9d5' });
-  const gz = z + 11;
-  const cols = ['#d9923f', '#b8643a', '#f0c3cf', '#e8c170', '#7a4a2a'];
+  box(R, P, x, y, z, w, 0.7, 3, '#e9dcc3', { line: true, top: '#f3e9d5' });
+  const cols = ['#d9923f', '#b8643a', '#f0c3cf', '#e8c170', '#7a4a2a', '#f5e0a8'];
   for (let row = 0; row < 2; row++) {
-    for (let i = 0; i < Math.floor(w / 0.22); i++) {
-      box(R, P, x + 0.1 + i * 0.22, y + 0.15 + row * 0.3, gz + (row === 0 ? 6 : 1), 0.14, 0.14, 2, cols[(i + row * 2) % 5]!);
+    const tz = z + 3 + (row === 0 ? 5 : 0);
+    box(R, P, x + 0.05, y + 0.1 + row * 0.3, tz, w - 0.1, 0.22, 0, '#f6efe2');
+    for (let i = 0; i < Math.floor((w - 0.1) / 0.2); i++) {
+      const col = cols[(i + row * 3) % cols.length]!;
+      if ((i + row) % 3 === 2) disc(R, P, x + 0.16 + i * 0.2, y + 0.21 + row * 0.3, 0.07, tz + 1, col);
+      else box(R, P, x + 0.1 + i * 0.2, y + 0.14 + row * 0.3, tz, 0.13, 0.13, 2, col, { top: shade(col, 0.2) });
     }
   }
-  box(R, P, x, y, gz, w, 0.7, 12, '#cfeef2', { a: 0.28, top: '#e8f8fa' });
-  const e1 = P(x, y + 0.7, gz + 12), e2 = P(x + w, y + 0.7, gz + 12), e3 = P(x + w, y, gz + 12);
-  R.line(e1[0], e1[1], e2[0], e2[1], '#ffffff', 0.7);
-  R.line(e2[0], e2[1], e3[0], e3[1], '#ffffff', 0.5);
+  box(R, P, x, y, z + 3, w, 0.7, 10, '#d5f0f4', { a: 0.26, top: '#eafafc' });
+  const e1 = P(x, y + 0.7, z + 13), e2 = P(x + w, y + 0.7, z + 13), e3 = P(x + w, y, z + 13);
+  R.line(e1[0], e1[1], e2[0], e2[1], '#ffffff', 0.8);
+  R.line(e2[0], e2[1], e3[0], e3[1], '#ffffff', 0.55);
+  const g0 = P(x + 0.3, y + 0.7, z + 11), g1 = P(x + 0.6, y + 0.7, z + 5);
+  R.line(g0[0], g0[1], g1[0], g1[1], '#ffffff', 0.4); // glint
+}
+
+/** A cake on a stand under a glass dome. */
+function cakeDome(c: DrawCtx, x: number, y: number, z: number) {
+  const { R, P } = c;
+  box(R, P, x - 0.03, y - 0.03, z, 0.06, 0.06, 3, '#d8d2c6');
+  disc(R, P, x, y, 0.24, z + 3, '#e9e2d6');
+  disc(R, P, x, y, 0.16, z + 4, '#f0c3cf');
+  disc(R, P, x, y, 0.16, z + 7, '#f7d9e0');
+  const q = P(x, y, z + 7);
+  R.px(q[0], q[1] - 1, '#e0475a');
+  const a = P(x, y, z + 14), l = P(x - 0.24, y + 0.24, z + 4), r = P(x + 0.24, y - 0.24, z + 4);
+  R.poly([[l[0], l[1]], [l[0] + 1, a[1] + 4], [a[0] - 2, a[1]], [a[0] + 2, a[1]], [r[0] - 1, a[1] + 4], [r[0], l[1]]], '#e6f6f8', 0.3);
+  R.rect(a[0] - 1, a[1] - 1, 3, 1, '#c8d0d6');
+  R.line(l[0] + 2, l[1] - 3, a[0] - 2, a[1] + 2, '#ffffff', 0.6);
 }
 
 function rugRect(c: DrawCtx, x: number, y: number, w: number, d: number, z: number) {
   const { R, P } = c;
-  quad(R, P, x, y, w, d, z + 0.1, K.rugD);
-  quad(R, P, x + 0.12, y + 0.12, w - 0.24, d - 0.24, z + 0.1, K.rug);
-  quad(R, P, x + 0.35, y + 0.35, w - 0.7, d - 0.7, z + 0.1, K.rugL);
-  quad(R, P, x + 0.55, y + 0.55, w - 1.1, d - 1.1, z + 0.1, K.rug);
+  const zz = z + 0.1;
+  quad(R, P, x, y, w, d, zz, K.rugD);
+  quad(R, P, x + 0.12, y + 0.12, w - 0.24, d - 0.24, zz, K.rug);
+  quad(R, P, x + 0.32, y + 0.32, w - 0.64, d - 0.64, zz, K.rugBorder);
+  quad(R, P, x + 0.42, y + 0.42, w - 0.84, d - 0.84, zz, shade(K.rug, 0.08));
+  // Medallion.
+  const cx = x + w / 2, cy = y + d / 2;
+  const diamond = (k: number, col: string) => R.poly([P(cx, cy - d * k, zz), P(cx + w * k * 0.8, cy, zz), P(cx, cy + d * k, zz), P(cx - w * k * 0.8, cy, zz)], col);
+  diamond(0.28, K.rugBorder);
+  diamond(0.18, K.rugD);
+  diamond(0.08, K.rugL);
+  // Fringe on the near edge.
+  for (let u = x + 0.1; u < x + w - 0.05; u += 0.16) {
+    const a = P(u, y + d, zz), b = P(u, y + d + 0.1, zz);
+    R.line(a[0], a[1], b[0], b[1], K.rugBorder);
+  }
 }
 
 const BOOKS = ['#b5483f', '#4f7fae', '#e0a84a', '#5c8f5a', '#8a6fb8', '#efe0c0', '#3f5f6b', '#c77d4f'];
@@ -118,13 +275,17 @@ function shelfUnit(c: DrawCtx, p: Prop, z: number, archive: boolean) {
   const { R, P } = c;
   const h = p.opts?.h ?? 40;
   const againstLeft = p.face === 'x+';
-  box(R, P, p.x, p.y, z, p.w, p.d, h, archive ? K.wood : K.woodD, { line: true });
+  const body = archive ? K.wood : K.woodD;
+  box(R, P, p.x, p.y, z, p.w, p.d, 3, shade(body, -0.2)); // plinth
+  box(R, P, p.x, p.y, z + 3, p.w, p.d, h - 3, body, { line: true });
   const face: Plane = againstLeft ? { x: p.x + p.w } : { y: p.y + p.d };
   const a0 = againstLeft ? p.y : p.x;
   const a1 = againstLeft ? p.y + p.d : p.x + p.w;
-  const shelves = Math.floor((h - 4) / 10);
+  plane(R, P, face, a0 + 0.06, a1 - 0.06, z + 4, z + h - 2, '#4a2c1a'); // back panel
+  const shelves = Math.floor((h - 6) / 10);
   for (let s = 0; s < shelves; s++) {
-    const v0 = z + 3 + s * 10;
+    const v0 = z + 4 + s * 10;
+    plane(R, P, face, a0 + 0.04, a1 - 0.04, v0 - 1, v0, K.woodL);
     if (archive) {
       const n = Math.max(1, Math.floor((a1 - a0) / 0.34));
       for (let i = 0; i < n; i++) {
@@ -134,81 +295,114 @@ function shelfUnit(c: DrawCtx, p: Prop, z: number, archive: boolean) {
       }
       continue;
     }
-    plane(R, P, face, a0 + 0.05, a1 - 0.05, v0 - 1, v0, K.wood);
-    let u = a0 + 0.08;
+    let u = a0 + 0.1;
     let i = 0;
-    while (u < a1 - 0.12) {
+    while (u < a1 - 0.15) {
       const r = hash(Math.round(a0 * 97) + s * 31 + i * 7 + (againstLeft ? 5 : 11));
-      const w = 0.07 + r * 0.06;
-      if (r > 0.86) { u += 0.12; i++; continue; }
-      plane(R, P, face, u, Math.min(u + w, a1 - 0.08), v0, v0 + 6 + Math.round(r * 2), BOOKS[Math.floor(r * BOOKS.length)]!);
+      if (r > 0.9 && u < a1 - 0.5) {
+        // A stack lying flat.
+        for (let k = 0; k < 3; k++) plane(R, P, face, u, u + 0.32, v0 + k * 2, v0 + k * 2 + 2, BOOKS[(i + k) % BOOKS.length]!);
+        u += 0.4;
+        i++;
+        continue;
+      }
+      const w = 0.07 + r * 0.05;
+      const bh = 6 + Math.round(r * 2);
+      plane(R, P, face, u, Math.min(u + w, a1 - 0.1), v0, v0 + bh, BOOKS[Math.floor(r * BOOKS.length)]!);
+      const sp = planePt(P, face, u + w / 2, v0 + bh - 2);
+      R.px(sp[0], sp[1], K.cream, 0.5); // spine label
       u += w + 0.015;
       i++;
     }
   }
-  if (p.opts?.plantOnTop) plantPot(c, p.x + p.w / 2, p.y + p.d / 2, z + h, false);
+  box(R, P, p.x - 0.04, p.y - 0.04, z + h, p.w + 0.08, p.d + 0.08, 2, shade(body, -0.1), { line: true }); // crown
+  if (p.opts?.plantOnTop) {
+    const q = P(p.x + p.w / 2, p.y + p.d / 2, z + h + 2);
+    R.grid(POTHOS, POTHOS_PAL, q[0] - 3, q[1] - 2);
+  }
 }
 
 function desk(c: DrawCtx, p: Prop, z: number) {
   const { R, P } = c;
   const { x, y, w } = p;
-  box(R, P, x, y, z, 0.08, 0.7, 12, K.woodD);
-  box(R, P, x + w - 0.08, y, z, 0.08, 0.7, 12, K.woodD);
-  box(R, P, x, y, z + 12, w, 0.7, 2, K.woodL, { line: true });
-  // The monitor faces the agent sitting behind the desk; we see its back.
-  box(R, P, x + w / 2 - 0.35, y + 0.12, z + 14, 0.7, 0.08, 9, '#3a3f47', { line: K.ink });
-  box(R, P, x + w / 2 - 0.05, y + 0.2, z + 14, 0.1, 0.1, 2, K.metalD);
-  const glow = P(x + w / 2 - 0.35, y + 0.12, z + 23);
-  R.line(glow[0], glow[1], glow[0] + 8, glow[1] - 4, K.screen, 0.9, true);
-  box(R, P, x + 0.6, y + 0.02, z + 14, 0.55, 0.14, 1, '#2f3338'); // keyboard
-  box(R, P, x + w - 0.3, y + 0.45, z + 14, 0.12, 0.12, 3, K.white); // mug
-  box(R, P, x + 0.12, y + 0.4, z + 14, 0.3, 0.22, 1, '#f7f1e3'); // papers
+  // Drawer pedestal on the left, a steel leg on the right.
+  box(R, P, x, y, z, 0.5, 0.7, 13, K.woodD, { line: true });
+  for (const v of [4, 8]) {
+    const a = P(x + 0.05, y + 0.7, z + v), b = P(x + 0.45, y + 0.7, z + v);
+    R.line(a[0], a[1], b[0], b[1], shade(K.woodD, -0.3));
+    const hq = P(x + 0.25, y + 0.7, z + v + 2);
+    R.px(hq[0], hq[1], K.brass);
+  }
+  box(R, P, x + w - 0.08, y + 0.05, z, 0.06, 0.6, 13, IRON);
+  box(R, P, x, y, z + 13, w, 0.7, 2, '#c4935e', { line: true, top: '#d2a26a' });
+  // The monitor faces the agent behind the desk; we see its back and the glow.
+  box(R, P, x + w / 2 - 0.1, y + 0.25, z + 15, 0.2, 0.15, 1, IRON);
+  box(R, P, x + w / 2 - 0.03, y + 0.3, z + 16, 0.06, 0.06, 3, IRON);
+  box(R, P, x + w / 2 - 0.38, y + 0.25, z + 18, 0.76, 0.07, 8, '#2f3338', { line: K.ink });
+  const g = P(x + w / 2 - 0.38, y + 0.25, z + 26);
+  R.line(g[0], g[1], g[0] + 9, g[1] - 4, K.screen, 0.9, true);
+  c.lights.push({ x: g[0] + 5, y: g[1] + 4, r: 18, col: [0.6, 0.9, 1], s: 0.35 });
+  box(R, P, x + 0.55, y + 0.02, z + 15, 0.6, 0.14, 1, '#3a3f47'); // keyboard
+  box(R, P, x + 1.25, y + 0.05, z + 15, 0.08, 0.1, 1, '#3a3f47'); // mouse
+  mug(c, x + w - 0.3, y + 0.5, z + 15);
+  box(R, P, x + 0.1, y + 0.4, z + 15, 0.3, 0.22, 1, '#f7f1e3'); // papers
   if (p.opts?.lamp) {
-    box(R, P, x + 0.1, y + 0.1, z + 14, 0.08, 0.08, 8, K.brass);
-    box(R, P, x + 0.02, y + 0.02, z + 21, 0.24, 0.24, 3, K.brass, { top: shade(K.brass, 0.2) });
-    const b = P(x + 0.14, y + 0.14, z + 21);
-    R.rect(b[0] - 1, b[1], 3, 1, K.bulb, 1, true);
-    c.lights.push(warm(b[0], b[1] + 8, 26, 0.8));
+    box(R, P, x + 0.08, y + 0.08, z + 15, 0.1, 0.1, 1, IRON);
+    const b0 = P(x + 0.13, y + 0.13, z + 16), b1 = P(x + 0.13, y + 0.13, z + 24), b2 = P(x + 0.3, y + 0.2, z + 27);
+    R.line(b0[0], b0[1], b1[0], b1[1], IRON);
+    R.line(b1[0], b1[1], b2[0], b2[1], IRON);
+    R.poly([[b2[0] - 2, b2[1] - 1], [b2[0] + 3, b2[1] - 1], [b2[0] + 4, b2[1] + 2], [b2[0] - 3, b2[1] + 2]], K.teal);
+    R.rect(b2[0] - 1, b2[1] + 2, 3, 1, K.bulb, 1, true);
+    c.lights.push(warm(b2[0], b2[1] + 8, 26, 0.8));
+  } else {
+    plantPot(c, x + 0.25, y + 0.5, z + 15, false);
   }
 }
 
 function floorLamp(c: DrawCtx, x: number, y: number, z: number) {
   const { R, P } = c;
-  box(R, P, x - 0.1, y - 0.1, z, 0.2, 0.2, 1, K.ink);
-  box(R, P, x - 0.03, y - 0.03, z, 0.06, 0.06, 26, K.ink);
-  const q = P(x, y, z + 30);
-  R.poly([[q[0] - 4, q[1] + 4], [q[0] + 4, q[1] + 4], [q[0] + 2, q[1] - 1], [q[0] - 2, q[1] - 1]], '#f3dfb5');
-  R.rect(q[0] - 2, q[1] + 4, 5, 1, K.bulb, 1, true);
+  disc(R, P, x, y, 0.14, z, K.ink);
+  box(R, P, x - 0.025, y - 0.025, z, 0.05, 0.05, 28, K.brass);
+  const q = P(x, y, z + 32);
+  R.poly([[q[0] - 5, q[1] + 4], [q[0] + 5, q[1] + 4], [q[0] + 3, q[1] - 2], [q[0] - 3, q[1] - 2]], '#f3dfb5');
+  R.rect(q[0] - 5, q[1] + 4, 11, 1, '#d9c294');
+  R.rect(q[0] - 2, q[1] + 5, 5, 1, K.bulb, 1, true);
   c.lights.push(warm(q[0], q[1] + 10, 40, 0.9));
 }
 
 function sideLamp(c: DrawCtx, x: number, y: number, z: number) {
   const { R, P } = c;
-  box(R, P, x - 0.2, y - 0.2, z, 0.4, 0.4, 10, K.woodD, { line: true });
-  box(R, P, x - 0.03, y - 0.03, z + 10, 0.06, 0.06, 5, K.brass);
-  const q = P(x, y, z + 18);
-  R.poly([[q[0] - 4, q[1] + 3], [q[0] + 4, q[1] + 3], [q[0] + 2, q[1] - 2], [q[0] - 2, q[1] - 2]], '#f3dfb5');
-  c.lights.push(warm(q[0], q[1] + 8, 30, 0.8));
+  box(R, P, x - 0.2, y - 0.2, z, 0.4, 0.4, 11, K.woodD, { line: true });
+  box(R, P, x - 0.08, y - 0.08, z + 11, 0.16, 0.16, 4, K.teal, { line: true }); // ceramic base
+  box(R, P, x - 0.02, y - 0.02, z + 15, 0.04, 0.04, 3, K.brass);
+  const q = P(x, y, z + 21);
+  R.poly([[q[0] - 5, q[1] + 3], [q[0] + 5, q[1] + 3], [q[0] + 3, q[1] - 3], [q[0] - 3, q[1] - 3]], '#f3dfb5');
+  R.rect(q[0] - 5, q[1] + 3, 11, 1, '#d9c294');
+  c.lights.push(warm(q[0], q[1] + 8, 32, 0.9));
 }
 
+/** Brass dome pendant. */
 function pendant(c: DrawCtx, x: number, y: number, zTop: number, zLamp: number) {
   const { R, P } = c;
-  const a = P(x, y, zTop), b = P(x, y, zLamp + 4);
+  const a = P(x, y, zTop), b = P(x, y, zLamp + 5);
   R.line(a[0], a[1], b[0], b[1], K.ink);
   const q = P(x, y, zLamp);
-  R.poly([[q[0] - 4, q[1] + 1], [q[0] + 4, q[1] + 1], [q[0] + 2, q[1] - 3], [q[0] - 2, q[1] - 3]], K.teal);
-  R.rect(q[0] - 4, q[1], 9, 1, shade(K.teal, -0.3));
-  R.rect(q[0] - 1, q[1] + 1, 3, 1, K.bulb, 1, true);
-  c.lights.push({ x: q[0], y: q[1] + 10, r: 46, col: [1, 0.82, 0.55], s: 1 });
+  R.poly([[q[0] - 5, q[1] + 1], [q[0] + 5, q[1] + 1], [q[0] + 4, q[1] - 2], [q[0] + 2, q[1] - 4], [q[0] - 2, q[1] - 4], [q[0] - 4, q[1] - 2]], K.brass);
+  R.rect(q[0] - 1, q[1] - 5, 3, 1, '#8d6a2a');
+  R.px(q[0] - 3, q[1] - 2, '#fbe2a0');
+  R.px(q[0] - 2, q[1] - 3, '#fbe2a0');
+  R.rect(q[0] - 5, q[1] + 1, 11, 1, '#8d6a2a');
+  R.rect(q[0] - 2, q[1] + 2, 5, 1, K.bulb, 1, true);
+  c.lights.push({ x: q[0], y: q[1] + 12, r: 46, col: [1, 0.82, 0.55], s: 1 });
 }
 
 function hangingPlant(c: DrawCtx, x: number, y: number, z: number) {
   const { R, P } = c;
   const a = P(x, y, z), b = P(x, y, z - 5);
   R.line(a[0], a[1], b[0], b[1], '#3a2a22');
-  box(R, P, x - 0.12, y - 0.12, z - 9, 0.24, 0.24, 4, K.pot);
+  box(R, P, x - 0.12, y - 0.12, z - 9, 0.24, 0.24, 4, K.ceramic, { line: K.ceramicD });
   const q = P(x, y, z - 5);
-  R.grid(PLANT_HANG, PLANT_PAL, q[0] - 3, q[1] + 1);
+  R.grid(POTHOS, POTHOS_PAL, q[0] - 3, q[1] + 1);
 }
 
 function coatRack(c: DrawCtx, x: number, y: number) {
@@ -253,11 +447,13 @@ function stool(c: DrawCtx, x: number, y: number) {
 
 function coffeeStation(c: DrawCtx, x: number, y: number, z: number) {
   const { R, P } = c;
-  box(R, P, x, y, z, 0.65, 0.5, 14, K.woodL, { line: true });
-  box(R, P, x + 0.08, y + 0.05, z + 14, 0.3, 0.3, 8, '#3b3f45', { line: K.ink });
-  box(R, P, x + 0.12, y + 0.3, z + 14, 0.14, 0.12, 3, '#9fd0ea', { a: 0.7 });
-  box(R, P, x + 0.45, y + 0.1, z + 14, 0.12, 0.12, 3, K.berry);
-  box(R, P, x + 0.45, y + 0.3, z + 14, 0.12, 0.12, 3, K.cream);
+  box(R, P, x, y, z, 0.65, 0.5, 14, '#c4935e', { line: true });
+  box(R, P, x + 0.05, y + 0.05, z + 14, 0.32, 0.3, 9, '#3b3f45', { line: K.ink });
+  box(R, P, x + 0.09, y + 0.28, z + 14, 0.16, 0.12, 3, '#9fd0ea', { a: 0.7 }); // carafe
+  const l = P(x + 0.28, y + 0.35, z + 21);
+  R.px(l[0], l[1], '#7ad69a', 1, true);
+  cupStack(c, x + 0.44, y + 0.08, z + 14, 3);
+  mug(c, x + 0.5, y + 0.38, z + 14, K.berry);
 }
 
 /** A stairwell opening: the stairs run hidden under the floor; steps drop away from the open side. */
@@ -277,84 +473,136 @@ function stairwell(c: DrawCtx, p: Prop, z: number) {
 
 // ── composites ──────────────────────────────────────────────────────────────
 
+/** Front counter: sage slatted front, kickplate, veined marble top. */
 function cafeCounter(c: DrawCtx, p: Prop) {
   const { R, P } = c;
   const { x, y, w, d } = p;
-  box(R, P, x, y, 0, w, d, 16, K.wood, { line: true });
-  for (let u = x + 0.25; u < x + w - 0.1; u += 0.3) {
-    const p0 = P(u, y + d, 2), p1 = P(u, y + d, 13);
-    R.line(p0[0], p0[1], p1[0], p1[1], K.woodD, 0.6);
+  box(R, P, x, y, 0, w, d, 13, K.slat, { line: K.slatD });
+  for (let u = x + 0.12; u < x + w - 0.05; u += 0.16) {
+    const p0 = P(u, y + d, 3), p1 = P(u, y + d, 12);
+    R.line(p0[0], p0[1], p1[0], p1[1], K.slatD, 0.75);
   }
-  box(R, P, x - 0.1, y - 0.05, 16, w + 0.2, d + 0.1, 2, K.counterTop, { line: K.woodD });
-  espresso(c, x + 0.1, y + 0.1, 18);
-  displayCase(c, x + 1.1, y + 0.05, 18, 1.9);
-  register(c, x + 3.2, y + 0.2, 18);
-  for (let i = 0; i < 3; i++) box(R, P, x + 3.85, y + 0.15 + i * 0.18, 18, 0.14, 0.14, 3 + i, K.white);
+  plane(R, P, { y: y + d }, x, x + w, 0, 3, '#4b3a2c');
+  box(R, P, x - 0.08, y - 0.06, 13, w + 0.16, d + 0.12, 2, K.marble, { line: '#9b8f7f', top: K.marble });
+  for (let i = 0; i < Math.floor((w + d) * 3); i++) {
+    const q = P(x + hash(i * 7 + 3) * w, y + hash(i * 13 + 3) * d, 15);
+    R.px(q[0], q[1], K.vein);
+  }
+  // Pickup end on the left, then the till, pastries and a cake.
+  bell(c, x + 0.25, y + 0.5, 15);
+  cupStack(c, x + 0.45, y + 0.15, 15, 3);
+  register(c, x + 1.0, y + 0.25, 15);
+  tipJar(c, x + 1.55, y + 0.45, 15);
+  displayCase(c, x + 1.85, y + 0.05, 15, 1.6);
+  cakeDome(c, x + w - 0.4, y + 0.4, 15);
 }
 
+/** Back bar: cabinets with brass pulls, grinder, espresso machine, milk jugs, syrups, cups. */
 function backbar(c: DrawCtx, p: Prop) {
   const { R, P } = c;
-  box(R, P, p.x, p.y, 0, p.w, p.d, 16, K.woodD, { line: true, top: K.counterTop });
-  box(R, P, p.x + 0.3, p.y + 0.1, 16, 0.5, 0.35, 8, '#3b3f45'); // grinder
-  for (let i = 0; i < 4; i++) {
-    const x = p.x + 1.8 + i * 0.34;
-    box(R, P, x, p.y + 0.12, 16, 0.24, 0.2, 7, i % 2 ? '#8b5a2b' : '#6e4524', { line: true });
-    const l = P(x + 0.04, p.y + 0.32, 20);
-    R.rect(l[0], l[1], 3, 2, K.cream);
+  const { x, y, w, d } = p;
+  box(R, P, x, y, 0, w, d, 16, K.woodD, { line: true });
+  for (let u = x + 0.05; u < x + w - 0.5; u += 0.92) {
+    plane(R, P, { y: y + d }, u + 0.05, u + 0.85, 3, 13, K.wood);
+    plane(R, P, { y: y + d }, u + 0.1, u + 0.8, 4, 12, shade(K.wood, -0.08));
+    const hq = P(u + 0.75, y + d, 9);
+    R.px(hq[0], hq[1], K.brass);
   }
+  box(R, P, x - 0.04, y - 0.02, 16, w + 0.08, d + 0.06, 2, K.counterTop, { line: K.woodD });
+  grinder(c, x + 0.25, y + 0.12, 18);
+  espresso(c, x + 0.75, y + 0.05, 18);
+  for (const jx of [2.2, 2.42]) box(R, P, x + jx, y + 0.2, 18, 0.16, 0.16, 4, K.chrome, { line: K.chromeD }); // milk jugs
+  syrups(c, x + 2.75, y + 0.2, 18, 4);
+  cupStack(c, x + 3.55, y + 0.2, 18, 4);
+  cupStack(c, x + 3.8, y + 0.2, 18, 3);
+  plantPot(c, x + 4.3, y + 0.3, 18, false);
 }
 
+/** Chesterfield against the left wall: rolled arms, button-tufted back, two seat cushions. */
 function sofa(c: DrawCtx, p: Prop) {
   const { R, P } = c;
-  box(R, P, p.x, p.y, 0, p.w, p.d, 7, K.teal, { line: true });
-  box(R, P, p.x, p.y, 7, 0.2, p.d, 8, shade(K.teal, -0.1), { line: true });
-  box(R, P, p.x + 0.2, p.y + 0.3, 7, 0.3, 0.45, 4, K.amber, { line: true });
-  box(R, P, p.x + 0.2, p.y + p.d - 0.75, 7, 0.3, 0.45, 4, K.berry, { line: true });
+  const { x, y, w, d } = p;
+  const col = K.velvet, dk = shade(col, -0.3);
+  for (const ly of [0.05, d - 0.15]) for (const lx of [0.05, w - 0.15]) box(R, P, x + lx, y + ly, 0, 0.1, 0.1, 2, K.woodD);
+  box(R, P, x, y, 2, w, 0.22, 11, col, { line: dk }); // far arm
+  box(R, P, x, y + 0.22, 2, w, d - 0.44, 6, shade(col, -0.08), { line: dk });
+  box(R, P, x, y + 0.22, 8, 0.2, d - 0.44, 10, shade(col, -0.05), { line: dk }); // back
+  for (const v of [11, 15]) {
+    for (let u = y + 0.4; u < y + d - 0.3; u += 0.32) {
+      const q = planePt(P, { x: x + 0.2 }, u + (v === 15 ? 0.16 : 0), v);
+      R.px(q[0], q[1], dk); // buttons
+    }
+  }
+  const seg = (d - 0.44) / 2;
+  for (let i = 0; i < 2; i++) box(R, P, x + 0.2, y + 0.24 + i * seg, 8, w - 0.22, seg - 0.04, 2, shade(col, 0.1), { line: dk });
+  box(R, P, x + 0.22, y + 0.35, 10, 0.12, 0.42, 5, K.mustard, { line: true });
+  box(R, P, x + 0.22, y + d - 0.85, 10, 0.12, 0.42, 5, '#e8d9bd', { line: true });
+  box(R, P, x, y + d - 0.22, 2, w, 0.22, 11, col, { line: dk }); // near arm
+  const a0 = P(x, y + d - 0.22, 13), a1 = P(x + w, y + d - 0.22, 13);
+  R.line(a0[0], a0[1], a1[0], a1[1], shade(col, 0.3));
 }
 
+/** Mustard wingback. Facing x− puts the back on the far (+x) side. */
 function armchair(c: DrawCtx, p: Prop, z: number) {
   const { R, P } = c;
-  const col = '#c46b4e';
-  box(R, P, p.x, p.y, z, 0.8, 0.8, 7, col, { line: true });
-  if (p.face === 'x-') {
-    // Sitter faces the sofa: backrest on the far (+x) side, arms front and back.
-    box(R, P, p.x + 0.62, p.y, z + 7, 0.18, 0.8, 9, shade(col, -0.12), { line: true });
-    box(R, P, p.x, p.y, z + 7, 0.62, 0.14, 4, shade(col, -0.05), { line: true });
-    box(R, P, p.x, p.y + 0.66, z + 7, 0.62, 0.14, 4, shade(col, -0.05), { line: true });
-  } else {
-    box(R, P, p.x, p.y, z + 7, 0.18, 0.8, 9, shade(col, -0.12), { line: true });
-    box(R, P, p.x + 0.18, p.y, z + 7, 0.62, 0.14, 4, shade(col, -0.05), { line: true });
-  }
+  const { x, y } = p;
+  const col = K.mustard, dk = shade(col, -0.4);
+  for (const [lx, ly] of [[0.05, 0.05], [0.65, 0.05], [0.05, 0.65], [0.65, 0.65]] as const) box(R, P, x + lx, y + ly, z, 0.08, 0.08, 2, K.woodD);
+  box(R, P, x, y, z + 2, 0.8, 0.8, 6, col, { line: dk });
+  const back = p.face === 'x-' ? x + 0.6 : x;
+  const seat = p.face === 'x-' ? x : x + 0.2;
+  const wing = p.face === 'x-' ? x + 0.42 : x + 0.2;
+  box(R, P, seat, y, z + 8, 0.6, 0.15, 5, shade(col, -0.05), { line: dk }); // far arm
+  box(R, P, back, y, z + 8, 0.2, 0.8, 15, shade(col, -0.12), { line: dk });
+  box(R, P, wing, y, z + 12, 0.18, 0.15, 9, shade(col, -0.08), { line: dk });
+  box(R, P, seat + 0.05, y + 0.15, z + 8, 0.5, 0.5, 2, shade(col, 0.12), { line: dk }); // cushion
+  box(R, P, wing, y + 0.65, z + 12, 0.18, 0.15, 9, shade(col, -0.08), { line: dk });
+  box(R, P, seat, y + 0.65, z + 8, 0.6, 0.15, 5, shade(col, -0.05), { line: dk }); // near arm
 }
 
+/** Low table with a shelf of books underneath. */
 function coffeeTable(c: DrawCtx, p: Prop) {
   const { R, P } = c;
-  box(R, P, p.x, p.y, 0, p.w, p.d, 7, K.woodD, { line: true, top: K.woodL });
-  box(R, P, p.x + 0.15, p.y + 0.2, 7, 0.3, 0.4, 2, '#e8dcc0'); // magazines
-  box(R, P, p.x + 0.2, p.y + 0.3, 9, 0.25, 0.3, 1, K.teal);
-  box(R, P, p.x + 0.55, p.y + 0.75, 7, 0.14, 0.14, 3, K.white, { line: K.metalD }); // mug
-  plantPot(c, p.x + 0.55, p.y + 0.3, 7, false);
+  const { x, y, w, d } = p;
+  for (const [lx, ly] of [[0.05, 0.05], [w - 0.13, 0.05], [0.05, d - 0.13], [w - 0.13, d - 0.13]] as const) box(R, P, x + lx, y + ly, 0, 0.08, 0.08, 6, K.woodD);
+  box(R, P, x + 0.05, y + 0.05, 2, w - 0.1, d - 0.1, 1, K.wood);
+  box(R, P, x + 0.15, y + 0.2, 3, 0.35, 0.28, 2, K.teal);
+  box(R, P, x + 0.18, y + 0.24, 5, 0.3, 0.22, 1, '#e8d9bd');
+  box(R, P, x, y, 6, w, d, 2, K.woodL, { line: true, top: '#b5774a' });
+  box(R, P, x + 0.1, y + 0.72, 8, 0.45, 0.4, 1, '#7a5a3a'); // tray
+  cup(c, x + 0.3, y + 0.92, 9, true, 2);
+  box(R, P, x + 0.15, y + 0.12, 8, 0.32, 0.24, 1, '#e8dcc0'); // magazine
+  plantPot(c, x + 0.6, y + 0.35, 8, false);
 }
 
-/** A high coffee bar with stools, under the pendant lamps. */
+/** A high coffee bar on iron legs with a brass foot rail, under the pendant lamps. */
 function workBar(c: DrawCtx, p: Prop) {
   const { R, P } = c;
-  box(R, P, p.x + 0.1, p.y + 0.1, 0, 0.1, p.d - 0.2, 14, K.woodD);
-  box(R, P, p.x + p.w - 0.2, p.y + 0.1, 0, 0.1, p.d - 0.2, 14, K.woodD);
-  box(R, P, p.x, p.y, 14, p.w, p.d, 2, K.woodL, { line: true, top: K.counterTop });
-  // Cups, a sugar jar and a little plant: a coffee bar, not a desk.
-  for (const [lx, col] of [[0.35, K.white], [1.3, '#e8b4b8'], [2.2, K.white]] as const) {
-    box(R, P, p.x + lx, p.y + 0.3, 16, 0.14, 0.14, 3, col, { line: K.metalD });
+  const { x, y, w, d } = p;
+  for (const lx of [0.15, w - 0.25]) {
+    box(R, P, x + lx, y + 0.15, 0, 0.1, d - 0.3, 1, IRON);
+    box(R, P, x + lx + 0.03, y + d / 2 - 0.04, 1, 0.06, 0.08, 13, IRON);
   }
-  box(R, P, p.x + 0.85, p.y + 0.2, 16, 0.16, 0.16, 4, K.glass, { a: 0.8 });
-  plantPot(c, p.x + 1.8, p.y + 0.3, 16, false);
+  box(R, P, x + 0.1, y + d - 0.06, 4, w - 0.2, 0.04, 1, K.brass);
+  box(R, P, x, y, 14, w, d, 2, K.woodL, { line: K.woodD, top: '#c08552' });
+  // Cups, a sugar jar and a little plant: a coffee bar, not a desk.
+  cup(c, x + 0.4, y + 0.35, 16, true, 1);
+  mug(c, x + 1.35, y + 0.35, 16, '#e8b4b8');
+  cup(c, x + 2.3, y + 0.35, 16, false);
+  box(R, P, x + 0.85, y + 0.22, 16, 0.16, 0.16, 4, K.glass, { a: 0.8 });
+  plantPot(c, x + 1.85, y + 0.35, 16, false);
 }
 
+/** Leather-topped stool with a brass foot ring. */
 function barStool(c: DrawCtx, x: number, y: number) {
   const { R, P } = c;
-  box(R, P, x - 0.04, y - 0.04, 0, 0.08, 0.08, 11, K.ink);
-  disc(R, P, x, y, 0.2, 11, K.ink);
-  disc(R, P, x, y, 0.2, 12, '#c46b4e');
+  box(R, P, x - 0.12, y - 0.12, 0, 0.24, 0.24, 1, IRON);
+  box(R, P, x - 0.03, y - 0.03, 1, 0.06, 0.06, 10, IRON);
+  disc(R, P, x, y, 0.16, 4, K.brass);
+  disc(R, P, x, y, 0.12, 4.5, K.ink);
+  disc(R, P, x, y, 0.21, 11, FRAME);
+  disc(R, P, x, y, 0.2, 12, '#6b3f2a');
+  disc(R, P, x - 0.04, y - 0.04, 0.08, 12.5, K.wood);
 }
 
 function cabinet(c: DrawCtx, p: Prop) {
@@ -385,13 +633,14 @@ export function drawProp(c: DrawCtx, p: Prop, z: number, ceiling: number): void 
     case 'aframe': return aframe(c, p.x, p.y);
     case 'roundTable': return roundTable(c, cx, cy, z, cx + cy);
     case 'chair': return chairSeat(c, cx, cy, z, p.face ?? 'x+');
+    case 'officeChair': return officeChair(c, cx, cy, z);
     case 'plant': return plantPot(c, cx, cy, z, false);
     case 'bigPlant': return plantPot(c, cx, cy, z, true);
     case 'rug': return rugRect(c, p.x, p.y, p.w, p.d, z);
     case 'sofa': return sofa(c, p);
     case 'sideLamp': return sideLamp(c, cx, cy, z);
     case 'armchair': return armchair(c, p, z);
-    case 'pendant': return pendant(c, p.x, p.y, ceiling, ceiling - 18);
+    case 'pendant': return pendant(c, p.x, p.y, ceiling, ceiling - 20);
     case 'hangingPlant': return hangingPlant(c, p.x, p.y, ceiling - 6);
     case 'desk': return desk(c, p, z);
     case 'coffeeStation': return coffeeStation(c, p.x, p.y, z);
