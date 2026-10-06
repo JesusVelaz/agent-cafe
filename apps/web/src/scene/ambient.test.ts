@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { skyClouds } from './ambient';
+import { cloudsAt } from './ambient';
 import type { ThemeId } from './atmosphere';
 import { renderScene, SCENE_H, SCENE_W } from './building';
 import { Raster } from './raster';
@@ -33,8 +33,19 @@ describe('a bigger frame', () => {
   });
 
   it('gets more clouds as it grows', () => {
-    expect(skyClouds({ w: SCENE_W, h: SCENE_H }, false)).toHaveLength(5);
-    expect(skyClouds({ w: SCENE_W * 2, h: SCENE_H }, false).length).toBe(10);
-    expect(skyClouds({ w: SCENE_W * 2, h: SCENE_H }, true).length).toBeGreaterThan(10);
+    const count = (w: number, h: number, storm = false) => cloudsAt({ w, h }, storm, 0).length;
+    expect(count(SCENE_W * 4, SCENE_H)).toBeGreaterThan(count(SCENE_W, SCENE_H));
+    expect(count(SCENE_W * 4, SCENE_H * 2)).toBeGreaterThan(count(SCENE_W * 4, SCENE_H));
+    expect(count(SCENE_W * 4, SCENE_H, true)).toBeGreaterThan(count(SCENE_W * 4, SCENE_H));
+  });
+
+  it.each([false, true])('keeps every cloud on the left in place as the frame narrows (storm: %s)', (storm) => {
+    // The work board sliding open narrows the stage from the right; the sky on the left mustn't change.
+    const left = (w: number, t: number) => cloudsAt({ w, h: SCENE_H }, storm, t).filter((c) => c.x < 900);
+    for (const t of [0, 37.5, 400, 3000]) {
+      const wide = left(1800, t);
+      expect(wide.length).toBeGreaterThan(0);
+      for (const w of [1500, 1200, 902]) expect(left(w, t)).toEqual(wide);
+    }
   });
 });

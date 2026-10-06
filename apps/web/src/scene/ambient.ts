@@ -8,7 +8,7 @@
  */
 import { BUILDING } from '@/sim/layout';
 import { isDim, THEMES } from './atmosphere';
-import { perArea, plotOffset, SCENE_W } from './frame';
+import { MAX_FRAME, perArea, plotOffset, SCENE_W } from './frame';
 import { box, plane } from './iso';
 import { hash, K, mix, shade } from './palette';
 import type { DrawCtx } from './props';
@@ -41,17 +41,37 @@ const CLOUDS: Cloud[] = [
 /** Extra clouds when it rains. */
 const STORM: Cloud[] = [{ y: 0.17, w: 40, v: 4.2, s: 0.62, far: false }, { y: 0.3, w: 34, v: 3.6, s: 0.12, far: true }, { y: 0.02, w: 44, v: 3.8, s: 0.87, far: false }];
 
-/** A seeded cloud for frames bigger than the base one; lower ones only show beside the plot. */
+/** A seeded cloud for the sky beyond the hand-placed ones; lower ones only show beside the plot. */
 function extraCloud(i: number, storm: boolean): Cloud {
   const k = i * 19 + (storm ? 7 : 0);
   const far = hash(k + 1) < 0.5;
   return { y: 0.02 + 0.5 * hash(k + 2), w: 22 + Math.round(28 * hash(k + 3)), v: (far ? 1 : 1.8) + 1.2 * hash(k + 4), s: hash(k + 5), far };
 }
 
-/** The hand-placed clouds, plus seeded ones so a wider or taller frame stays as cloudy. */
-export function skyClouds(R: Pick<Raster, 'w' | 'h'>, storm: boolean): Cloud[] {
-  const fill = (base: Cloud[], isStorm: boolean) => [...base, ...Array.from({ length: Math.max(0, perArea(base.length, R) - base.length) }, (_, i) => extraCloud(i, isStorm))];
+/**
+ * The sky is laid out as wide as the widest frame, so its clouds don't depend on the
+ * frame's width: a narrower frame just crops it on the right. Opening the work board
+ * narrows the stage, and the clouds on the left must stay put rather than jump or vanish.
+ */
+const SKY_W = MAX_FRAME.w;
+
+/** The hand-placed clouds, plus seeded ones so the whole sky (and a taller frame) stays as cloudy. */
+function skyClouds(h: number, storm: boolean): Cloud[] {
+  const sky = { w: SKY_W, h };
+  const fill = (base: Cloud[], isStorm: boolean) => [...base, ...Array.from({ length: Math.max(0, perArea(base.length, sky) - base.length) }, (_, i) => extraCloud(i, isStorm))];
   return storm ? [...fill(CLOUDS, false), ...fill(STORM, true)] : fill(CLOUDS, false);
+}
+
+/** The clouds in this frame at time t, in frame pixels from its left edge. */
+export function cloudsAt(R: Pick<Raster, 'w' | 'h'>, storm: boolean, t: number) {
+  const speed = storm ? 2 : 1;
+  return skyClouds(R.h, storm)
+    .map((cl, i) => {
+      const span = SKY_W + cl.w + 24;
+      const x = ((cl.s * span + t * cl.v * speed) % span) - cl.w - 12;
+      return { x: Math.round(x), y: Math.round(cl.y * R.h), w: cl.w, far: cl.far, seed: i + 1 };
+    })
+    .filter((cl) => cl.x < R.w);
 }
 
 function cloudColours(c: DrawCtx): [string, string] {
@@ -90,10 +110,11 @@ function cloud(R: Raster, x: number, y: number, w: number, seed: number, body: s
 function moon(R: Raster) {
   // Over the plot's top-left, wherever the plot sits in the frame.
   const x = plotOffset(R).x + Math.round(SCENE_W * 0.12), y = 34;
-  circle(R, x, y, 6, '#f4ecc8', y + 7);
-  R.rect(x - 2, y - 2, 2, 2, '#ded3a8', 1, true);
-  R.rect(x + 2, y + 1, 1, 1, '#ded3a8', 1, true);
-  R.rect(x - 1, y + 3, 2, 1, '#ded3a8', 1, true);
+  circle(R, x, y, 8, '#f4ecc8', y + 9);
+  R.rect(x - 3, y - 3, 3, 2, '#ded3a8', 1, true);
+  R.rect(x + 3, y + 1, 2, 1, '#ded3a8', 1, true);
+  R.rect(x - 1, y + 4, 2, 1, '#ded3a8', 1, true);
+  R.px(x + 2, y - 5, '#ded3a8', 1, true);
 }
 
 /** Moon, clouds, a passing flock and the odd plane. Drawn over the backdrop, behind the café. */
@@ -102,15 +123,12 @@ export function drawSky(c: DrawCtx) {
   if (theme === 'night') moon(R);
   const [body, under] = cloudColours(c);
   const bg = THEMES[theme].bg[0];
-  const list = skyClouds(R, theme === 'rain');
-  const speed = theme === 'rain' ? 2 : 1;
+  const list = cloudsAt(R, theme === 'rain', t);
   for (const far of [true, false]) {
-    for (const [i, cl] of list.entries()) {
+    for (const cl of list) {
       if (cl.far !== far) continue;
-      const span = R.w + cl.w + 24;
-      const x = ((cl.s * span + t * cl.v * speed) % span) - cl.w - 12;
       const tint = far ? 0.45 : 0;
-      cloud(R, Math.round(x), Math.round(cl.y * R.h), cl.w, i + 1, mix(body, bg, tint), mix(under, bg, tint));
+      cloud(R, cl.x, cl.y, cl.w, cl.seed, mix(body, bg, tint), mix(under, bg, tint));
     }
   }
   if (sunny(c)) {
