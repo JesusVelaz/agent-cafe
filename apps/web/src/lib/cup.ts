@@ -11,10 +11,10 @@ export type Mood = 'quiet' | 'working' | 'alert';
 /** What floats above the cup (rows 0–3). */
 const ABOVE: Record<Mood, readonly string[]> = {
   quiet: [
-    '...........zzz..',
+    '...........zzzz.',
+    '.............z..',
     '............z...',
-    '...........zzz..',
-    '................',
+    '...........zzzz.',
   ],
   working: [
     '................',
@@ -55,7 +55,7 @@ const FACE: Record<Mood, readonly string[]> = {
   ],
 };
 
-export function cupRows(mood: Mood): readonly string[] {
+function cupRows(mood: Mood): readonly string[] {
   return [
     ...ABOVE[mood],
     '................',
@@ -69,7 +69,7 @@ export function cupRows(mood: Mood): readonly string[] {
   ];
 }
 
-export const CUP_PAL: Record<string, string> = {
+const CUP_PAL: Record<string, string> = {
   o: '#2b1d17',
   w: '#f3e6cc',
   c: '#c9975f',

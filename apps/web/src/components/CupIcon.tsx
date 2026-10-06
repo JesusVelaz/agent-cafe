@@ -1,6 +1,6 @@
-import { cupPixels, type Mood } from '@/lib/cup';
+import { cupPixels, type Mood, type Px } from '@/lib/cup';
 
-const PIXELS: Record<Mood, ReturnType<typeof cupPixels>> = {
+const PIXELS: Record<Mood, Px[]> = {
   quiet: cupPixels('quiet'),
   working: cupPixels('working'),
   alert: cupPixels('alert'),
