@@ -2,11 +2,15 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { THEMES, type ThemeId } from '@/scene/atmosphere';
-import { fitFrame } from '@/scene/frame';
+import { fitFrame, fitScale, frameAt } from '@/scene/frame';
 import { CafeRenderer, SCENE_H, SCENE_W, type AgentHit } from '@/scene/renderer';
 import { activityLabel, deriveActivity } from '@/sim/activity';
 import { useCafe } from '@/store/cafe';
 import { activeTaskFor, latestTaskFor } from '@/store/reduce';
+
+/** How long the stage must hold still before the café takes a new scale, and how long it eases into it. */
+const SETTLE_MS = 160;
+const ZOOM_MS = 220;
 
 interface Props {
   theme: ThemeId;
@@ -24,6 +28,8 @@ interface Props {
  * The café canvas. The plot is sized to fit (SCENE_W×SCENE_H scaled up by a whole
  * number when it fits, for crisp pixels; fractionally only on small screens), and the
  * frame around it fills the whole stage at that scale, so the sky runs edge to edge.
+ * While the stage resizes (the panel sliding) the café holds its scale and stays
+ * centred; a new scale is eased into once the stage is still.
  */
 export function CafeScene({ theme, labels = true, reserveBottom = 0, onFrame, overlay }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -42,11 +48,10 @@ export function CafeScene({ theme, labels = true, reserveBottom = 0, onFrame, ov
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(([entry]) => {
-      const { width, height } = entry!.contentRect;
-      const v = fitFrame(width, height, reserveBottom);
-      // Apply it now, before this frame paints, rather than after React re-renders: the
-      // stage, the scale the callouts use and the redrawn canvas all change together.
+    // Applied straight from the observer, before this frame paints, rather than after
+    // React re-renders: the stage, the scale the callouts use and the redrawn canvas
+    // all change together.
+    const apply = (v: typeof view) => {
       viewRef.current = v;
       live.current.scale = v.scale;
       const stage = stageRef.current;
@@ -56,9 +61,44 @@ export function CafeScene({ theme, labels = true, reserveBottom = 0, onFrame, ov
       }
       rendererRef.current?.resize(v.w, v.h);
       setView(v);
+    };
+    let sized = false;
+    let settle: ReturnType<typeof setTimeout> | undefined;
+    const ro = new ResizeObserver(([entry]) => {
+      const { width, height } = entry!.contentRect;
+      if (!sized) {
+        sized = true;
+        apply(fitFrame(width, height, reserveBottom));
+        return;
+      }
+      // While the stage is being resized (the panel sliding, a window drag) the café
+      // keeps its scale and stays put; only the sky around it grows or shrinks. A scale
+      // changing every frame makes pixel art crawl.
+      apply(frameAt(width, height, viewRef.current.scale));
+      clearTimeout(settle);
+      settle = setTimeout(() => {
+        const from = viewRef.current.scale;
+        const to = fitScale(width, height, reserveBottom);
+        if (to === from) return;
+        // Once it's still, take the scale that fits, easing into it rather than popping.
+        apply(frameAt(width, height, to));
+        const stage = stageRef.current;
+        if (stage && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+          // Smooth sampling while it zooms (crisp pixels would shimmer at in-between scales), crisp again once it lands.
+          const canvas = stage.querySelector('canvas');
+          if (canvas) canvas.style.imageRendering = 'auto';
+          const zoom = stage.animate([{ transform: `scale(${from / to})` }, { transform: 'scale(1)' }], { duration: ZOOM_MS, easing: 'cubic-bezier(.2,.8,.2,1)' });
+          const crisp = () => canvas?.style.removeProperty('image-rendering');
+          zoom.onfinish = crisp;
+          zoom.oncancel = crisp;
+        }
+      }, SETTLE_MS);
     });
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => {
+      ro.disconnect();
+      clearTimeout(settle);
+    };
   }, [reserveBottom]);
 
   useEffect(() => {

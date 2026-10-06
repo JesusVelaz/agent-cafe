@@ -17,16 +17,19 @@ export const perArea = (n: number, R: Pick<Raster, 'w' | 'h'>) => Math.round((n 
 /** The biggest frame worth drawing (only a tiny scale on a huge stage gets near it). */
 const MAX_FRAME = { w: 2560, h: 1600 };
 
-/**
- * Pixel scale and frame size for a stage of this many CSS px. The plot is fitted
- * (a whole-number scale when it fits, for crisp pixels; fractional only when small)
- * and the frame around it covers the whole stage at that scale.
- */
-export function fitFrame(width: number, height: number, reserveBottom = 0): { scale: number; w: number; h: number } {
+/** The pixel scale that fits the plot in a stage of this many CSS px: whole when it fits (crisp pixels), fractional only when small. */
+export function fitScale(width: number, height: number, reserveBottom = 0): number {
   const f = Math.min((width - 16) / SCENE_W, (height - 16 - reserveBottom) / SCENE_H);
-  const scale = f >= 2 ? Math.floor(f) : Math.max(0.25, f);
+  return f >= 2 ? Math.floor(f) : Math.max(0.25, f);
+}
+
+/** The frame that covers a stage of this many CSS px at this scale, with the plot centred. */
+export function frameAt(width: number, height: number, scale: number): { scale: number; w: number; h: number } {
   // Grow the frame two pixels at a time so the plot's offset is always exact: the café
   // then sits dead centre at every stage size instead of wobbling a pixel as it resizes.
   const fit = (px: number, base: number, max: number) => Math.min(max, base + 2 * Math.max(0, Math.ceil((px / scale - base) / 2)));
   return { scale, w: fit(width, SCENE_W, MAX_FRAME.w), h: fit(height, SCENE_H, MAX_FRAME.h) };
 }
+
+/** Scale and frame for a stage of this many CSS px (the plot fitted, the frame covering the stage). */
+export const fitFrame = (width: number, height: number, reserveBottom = 0) => frameAt(width, height, fitScale(width, height, reserveBottom));
