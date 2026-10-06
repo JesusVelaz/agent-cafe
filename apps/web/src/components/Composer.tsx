@@ -211,7 +211,7 @@ export function Composer({ onDockedHeight }: { onDockedHeight?: (px: number) => 
 
   return (
     <div
-      className={`absolute z-30 settling:invisible transition-[right,bottom,width] duration-300 ease-[cubic-bezier(.2,.8,.2,1)] ${
+      className={`absolute z-30 transition-[right,bottom,width] duration-300 ease-[cubic-bezier(.2,.8,.2,1)] ${
         floating ? 'bottom-4 right-4 w-[calc(100%-2rem)] lg:bottom-5 lg:right-[76px] lg:w-[519px]' : 'bottom-0 right-0 w-full lg:w-[519px]'
       }`}
     >

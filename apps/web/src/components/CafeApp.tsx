@@ -53,9 +53,9 @@ export function CafeApp() {
   const mainRef = useRef<HTMLElement>(null);
   const onDockedHeight = useCallback((px: number) => mainRef.current?.style.setProperty('--composer-h', `${px}px`), []);
   // The server can't know whether the panel was left folded, so its render has it
-  // open (kept hidden by `settling:`). Apply the remembered state, flush styles with
+  // open (under the first-load cover). Apply the remembered state, flush styles with
   // transitions still off, then turn them on: all before paint, so a folded panel
-  // doesn't visibly fold on every load.
+  // doesn't slide shut, resizing the café, on every load.
   const [loaded, setLoaded] = useState(false);
   const [settled, setSettled] = useState(false);
   useLayoutEffect(() => {
@@ -88,7 +88,7 @@ export function CafeApp() {
           {/* Both panel faces stay mounted; the column slides and they cross-fade.
               Clip, not hidden: a hidden box can still be scrolled, and the thread's
               scrollIntoView would slide the folded rail sideways. */}
-          <div className={`relative min-h-0 overflow-clip border-slate-line settling:invisible lg:border-l ${collapsed ? 'hidden lg:block' : ''}`}>
+          <div className={`relative min-h-0 overflow-clip border-slate-line lg:border-l ${collapsed ? 'hidden lg:block' : ''}`}>
             <div
               inert={collapsed}
               className={`h-full transition-[opacity,visibility] duration-200 lg:absolute lg:inset-y-0 lg:left-0 lg:h-auto lg:w-[520px] ${collapsed ? 'lg:invisible lg:opacity-0' : 'visible opacity-100'}`}
