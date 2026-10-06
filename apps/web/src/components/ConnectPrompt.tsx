@@ -60,7 +60,7 @@ export function ConnectPrompt({ onConnect }: { onConnect: () => void }) {
       aria-labelledby="connect-title"
       className="m-auto w-[min(420px,calc(100vw-2rem))] rounded-2xl border border-slate-line bg-night-2 p-6 text-chalk shadow-[0_30px_80px_rgba(0,0,0,.55)] transition-[opacity,scale] duration-200 backdrop:bg-black/50 backdrop:backdrop-blur-[2px] starting:scale-95 starting:opacity-0"
     >
-      <CupIcon size={36} steaming={false} />
+      <CupIcon size={36} mood="quiet" />
       <h2 id="connect-title" className="mt-3 font-display text-[30px] font-normal leading-none">Connect a provider</h2>
       <p className="mt-2 text-[13px] leading-relaxed text-chalk-dim">
         Your agents need a signed-in account to do real work. Until you connect one, they only run demo tasks.

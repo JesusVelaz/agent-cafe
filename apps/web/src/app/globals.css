@@ -22,6 +22,7 @@
   --color-mint: #7ad69a; /* working, done */
   --color-amber: #f5c451; /* asking you */
   --color-coral: #ff8a6b; /* needs you, failed */
+  --color-crema: #d9a86c; /* the logo's "Café" */
   --color-claude: #e8906a;
   --color-teal: #4f9aa5;
   --color-walnut: #2d313a;
@@ -125,5 +126,34 @@ body {
   .steam-a,
   .steam-b {
     animation: none !important;
+  }
+}
+
+/* The brewing pill's dots: they bubble up one after another, in pixel steps. */
+@keyframes brew {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+  30% {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
+}
+.brew-dot {
+  animation: brew 1.2s steps(3) infinite;
+}
+.brew-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.brew-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .brew-dot {
+    animation: none !important;
+    opacity: 1;
   }
 }
