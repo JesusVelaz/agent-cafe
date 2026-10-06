@@ -30,7 +30,7 @@ const FACE: Record<HairStyle, string[]> = {
 };
 const HEAD_BACK = [...HEAD_TOP, ...S(['.ohhhhh', '.ohhhhh', '.ohHhhh', '.ohhhhh', '..ohhhh'])];
 
-export type Outfit = 'casual' | 'office';
+export type Outfit = 'casual' | 'office' | 'apron';
 
 const BODY: Record<Outfit, { front: string[]; typing: string[]; back: string[] }> = {
   office: {
@@ -43,6 +43,12 @@ const BODY: Record<Outfit, { front: string[]; typing: string[]; back: string[] }
     front: S(['...oCcc', '..oCcwc', '.oCccwc', '.oCcccc', '.osCcCC', '..oCccc', '..oCCCC']),
     typing: S(['...oCcc', '..oCcwc', '.oCccwc', '.oCcccc', '.oCcsCC', '..oCccc', '..oCCCC']),
     back: S(['...oCCC', '..oCccc', '.oCcccc', '.oCcccc', '.osCccc', '..oCccc', '..oCCCC']),
+  },
+  // The barista: a shirt under a bib apron with a front pocket; ties cross at the back.
+  apron: {
+    front: S(['...oCca', '..oCcaa', '.oCcaaa', '.oCcaaa', '.osaaAA', '..oaaaa', '..oAAAA']),
+    typing: S(['...oCca', '..oCcaa', '.oCcaaa', '.oCcaaa', '.oaassA', '..oaaaa', '..oAAAA']),
+    back: S(['...oCcc', '..oCcAc', '.oCccAc', '.oCcccA', '.osAAAA', '..oCccc', '..oCCCC']),
   },
 };
 
@@ -125,6 +131,7 @@ function seeded(seed: number) {
 
 const JACKETS = ['#34405a', '#4a3a57', '#5b4a3c', '#2f4f4f', '#6b3f3f', '#3d4a3a'];
 const TIES = [K.berry, K.teal, K.amber, '#8a6fb8', '#e76f51'];
+const SHIRTS = ['#efe7da', '#3a3f47', '#c9b79c'];
 const HOODIES = ['#d9a441', '#4f9aa5', '#c46b4e', '#8a6fb8', '#5d7fb8', '#7a8c4a', '#e8b4b8', '#6b4a3a'];
 
 /**
@@ -139,7 +146,7 @@ export function agentLook(seed: number, outfit: Outfit): AgentLook {
   const hairCol = pick(HAIR);
   const skin = pick(SKIN);
   const accessory = pick(['none', 'glasses', 'phones', 'beanie', 'none'] as const);
-  const cloth = outfit === 'office' ? pick(JACKETS) : pick(HOODIES);
+  const cloth = outfit === 'office' ? pick(JACKETS) : outfit === 'apron' ? pick(SHIRTS) : pick(HOODIES);
   return {
     hair,
     outfit,
@@ -227,28 +234,36 @@ export const PIGEON: readonly Grid[] = [
 ];
 export const PIGEON_PAL = { g: '#9aa0ab', G: '#6f7480', h: '#5c6a7a', b: '#e0a84a', o: '#c46b6b' };
 /**
- * A beagle-ish dog, side-on facing right (13×9), built like the agents: a body
- * (head up, or down sniffing) plus legs plus a wagging tail.
- *   o outline · k tan fur · d dark patch and ears · w white chest and tail tip · e eye · n nose
+ * A beagle, side-on facing right (17×11), painted from layers like the agents: a
+ * low body with a saddle and collar, legs, a wagging tail, and a head that drops
+ * to the ground to sniff.
+ *   o outline · k tan fur · l light fur · d dark ear and saddle · w white muzzle, chest,
+ *   paws and tail tip · e eye · n nose · c collar
  */
 export type DogFrame = 'stand' | 'strideA' | 'strideB' | 'sniff';
-const DOG_BODY = {
-  up: ['.........ooo.', '........okkko', '........dkeko', '...ooooodkkkn', '..okkkkkkkkwo', '..okkdddkkwo.', '..okkkkkkkwo.'],
-  sniff: ['.............', '.............', '.............', '...ooooo.....', '..okkkkkooo..', '..okkdddkdkko', '..okkkkkkdeko'],
+export const DOG_W = 17;
+const DOG_H = 11;
+const DOG_HEAD = ['..ooo...', '.olllo..', 'oddkeko.', 'oddkkwwn', 'oddkwwwo', '.ooooo..'];
+const DOG_BODY = ['oooooocc....', 'okdddkcckwwo', 'okkkkkkkkwwo', '.okllllkkwo.', '..ooooooooo.'];
+const DOG_LEGS: Record<Exclude<DogFrame, 'sniff'>, string[]> = {
+  stand: ['.dk.....dk..', '.dw.....dw..'],
+  strideA: ['d..k...d..k.', 'd..w..d...w.'],
+  strideB: ['.kd.....kd..', '.wd.....wd..'],
 };
-const DOG_LEGS = {
-  stand: ['...kk...kk...', '...oo...oo...'],
-  strideA: ['..k..k.k..k..', '..o..o.o..o..'],
-  strideB: ['...k.k..k.k..', '...o.o..o.o..'],
-};
+const DOG_TAIL = { up: ['o..', 'wo.', 'ko.', '.k.'], down: ['...', 'o..', 'wko', '..k'] };
+/** Where the lead clips on, in grid cells (the collar, behind the ear). */
+export const DOG_COLLAR = { x: 8, y: 4 };
+
 export function dogGrid(frame: DogFrame, wag: boolean): Grid {
-  const rows = [...(frame === 'sniff' ? DOG_BODY.sniff : DOG_BODY.up), ...DOG_LEGS[frame === 'sniff' ? 'stand' : frame]];
-  if (frame === 'sniff') setPx(rows, 7, 12, 'n'); // nose to the ground
-  const tail: Array<[number, number, string]> = wag ? [[1, 1, 'w'], [2, 1, 'k'], [3, 2, 'k']] : [[2, 0, 'w'], [3, 1, 'k'], [3, 2, 'k']];
-  for (const [r, c, ch] of tail) setPx(rows, frame === 'sniff' ? r + 1 : r, c, ch);
-  return rows;
+  const g = Array.from({ length: DOG_H }, () => Array<string>(DOG_W).fill('.'));
+  const paint = (rows: string[], x: number, y: number) => rows.forEach((r, j) => [...r].forEach((ch, i) => { if (ch !== '.') g[y + j]![x + i] = ch; }));
+  paint(wag ? DOG_TAIL.down : DOG_TAIL.up, 0, 1);
+  paint(DOG_BODY, 2, 4);
+  paint(DOG_LEGS[frame === 'sniff' ? 'stand' : frame], 2, 9);
+  paint(DOG_HEAD, 9, frame === 'sniff' ? 5 : 0); // nose to the ground
+  return g.map((r) => r.join(''));
 }
-export const DOG_PAL = { o: K.ink, k: '#c98f55', d: '#7a4a2a', w: '#f3ead8', e: '#1e1512', n: '#1e1512' };
+export const DOG_PAL = { o: K.ink, k: '#c98f55', l: '#e3b27a', d: '#7a4a2a', w: '#f6efe2', e: '#1e1512', n: '#1e1512', c: K.berry };
 /** Butterfly, wings open then closed. */
 export const BUTTERFLY: readonly Grid[] = [['w.w', '.k.'], ['.w.', '.k.']];
 /** Tree canopy (15×13): L dark leaf · l leaf · g highlight. */

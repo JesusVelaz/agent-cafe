@@ -8,19 +8,30 @@
  */
 import { BUILDING } from '@/sim/layout';
 import { isDim, THEMES } from './atmosphere';
+import { perArea, plotOffset, SCENE_W } from './frame';
 import { box, plane } from './iso';
 import { hash, K, mix, shade } from './palette';
 import type { DrawCtx } from './props';
 import type { Raster } from './raster';
-import { agentGrid, agentLook, BIRD, BUTTERFLY, DOG_PAL, dogGrid, PIGEON, PIGEON_PAL, type AgentFrame, type DogFrame } from './sprites';
+import { agentGrid, agentLook, BIRD, BUTTERFLY, DOG_COLLAR, DOG_PAL, DOG_W, dogGrid, PIGEON, PIGEON_PAL, type AgentFrame, type DogFrame } from './sprites';
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const sunny = (c: DrawCtx) => c.theme === 'day' || c.theme === 'summer';
 
 // ── sky ─────────────────────────────────────────────────────────────────────
 
-/** Screen-space clouds, all in the sky above the plot. `y` is a fraction of the frame height. */
-const CLOUDS = [
+interface Cloud {
+  /** Fraction of the frame height. */
+  y: number;
+  w: number;
+  /** Drift speed (px/s) and starting phase (0–1). */
+  v: number;
+  s: number;
+  far: boolean;
+}
+
+/** Screen-space clouds, all in the sky above the plot. */
+const CLOUDS: Cloud[] = [
   { y: 0.04, w: 48, v: 2.6, s: 0.1, far: false },
   { y: 0.14, w: 30, v: 1.4, s: 0.55, far: true },
   { y: 0.22, w: 36, v: 1.9, s: 0.82, far: true },
@@ -28,7 +39,20 @@ const CLOUDS = [
   { y: 0.28, w: 40, v: 2.2, s: 0.68, far: false },
 ];
 /** Extra clouds when it rains. */
-const STORM = [{ y: 0.17, w: 40, v: 4.2, s: 0.62, far: false }, { y: 0.3, w: 34, v: 3.6, s: 0.12, far: true }, { y: 0.02, w: 44, v: 3.8, s: 0.87, far: false }];
+const STORM: Cloud[] = [{ y: 0.17, w: 40, v: 4.2, s: 0.62, far: false }, { y: 0.3, w: 34, v: 3.6, s: 0.12, far: true }, { y: 0.02, w: 44, v: 3.8, s: 0.87, far: false }];
+
+/** A seeded cloud for frames bigger than the base one; lower ones only show beside the plot. */
+function extraCloud(i: number, storm: boolean): Cloud {
+  const k = i * 19 + (storm ? 7 : 0);
+  const far = hash(k + 1) < 0.5;
+  return { y: 0.02 + 0.5 * hash(k + 2), w: 22 + Math.round(28 * hash(k + 3)), v: (far ? 1 : 1.8) + 1.2 * hash(k + 4), s: hash(k + 5), far };
+}
+
+/** The hand-placed clouds, plus seeded ones so a wider or taller frame stays as cloudy. */
+export function skyClouds(R: Pick<Raster, 'w' | 'h'>, storm: boolean): Cloud[] {
+  const fill = (base: Cloud[], isStorm: boolean) => [...base, ...Array.from({ length: Math.max(0, perArea(base.length, R) - base.length) }, (_, i) => extraCloud(i, isStorm))];
+  return storm ? [...fill(CLOUDS, false), ...fill(STORM, true)] : fill(CLOUDS, false);
+}
 
 function cloudColours(c: DrawCtx): [string, string] {
   switch (c.theme) {
@@ -64,7 +88,8 @@ function cloud(R: Raster, x: number, y: number, w: number, seed: number, body: s
 }
 
 function moon(R: Raster) {
-  const x = Math.round(R.w * 0.12), y = 34;
+  // Over the plot's top-left, wherever the plot sits in the frame.
+  const x = plotOffset(R).x + Math.round(SCENE_W * 0.12), y = 34;
   circle(R, x, y, 6, '#f4ecc8', y + 7);
   R.rect(x - 2, y - 2, 2, 2, '#ded3a8', 1, true);
   R.rect(x + 2, y + 1, 1, 1, '#ded3a8', 1, true);
@@ -77,7 +102,7 @@ export function drawSky(c: DrawCtx) {
   if (theme === 'night') moon(R);
   const [body, under] = cloudColours(c);
   const bg = THEMES[theme].bg[0];
-  const list = theme === 'rain' ? [...CLOUDS, ...STORM] : CLOUDS;
+  const list = skyClouds(R, theme === 'rain');
   const speed = theme === 'rain' ? 2 : 1;
   for (const far of [true, false]) {
     for (const [i, cl] of list.entries()) {
@@ -217,15 +242,17 @@ function walker(c: DrawCtx, push: Push) {
     const { R, P } = c;
     const feet = P(dx, dy, 0);
     const g = dogGrid(frame, wag);
-    R.rect(feet[0] - 4, feet[1], 9, 1, '#000000', 0.15 * da);
-    R.grid(g, DOG_PAL, feet[0] - 6, feet[1] - g.length + 1, flip, '', da);
+    R.rect(feet[0] - 6, feet[1], 13, 1, '#000000', 0.15 * da);
+    R.grid(g, DOG_PAL, feet[0] - Math.floor(DOG_W / 2), feet[1] - g.length + 1, flip, '', da);
   });
   // The lead, drawn after both of them, sagging when there's slack.
   push(Math.max(w.x + wy + 0.2, dx + dy + 0.1) + 0.01, () => {
     const { R, P } = c;
     const feet = P(w.x, wy, 0), dfeet = P(dx, dy, 0);
     const hand: [number, number] = [feet[0] + (dfeet[0] > feet[0] ? 5 : -6), feet[1] - 5];
-    const collar: [number, number] = [dfeet[0] + (flip ? -2 : 2), dfeet[1] - (sniffing ? 3 : 4)];
+    // The collar cell of the sprite (mirrored when the dog faces left).
+    const left = dfeet[0] - Math.floor(DOG_W / 2), top = dfeet[1] - dogGrid('stand', false).length + 1;
+    const collar: [number, number] = [left + (flip ? DOG_W - 1 - DOG_COLLAR.x : DOG_COLLAR.x), top + DOG_COLLAR.y];
     const sag = Math.max(0, 4 - Math.hypot(collar[0] - hand[0], collar[1] - hand[1]) / 5);
     const mid: [number, number] = [(hand[0] + collar[0]) / 2, (hand[1] + collar[1]) / 2 + sag];
     const la = Math.min(a, da);
@@ -282,14 +309,30 @@ function car(c: DrawCtx, x: number, y: number, dir: number, col: string, a: numb
   plane(R, P, { y: y + 0.74 }, cab + 0.56, cab + 0.97, 8.5, 12, '#bfe3ea', a, dim);
   plane(R, P, { x: cab + 1.05 }, y + 0.14, y + 0.68, 8.5, 12, '#a9d3e0', a, dim);
   for (const wx of [0.3, CAR_LEN - 0.6]) box(R, P, x + wx, y + 0.72, 0, 0.32, 0.1, 4, '#1e1e22', { a });
-  // Lights: head at the front, tail at the back; only the +x end faces us.
-  const end = P(x + CAR_LEN, y + 0.62, 5);
-  R.rect(end[0] - 1, end[1] - 1, 2, 2, dir > 0 ? '#fff1c2' : '#e0475a', a, dim);
+  // Lights: a pair at each end. Only the +x end faces us, so it shows both of its
+  // lamps (heads going right, tails going left); the hidden end's lamps wrap round
+  // the near side as a sliver at that corner.
+  const near = dir > 0 ? HEADLIGHT : TAILLIGHT, far = dir > 0 ? TAILLIGHT : HEADLIGHT;
+  for (const ly of [0.15, 0.62]) {
+    const q = P(x + CAR_LEN, y + ly, 5);
+    // A dark housing so the lamp reads on any paint, the lamp, and a hot spot.
+    R.rect(q[0] - 1, q[1] - 1, 3, 3, LAMP_HOUSING, a);
+    R.rect(q[0] - 1, q[1] - 1, 2, 2, near.lamp, a, dim);
+    R.px(q[0] - 1, q[1] - 1, near.hot, a, dim);
+  }
+  const wrap = P(x + 0.04, y + 0.8, 5);
+  R.rect(wrap[0], wrap[1] - 1, 2, 1, far.lamp, a, dim);
   if (dim && a >= 1) {
     const front = dir > 0 ? P(x + CAR_LEN + 1.2, y + 0.4, 0) : P(x - 1.2, y + 0.4, 0);
     c.lights.push({ x: front[0], y: front[1], r: 34, col: [1, 0.93, 0.72], s: 1 });
+    const back = dir > 0 ? P(x - 0.3, y + 0.4, 2) : P(x + CAR_LEN + 0.3, y + 0.4, 2);
+    c.lights.push({ x: back[0], y: back[1], r: 12, col: [1, 0.3, 0.28], s: 0.6 });
   }
 }
+
+const HEADLIGHT = { lamp: '#fff1c2', hot: '#ffffff' };
+const TAILLIGHT = { lamp: '#e3203a', hot: '#ff9aa6' };
+const LAMP_HOUSING = '#2b2124';
 
 function traffic(c: DrawCtx, push: Push) {
   LANES.forEach((L, li) => {

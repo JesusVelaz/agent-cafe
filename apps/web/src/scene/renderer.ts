@@ -1,6 +1,7 @@
 /**
- * Runs the café: steps the simulation, renders a frame into a 400×360
- * framebuffer, and pushes it to a <canvas> that CSS scales up with
+ * Runs the café: steps the simulation, renders a frame into a framebuffer (at
+ * least SCENE_W×SCENE_H; the stage sizes it to fill its width and height, with the
+ * plot centred), and pushes it to a <canvas> that CSS scales up with
  * `image-rendering: pixelated`. About 15 fps is plenty for pixel art.
  *
  * A timer (not requestAnimationFrame) drives the loop so it keeps ticking in
@@ -38,7 +39,7 @@ const FRAME_MS = 66;
 export class CafeRenderer {
   private canvas: HTMLCanvasElement | null = null;
   private ctx: CanvasRenderingContext2D | null = null;
-  private readonly raster = new Raster(SCENE_W, SCENE_H);
+  private raster = new Raster(SCENE_W, SCENE_H);
   private readonly world = new World();
   private readonly cats = new Cats();
   private timer: ReturnType<typeof setTimeout> | null = null;
@@ -52,8 +53,8 @@ export class CafeRenderer {
 
   mount(host: HTMLElement): void {
     const canvas = document.createElement('canvas');
-    canvas.width = SCENE_W;
-    canvas.height = SCENE_H;
+    canvas.width = this.raster.w;
+    canvas.height = this.raster.h;
     canvas.className = 'pixelated block h-full w-full';
     canvas.setAttribute('role', 'img');
     canvas.setAttribute('aria-label', 'The café: Anthropic agents upstairs, OpenAI agents in the café below');
@@ -65,6 +66,18 @@ export class CafeRenderer {
     this.ctx = canvas.getContext('2d');
     this.last = performance.now();
     this.loop();
+  }
+
+  /** Frame size in scene px (the stage's size over its pixel scale), never below the base frame. */
+  resize(w: number, h: number): void {
+    w = Math.max(SCENE_W, Math.round(w));
+    h = Math.max(SCENE_H, Math.round(h));
+    if (w === this.raster.w && h === this.raster.h) return;
+    this.raster = new Raster(w, h);
+    if (this.canvas) {
+      this.canvas.width = w;
+      this.canvas.height = h;
+    }
   }
 
   destroy(): void {
@@ -110,7 +123,7 @@ export class CafeRenderer {
       floors,
       cats: this.cats.views,
     });
-    this.ctx?.putImageData(new ImageData(this.raster.d, SCENE_W, SCENE_H), 0, 0);
+    this.ctx?.putImageData(new ImageData(this.raster.d, this.raster.w, this.raster.h), 0, 0);
     this.hooks.frame?.(this.hits);
     this.updateHover();
   }
@@ -119,7 +132,7 @@ export class CafeRenderer {
 
   private toScene(e: MouseEvent) {
     const r = this.canvas!.getBoundingClientRect();
-    return { x: ((e.clientX - r.left) / r.width) * SCENE_W, y: ((e.clientY - r.top) / r.height) * SCENE_H };
+    return { x: ((e.clientX - r.left) / r.width) * this.raster.w, y: ((e.clientY - r.top) / r.height) * this.raster.h };
   }
 
   /** Front-most agent under a point (later hits were drawn on top). */

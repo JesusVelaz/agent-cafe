@@ -6,6 +6,7 @@
  * a 4×4 Bayer dither, which gives the stepped "pixel art" light pools. Emissive
  * pixels (windows, bulbs, screens, the outside backdrop) are left untouched.
  */
+import { perArea } from './frame';
 import { hash, rgb, type RGB } from './palette';
 import type { Raster } from './raster';
 
@@ -67,9 +68,9 @@ export function backdrop(R: Raster, theme: ThemeId, t: number, transparent: bool
     }
     R.em.fill(1);
   }
-  if (theme === 'night') for (let i = 0; i < 40; i++) R.px(hash(i * 3) * R.w, hash(i * 7 + 1) * R.h * 0.6, '#fff6d8', 0.35 + 0.35 * Math.sin(t + i), true);
+  if (theme === 'night') for (let i = 0; i < perArea(40, R); i++) R.px(hash(i * 3) * R.w, hash(i * 7 + 1) * R.h * 0.6, '#fff6d8', 0.35 + 0.35 * Math.sin(t + i), true);
   if (theme === 'rain') {
-    for (let i = 0; i < 90; i++) {
+    for (let i = 0; i < perArea(90, R); i++) {
       let x0 = (hash(i * 13) * (R.w + 60) - t * 10) % (R.w + 60);
       if (x0 < 0) x0 += R.w + 60;
       const y0 = (hash(i * 17 + 3) * R.h + t * (160 + hash(i) * 60)) % R.h;
@@ -77,20 +78,20 @@ export function backdrop(R: Raster, theme: ThemeId, t: number, transparent: bool
     }
   }
   if (theme === 'snow') {
-    for (let i = 0; i < 120; i++) {
+    for (let i = 0; i < perArea(120, R); i++) {
       const sx = (hash(i * 13) * R.w + Math.sin(t * 0.8 + i) * 6 + R.w) % R.w;
       const sy = (hash(i * 17 + 3) * R.h + t * (12 + hash(i) * 10)) % R.h;
       const big = hash(i * 5) > 0.7;
       R.rect(sx, sy, big ? 2 : 1, big ? 2 : 1, '#ffffff', 0.9, true);
     }
   }
-  if (theme === 'summer') for (let i = 0; i < 12; i++) R.px((hash(i * 9) * R.w + t * 4) % R.w, (hash(i * 4) * R.h - t * 3 + R.h) % R.h, '#fff4c4', 0.6, true);
+  if (theme === 'summer') for (let i = 0; i < perArea(12, R); i++) R.px((hash(i * 9) * R.w + t * 4) % R.w, (hash(i * 4) * R.h - t * 3 + R.h) % R.h, '#fff4c4', 0.6, true);
 }
 
 /** A few flakes in front of the building for depth. */
 export function frontWeather(R: Raster, theme: ThemeId, t: number): void {
   if (theme !== 'snow') return;
-  for (let i = 0; i < 30; i++) {
+  for (let i = 0; i < perArea(30, R); i++) {
     const sx = (hash(i * 29 + 7) * R.w + Math.sin(t + i) * 5 + R.w) % R.w;
     const sy = (hash(i * 31) * R.h + t * 18) % R.h;
     R.rect(sx, sy, 2, 2, '#ffffff', 0.95, true);

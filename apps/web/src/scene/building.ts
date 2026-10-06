@@ -14,8 +14,10 @@ import type { CatView } from '@/sim/cats';
 import type { Bubble, Pose } from '@/sim/world';
 import { backdrop, frontWeather, grade, type ThemeId } from './atmosphere';
 import { cloudShadows, drawSky, streetLife } from './ambient';
+import { barista } from './barista';
 import { text, textW } from './font';
 import { iso } from './iso';
+import { plotOffset, SCENE_H, SCENE_W } from './frame';
 import { drawStreet } from './outdoor';
 import { K } from './palette';
 import {
@@ -26,9 +28,8 @@ import type { Raster } from './raster';
 import { outfitFor } from './avatar';
 import { agentGrid, agentLook, CAT, CAT_FURS, ICON_PAL, ICONS, type AgentFrame, type CatFrame, type IconName } from './sprites';
 
-export const SCENE_W = 480;
-export const SCENE_H = 400;
-/** Screen position of the plot's back corner: centres the street plot in the frame. */
+export { SCENE_H, SCENE_W };
+/** Screen position of the plot's back corner in a base-size frame: centres the street plot. */
 const ORIGIN = { x: 222, y: 145 };
 
 export interface SceneAgent {
@@ -83,7 +84,8 @@ const TOOL_ICON: Record<string, IconName> = {
 };
 
 export function renderScene(R: Raster, agents: SceneAgent[], o: SceneOptions): AgentHit[] {
-  const P = iso(ORIGIN.x, ORIGIN.y);
+  const off = plotOffset(R);
+  const P = iso(ORIGIN.x + off.x, ORIGIN.y + off.y);
   const c: DrawCtx = { R, P, t: o.t, theme: o.theme, lights: [] };
   const { W, D, H1, UW, UD, H2 } = BUILDING;
   const TOP = H1 + H2;
@@ -157,6 +159,7 @@ export function renderScene(R: Raster, agents: SceneAgent[], o: SceneOptions): A
   }
 
   streetLife(c, (d, f) => front.push({ d, f }));
+  barista(c, (d, f) => front.push({ d, f }));
 
   for (const L of [under, up, front]) {
     L.sort((p, q) => p.d - q.d);
@@ -168,7 +171,7 @@ export function renderScene(R: Raster, agents: SceneAgent[], o: SceneOptions): A
   stringLights(c, [[0, 0, TOP - 2], [4.5, 0, TOP - 2], [UW, 0, TOP - 2]], 3);
 
   cloudShadows(c);
-  if (o.theme === 'summer') c.lights.push({ x: R.w * 0.62, y: R.h * 0.45, r: 120, col: [1, 0.9, 0.6], s: 1.4 });
+  if (o.theme === 'summer') c.lights.push({ x: off.x + SCENE_W * 0.62, y: off.y + SCENE_H * 0.45, r: 120, col: [1, 0.9, 0.6], s: 1.4 });
   grade(R, o.theme, c.lights);
   frontWeather(R, o.theme, o.t);
 
