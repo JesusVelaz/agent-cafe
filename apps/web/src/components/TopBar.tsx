@@ -49,7 +49,9 @@ export function TopBar({ themeChoice, theme, onTheme }: Props) {
   return (
     <header className="flex h-14 items-center gap-6 border-b border-slate-line bg-night-2 px-4">
       <div className="flex items-center gap-2.5">
-        <CupIcon size={28} mood={mood} />
+        <span data-cafe-logo className="flex">
+          <CupIcon size={28} mood={mood} />
+        </span>
         <h1 className="font-display text-[30px] leading-none">
           Agent <span className="text-crema">Café</span>
         </h1>

@@ -112,3 +112,32 @@ export function cupSvg(mood: Mood): string {
 }
 
 export const cupDataUrl = (mood: Mood) => `data:image/svg+xml,${encodeURIComponent(cupSvg(mood))}`;
+
+/** The cup's inside, top to bottom: the rows the first-load fill rises through. */
+const INSIDE_TOP = 6;
+const INSIDE_BOTTOM = 12;
+export const CUP_FILL_ROWS = INSIDE_BOTTOM - INSIDE_TOP + 1;
+const EMPTY = '#262a31';
+
+/**
+ * The cup with nothing in it yet, filled from the bottom to `level` (0–1, in whole
+ * rows) with coffee under a line of crema: the first-load meter. Same outline as the
+ * logo, no face and no steam; it wakes into the logo once full.
+ */
+export function cupFillPixels(level: number): Px[] {
+  const filled = Math.round(Math.min(1, Math.max(0, level)) * CUP_FILL_ROWS);
+  const surface = INSIDE_BOTTOM - filled + 1;
+  const out: Px[] = [];
+  cupRows('working').forEach((row, y) => {
+    if (y < 4) return; // nothing above an empty cup
+    const left = row.indexOf('o');
+    const right = row.indexOf('o', left + 1);
+    [...row].forEach((ch, x) => {
+      if (ch === '.') return;
+      const inside = y >= INSIDE_TOP && y <= INSIDE_BOTTOM && x > left && x < right;
+      if (!inside) out.push({ x, y, fill: CUP_PAL[ch]! });
+      else out.push({ x, y, fill: y < surface ? EMPTY : y === surface ? CUP_PAL.c! : CUP_PAL.r! });
+    });
+  });
+  return out;
+}

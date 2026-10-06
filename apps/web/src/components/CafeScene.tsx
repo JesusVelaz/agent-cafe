@@ -22,6 +22,8 @@ interface Props {
   onFrame?: (hits: Array<AgentHit & { cssX: number; cssY: number }>) => void;
   /** Absolutely positioned layer over the scene, in the same px space as onFrame. */
   overlay?: ReactNode;
+  /** Called once, when the first frame has been drawn at the stage's real size. */
+  onReady?: () => void;
 }
 
 /**
@@ -31,7 +33,7 @@ interface Props {
  * While the stage resizes (the panel sliding) the café holds its scale and stays
  * centred; a new scale is eased into once the stage is still.
  */
-export function CafeScene({ theme, labels = true, reserveBottom = 0, onFrame, overlay }: Props) {
+export function CafeScene({ theme, labels = true, reserveBottom = 0, onFrame, overlay, onReady }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const tipRef = useRef<HTMLDivElement>(null);
@@ -42,8 +44,11 @@ export function CafeScene({ theme, labels = true, reserveBottom = 0, onFrame, ov
   const viewRef = useRef(view);
   const { scale } = view;
   const [hoverId, setHoverId] = useState<string | null>(null);
-  const live = useRef({ theme, labels, scale, onFrame });
-  live.current = { theme, labels, scale, onFrame };
+  const live = useRef({ theme, labels, scale, onFrame, onReady });
+  live.current = { theme, labels, scale, onFrame, onReady };
+  /** Sized to the stage yet, and has that size been drawn (onReady fired)? */
+  const sizedRef = useRef(false);
+  const readyRef = useRef(false);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -68,6 +73,7 @@ export function CafeScene({ theme, labels = true, reserveBottom = 0, onFrame, ov
       const { width, height } = entry!.contentRect;
       if (!sized) {
         sized = true;
+        sizedRef.current = true;
         apply(fitFrame(width, height, reserveBottom));
         return;
       }
@@ -120,6 +126,10 @@ export function CafeScene({ theme, labels = true, reserveBottom = 0, onFrame, ov
         if (tip && h) tip.style.transform = `translate(${h.x * live.current.scale}px, ${(h.y - 10) * live.current.scale}px) translate(-50%, -100%)`;
       },
       frame: (hits) => {
+        if (sizedRef.current && !readyRef.current) {
+          readyRef.current = true;
+          live.current.onReady?.();
+        }
         const cb = live.current.onFrame;
         if (cb) cb(hits.map((h) => ({ ...h, cssX: h.headX * live.current.scale, cssY: h.headY * live.current.scale })));
       },
