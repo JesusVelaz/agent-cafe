@@ -2,13 +2,15 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { THEMES, type ThemeId } from '@/scene/atmosphere';
+import { fitFrame, fitScale, frameAt } from '@/scene/frame';
 import { CafeRenderer, SCENE_H, SCENE_W, type AgentHit } from '@/scene/renderer';
 import { activityLabel, deriveActivity } from '@/sim/activity';
 import { useCafe } from '@/store/cafe';
 import { activeTaskFor, latestTaskFor } from '@/store/reduce';
 
-/** The biggest frame worth drawing (only a tiny scale on a huge stage gets near it). */
-const MAX_FRAME = { w: 2560, h: 1600 };
+/** How long the stage must hold still before the café takes a new scale, and how long it eases into it. */
+const SETTLE_MS = 160;
+const ZOOM_MS = 220;
 
 interface Props {
   theme: ThemeId;
@@ -26,13 +28,18 @@ interface Props {
  * The café canvas. The plot is sized to fit (SCENE_W×SCENE_H scaled up by a whole
  * number when it fits, for crisp pixels; fractionally only on small screens), and the
  * frame around it fills the whole stage at that scale, so the sky runs edge to edge.
+ * While the stage resizes (the panel sliding) the café holds its scale and stays
+ * centred; a new scale is eased into once the stage is still.
  */
 export function CafeScene({ theme, labels = true, reserveBottom = 0, onFrame, overlay }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const tipRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<CafeRenderer | null>(null);
   const [view, setView] = useState({ scale: 2, w: SCENE_W, h: SCENE_H });
+  /** The latest size, ahead of React (the panel animation resizes the stage every frame). */
+  const viewRef = useRef(view);
   const { scale } = view;
   const [hoverId, setHoverId] = useState<string | null>(null);
   const live = useRef({ theme, labels, scale, onFrame });
@@ -41,20 +48,56 @@ export function CafeScene({ theme, labels = true, reserveBottom = 0, onFrame, ov
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
+    // Applied straight from the observer, before this frame paints, rather than after
+    // React re-renders: the stage, the scale the callouts use and the redrawn canvas
+    // all change together.
+    const apply = (v: typeof view) => {
+      viewRef.current = v;
+      live.current.scale = v.scale;
+      const stage = stageRef.current;
+      if (stage) {
+        stage.style.width = `${v.w * v.scale}px`;
+        stage.style.height = `${v.h * v.scale}px`;
+      }
+      rendererRef.current?.resize(v.w, v.h);
+      setView(v);
+    };
+    let sized = false;
+    let settle: ReturnType<typeof setTimeout> | undefined;
     const ro = new ResizeObserver(([entry]) => {
       const { width, height } = entry!.contentRect;
-      const f = Math.min((width - 16) / SCENE_W, (height - 16 - reserveBottom) / SCENE_H);
-      const s = f >= 2 ? Math.floor(f) : Math.max(0.25, f);
-      const fit = (px: number, base: number, max: number) => Math.min(max, Math.max(base, Math.ceil(px / s)));
-      setView({ scale: s, w: fit(width, SCENE_W, MAX_FRAME.w), h: fit(height, SCENE_H, MAX_FRAME.h) });
+      if (!sized) {
+        sized = true;
+        apply(fitFrame(width, height, reserveBottom));
+        return;
+      }
+      // While the stage is being resized (the panel sliding, a window drag) the café
+      // keeps its scale and stays put; only the sky around it grows or shrinks. A scale
+      // changing every frame makes pixel art crawl.
+      apply(frameAt(width, height, viewRef.current.scale));
+      clearTimeout(settle);
+      settle = setTimeout(() => {
+        const from = viewRef.current.scale;
+        const to = fitScale(width, height, reserveBottom);
+        if (to === from) return;
+        // Once it's still, take the scale that fits, easing into it rather than popping.
+        apply(frameAt(width, height, to));
+        const stage = stageRef.current;
+        if (stage && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+          // Smooth sampling while it zooms (crisp pixels would shimmer at in-between scales), crisp again once it lands.
+          const canvas = stage.querySelector('canvas');
+          if (canvas) canvas.style.imageRendering = 'auto';
+          const zoom = stage.animate([{ transform: `scale(${from / to})` }, { transform: 'scale(1)' }], { duration: ZOOM_MS, easing: 'cubic-bezier(.2,.8,.2,1)' });
+          zoom.onfinish = () => canvas?.style.removeProperty('image-rendering');
+        }
+      }, SETTLE_MS);
     });
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => {
+      ro.disconnect();
+      clearTimeout(settle);
+    };
   }, [reserveBottom]);
-
-  useEffect(() => {
-    rendererRef.current?.resize(view.w, view.h);
-  }, [view.w, view.h]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -82,6 +125,7 @@ export function CafeScene({ theme, labels = true, reserveBottom = 0, onFrame, ov
       },
     });
     r.mount(host);
+    r.resize(viewRef.current.w, viewRef.current.h);
     rendererRef.current = r;
     return () => {
       r.destroy();
@@ -96,7 +140,7 @@ export function CafeScene({ theme, labels = true, reserveBottom = 0, onFrame, ov
       className="relative flex min-h-0 min-w-0 items-center justify-center overflow-hidden"
       style={{ background: `linear-gradient(${bg0}, ${bg1})`, paddingBottom: reserveBottom }}
     >
-      <div className="relative shrink-0" style={{ width: view.w * scale, height: view.h * scale }} data-scene-stage>
+      <div ref={stageRef} className="relative shrink-0" style={{ width: view.w * scale, height: view.h * scale }} data-scene-stage>
         <div ref={hostRef} className="absolute inset-0" />
         <div ref={tipRef} className="pointer-events-none absolute left-0 top-0 z-10" hidden={!hoverId}>
           {hoverId && <AgentTooltip id={hoverId} />}

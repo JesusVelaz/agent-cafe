@@ -68,7 +68,12 @@ export class CafeRenderer {
     this.loop();
   }
 
-  /** Frame size in scene px (the stage's size over its pixel scale), never below the base frame. */
+  /**
+   * Frame size in scene px (the stage's size over its pixel scale), never below the
+   * base frame. Resizing a canvas wipes it, so the new frame is drawn straight away:
+   * called before paint (from a ResizeObserver), the stage never shows a blank or
+   * stretched frame while the panel slides open or shut.
+   */
   resize(w: number, h: number): void {
     w = Math.max(SCENE_W, Math.round(w));
     h = Math.max(SCENE_H, Math.round(h));
@@ -77,6 +82,7 @@ export class CafeRenderer {
     if (this.canvas) {
       this.canvas.width = w;
       this.canvas.height = h;
+      this.draw();
     }
   }
 
@@ -103,10 +109,14 @@ export class CafeRenderer {
     const now = performance.now();
     const dt = Math.min((now - this.last) / 1000, 0.25);
     this.last = now;
-    const s = this.hooks.read();
-    this.world.update(dt, s.data, Date.now());
+    this.world.update(dt, this.hooks.read().data, Date.now());
     this.cats.update(dt);
+    this.draw();
+  }
 
+  /** Render the current state (no simulation step) and push it to the canvas. */
+  private draw() {
+    const s = this.hooks.read();
     const agents: SceneAgent[] = this.world.agents.map((v) => ({
       id: v.id, name: v.name, providerId: v.providerId, x: v.x, y: v.y, face: v.face,
       pose: v.pose, t: v.t, bubble: v.bubble, spriteSeed: v.spriteSeed, demo: v.demo,
