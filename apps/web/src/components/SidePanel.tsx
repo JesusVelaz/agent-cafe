@@ -245,7 +245,6 @@ function Board() {
   const now = useNow(1000);
   const attention = needsAttention(state, now, state.dismissed, DEFAULTS.stuckAfterSec);
   const groups = projectGroups(state);
-  const working = groups.reduce((n, g) => n + g.working, 0);
   const [folded, setFolded] = useFolded();
 
   return (
@@ -260,11 +259,7 @@ function Board() {
       )}
 
       <section aria-labelledby="b-threads">
-        <SectionHeading
-          id="b-threads"
-          tone="var(--color-mint)"
-          action={<span className="text-[12px] text-chalk-faint">{working > 0 ? `${working} working` : 'All quiet'}</span>}
-        >
+        <SectionHeading id="b-threads" tone="var(--color-mint)">
           THREADS
         </SectionHeading>
         {groups.length === 0 && <p className="px-2 py-1 text-[13px] text-chalk-faint">No threads yet. Send a task below to start one.</p>}

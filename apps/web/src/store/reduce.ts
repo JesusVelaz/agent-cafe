@@ -403,3 +403,27 @@ export function needsAttention(
   approvals.sort((a, b) => a.task.pendingApproval!.requestedAt.localeCompare(b.task.pendingApproval!.requestedAt));
   return [...approvals, ...stuck, ...failed];
 }
+
+export type CrewState = 'needs' | 'working' | 'queued' | 'idle';
+const CREW_ORDER: Record<CrewState, number> = { needs: 0, working: 1, queued: 2, idle: 3 };
+
+/**
+ * One state per agent for the top bar's pips: needs you (given), else working, else
+ * waiting on a queued task, else idle. Most urgent first, oldest agent first within each.
+ */
+export function crewStates(s: Pick<CafeData, 'agents' | 'tasks'>, needYou: Iterable<string>): { agentId: string; state: CrewState }[] {
+  const needs = new Set(needYou);
+  const running = new Set<string>();
+  const queued = new Set<string>();
+  for (const t of Object.values(s.tasks)) {
+    if (t.status === 'running' || t.status === 'tool_wait') running.add(t.agentId);
+    else if (t.status === 'queued') queued.add(t.agentId);
+  }
+  return Object.values(s.agents)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+    .map((a) => ({
+      agentId: a.id,
+      state: (needs.has(a.id) ? 'needs' : running.has(a.id) ? 'working' : queued.has(a.id) ? 'queued' : 'idle') as CrewState,
+    }))
+    .sort((a, b) => CREW_ORDER[a.state] - CREW_ORDER[b.state]);
+}

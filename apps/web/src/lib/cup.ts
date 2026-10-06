@@ -1,27 +1,73 @@
 /**
- * The Agent Café mark: a pixel coffee cup on a 16×16 grid. One definition drives the
- * top-bar logo, the static favicon (app/icon.svg) and the live favicon, which steams
- * while agents work and carries a coral dot when one needs you.
- *   o outline · w cup · c crema · r coffee · b saucer · s steam (frame A) · t steam (frame B)
+ * The Agent Café mark: a pixel coffee cup with a face, on a 16×16 grid. Its mood is the
+ * café's: dozing when nothing runs, awake and steaming while agents work, wide-eyed
+ * with a coral dot when one needs you. One definition drives the top-bar logo, the
+ * static favicon (app/icon.svg) and the live favicon.
+ *   o outline · w cup · c crema · r coffee · b saucer · e face · p cheek
+ *   s steam (frame A) · t steam (frame B) · z snore · k alert dot
  */
-export const CUP: readonly string[] = [
-  '................',
-  '....ts.ts.......',
-  '....st.st.......',
-  '....ts.ts.......',
-  '................',
-  '..oooooooooo....',
-  '..ocrrrrrrco....',
-  '..owccccccwoooo.',
-  '..owwwwwwwwo..o.',
-  '..owwwwwwwwo..o.',
-  '..owwwwwwwwoooo.',
-  '...owwwwwwo.....',
-  '...owwwwwwo.....',
-  '.oooooooooooo...',
-  '..obbbbbbbbo....',
-  '................',
-];
+export type Mood = 'quiet' | 'working' | 'alert';
+
+/** What floats above the cup (rows 0–3). */
+const ABOVE: Record<Mood, readonly string[]> = {
+  quiet: [
+    '...........zzz..',
+    '............z...',
+    '...........zzz..',
+    '................',
+  ],
+  working: [
+    '................',
+    '....ts.ts.......',
+    '....st.st.......',
+    '....ts.ts.......',
+  ],
+  alert: [
+    '............kk..',
+    '...........kkkk.',
+    '...........kkkk.',
+    '............kk..',
+  ],
+};
+
+/** The face on the cup's body (rows 8–12). */
+const FACE: Record<Mood, readonly string[]> = {
+  quiet: [
+    '..owwwwwwwwo..o.',
+    '..oweewweewo..o.',
+    '..owpwwwwpwoooo.',
+    '...owweewwo.....',
+    '...owwwwwwo.....',
+  ],
+  working: [
+    '..owwewwewwo..o.',
+    '..owwewwewwo..o.',
+    '..owpwwwwpwoooo.',
+    '...owewwewo.....',
+    '...owweewwo.....',
+  ],
+  alert: [
+    '..oweewweewo..o.',
+    '..oweewweewo..o.',
+    '..owpwwwwpwoooo.',
+    '...owweewwo.....',
+    '...owweewwo.....',
+  ],
+};
+
+export function cupRows(mood: Mood): readonly string[] {
+  return [
+    ...ABOVE[mood],
+    '................',
+    '..oooooooooo....',
+    '..ocrrrrrrco....',
+    '..owccccccwoooo.',
+    ...FACE[mood],
+    '.oooooooooooo...',
+    '..obbbbbbbbo....',
+    '................',
+  ];
+}
 
 export const CUP_PAL: Record<string, string> = {
   o: '#2b1d17',
@@ -29,11 +75,13 @@ export const CUP_PAL: Record<string, string> = {
   c: '#c9975f',
   r: '#6b3f22',
   b: '#b08a5c',
+  e: '#2b1d17',
+  p: '#e8a08a',
   s: '#cfd6e6',
   t: '#cfd6e6',
+  z: '#a3a9b5',
+  k: '#ff8a6b',
 };
-
-export const BADGE = '#ff8a6b';
 
 export interface Px {
   x: number;
@@ -43,9 +91,9 @@ export interface Px {
   steam?: 's' | 't';
 }
 
-export function cupPixels(): Px[] {
+export function cupPixels(mood: Mood): Px[] {
   const out: Px[] = [];
-  CUP.forEach((row, y) =>
+  cupRows(mood).forEach((row, y) =>
     [...row].forEach((ch, x) => {
       if (ch === '.') return;
       out.push({ x, y, fill: CUP_PAL[ch]!, ...(ch === 's' || ch === 't' ? { steam: ch } : {}) });
@@ -54,14 +102,13 @@ export function cupPixels(): Px[] {
   return out;
 }
 
-/** A standalone SVG (for favicons): the cup on a transparent background, optional steam and badge. */
-export function cupSvg({ steam = false, badge = false }: { steam?: boolean; badge?: boolean } = {}): string {
-  const rects = cupPixels()
-    .filter((p) => !p.steam || (steam && p.steam === 's'))
+/** A standalone SVG (for favicons): the cup in that mood on a transparent background, steam frozen on frame A. */
+export function cupSvg(mood: Mood): string {
+  const rects = cupPixels(mood)
+    .filter((p) => p.steam !== 't')
     .map((p) => `<rect x="${p.x}" y="${p.y}" width="1" height="1" fill="${p.fill}"/>`)
     .join('');
-  const dot = badge ? `<rect x="11" y="0" width="5" height="5" fill="${BADGE}"/>` : '';
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" shape-rendering="crispEdges">${rects}${dot}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" shape-rendering="crispEdges">${rects}</svg>`;
 }
 
-export const cupDataUrl = (o: { steam?: boolean; badge?: boolean }) => `data:image/svg+xml,${encodeURIComponent(cupSvg(o))}`;
+export const cupDataUrl = (mood: Mood) => `data:image/svg+xml,${encodeURIComponent(cupSvg(mood))}`;
