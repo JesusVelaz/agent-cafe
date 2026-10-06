@@ -110,10 +110,11 @@ function cloud(R: Raster, x: number, y: number, w: number, seed: number, body: s
 function moon(R: Raster) {
   // Over the plot's top-left, wherever the plot sits in the frame.
   const x = plotOffset(R).x + Math.round(SCENE_W * 0.12), y = 34;
-  circle(R, x, y, 6, '#f4ecc8', y + 7);
-  R.rect(x - 2, y - 2, 2, 2, '#ded3a8', 1, true);
-  R.rect(x + 2, y + 1, 1, 1, '#ded3a8', 1, true);
-  R.rect(x - 1, y + 3, 2, 1, '#ded3a8', 1, true);
+  circle(R, x, y, 8, '#f4ecc8', y + 9);
+  R.rect(x - 3, y - 3, 3, 2, '#ded3a8', 1, true);
+  R.rect(x + 3, y + 1, 2, 1, '#ded3a8', 1, true);
+  R.rect(x - 1, y + 4, 2, 1, '#ded3a8', 1, true);
+  R.px(x + 2, y - 5, '#ded3a8', 1, true);
 }
 
 /** Moon, clouds, a passing flock and the odd plane. Drawn over the backdrop, behind the café. */
