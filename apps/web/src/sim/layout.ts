@@ -61,6 +61,7 @@ export type PropKind =
   | 'aframe'
   | 'roundTable'
   | 'chair'
+  | 'officeChair'
   | 'plant'
   | 'bigPlant'
   | 'rug'
@@ -156,6 +157,7 @@ const P = (kind: PropKind, x: number, y: number, w: number, d: number, solid: bo
 });
 const S = (x: number, y: number, face: Dir): Spot => ({ x, y, face });
 const chair = (x: number, y: number, face: Dir) => P('chair', x - 0.22, y - 0.22, 0.44, 0.44, false, { face });
+const officeChair = (x: number, y: number) => P('officeChair', x - 0.22, y - 0.22, 0.44, 0.44, false, { face: 'y+' });
 const table = (x: number, y: number) => P('roundTable', x - 0.5, y - 0.5, 1, 1, true);
 
 const { H1, UW, UD } = BUILDING;
@@ -179,7 +181,7 @@ export const GROUND: FloorLayout = {
     // Counter and back bar.
     P('backbar', 9.4, 0, 4.6, 0.6, true),
     P('cafeCounter', 9.6, 2.2, 4.2, 0.8, true),
-    P('bigPlant', 13.35, 4.1, 0.4, 0.4, true),
+    P('bigPlant', 13.4, 1.15, 0.4, 0.4, true), // behind the counter, clear of the register
     // Lounge.
     P('rug', 0.7, 1.4, 4.4, 3.8, false),
     P('sofa', 0, 1.7, 0.6, 3.2, false), // seats are on it; against the wall it never blocks a route
@@ -283,7 +285,7 @@ export const UPSTAIRS: FloorLayout = {
     P('desk', 1.3, 3.2, 1.8, 0.7, true, { opts: { lamp: true } }),
     P('desk', 4.0, 3.2, 1.8, 0.7, true),
     P('desk', 6.7, 3.2, 1.8, 0.7, true, { opts: { lamp: true } }),
-    chair(2.2, 2.4, 'y+'), chair(4.9, 2.4, 'y+'), chair(7.6, 2.4, 'y+'),
+    officeChair(2.2, 2.4), officeChair(4.9, 2.4), officeChair(7.6, 2.4),
     P('bookshelf', 2.2, 0, 2.2, 0.45, true, { face: 'y+', opts: { h: 44 } }),
     P('archive', 0, 4.4, 0.45, 1.5, true, { face: 'x+', opts: { h: 32 } }),
     table(5.0, 5.2), chair(4.2, 5.2, 'x+'), chair(5.8, 5.2, 'x-'),

@@ -187,12 +187,70 @@ export const CAT_FURS: ReadonlyArray<Record<string, string>> = [
   { o: K.ink, k: '#e3924a', d: '#bf6d2e', w: '#f7e6c8', y: '#6aa35a', n: '#d9706a' },
   { o: K.ink, k: '#9aa0aa', d: '#767c87', w: '#e8eaee', y: '#f2c14e', n: '#d98a8a' },
 ];
-export const PLANT_BIG: Grid = ['....L.l....', '..lLl.lLl..', '.lLllLllLl.', 'lLl.lLl.lLl', '.lLlllLllL.', 'lLllL.lLlLl', '.llLlLllLl.', '..lLlllLl..', '...lLlLl...', '....lLl....', '.....L.....'];
 export const PLANT_SMALL: Grid = ['.l.L.', 'lLlLl', '.lLl.', '..L..'];
 export const PLANT_HANG: Grid = ['.lLlLl.', 'lLlLlLl', 'l.L.l.L', 'L.l...l', 'l.....L', 'L......', 'l......'];
 export const PLANT_PAL = { l: K.leaf, L: K.leafD };
+/** Fiddle-leaf fig (13×15): g highlight · l leaf · L dark leaf · t stem. */
+export const FIG: Grid = [
+  '.....gLg.....',
+  '...glLLlg....',
+  '..gLLlLLLl...',
+  '..lLl.lLLg.g.',
+  '.g.gLlLl.glLg',
+  'glLlLL.LllLLl',
+  '.lLLlg.lLLLl.',
+  '..lLl..glLl..',
+  '.gLlLg..t....',
+  'glLLLl..t.gLg',
+  '.lLLl..ttlLLl',
+  '..gl...t.lLl.',
+  '.......t.....',
+  '......tt.....',
+  '......t......',
+];
+export const FIG_PAL = { g: '#9fd07a', l: K.leaf, L: '#3f7a3a', t: '#6b4a33' };
+/** Trailing pothos (7×7) for hanging pots and shelf tops. */
+export const POTHOS: Grid = ['.gLlLg.', 'gLlLlLg', 'L.lLl.L', 'l..L..l', 'L..l..g', 'g..L...', '...g...'];
+export const POTHOS_PAL = { g: '#9fd07a', l: K.leaf, L: '#3f7a3a' };
 export const CLOCK: Grid = ['..kkkkk..', '.kwwwwwk.', 'kwwwkwwwk', 'kwwwkwwwk', 'kwwwkkwwk', 'kwwwwwwwk', '.kwwwwwk.', '..kkkkk..'];
 export const CLOCK_PAL = { k: K.ink, w: '#fbf6e8' };
+/** The clock without hands; the hands are drawn from the real time. */
+export const CLOCK_FACE: Grid = ['..kkkkk..', '.kwwwwwk.', 'kwwwwwwwk', 'kwwwwwwwk', 'kwwwwwwwk', 'kwwwwwwwk', '.kwwwwwk.', '..kkkkk..'];
+
+// ── Ambient critters ──
+/** A distant bird, wings up then down. */
+export const BIRD: readonly Grid[] = [['k...k', '.k.k.', '..k..'], ['.....', 'kk.kk', '..k..']];
+/** Side-on pigeon facing right: standing, then pecking. g body · G tail · h head · b beak · o feet. */
+export const PIGEON: readonly Grid[] = [
+  ['....hh.', '.gggghb', 'Gggggg.', '..o.o..'],
+  ['.......', '.gggg..', 'Gggggh.', '..o.ohb'],
+];
+export const PIGEON_PAL = { g: '#9aa0ab', G: '#6f7480', h: '#5c6a7a', b: '#e0a84a', o: '#c46b6b' };
+/**
+ * A beagle-ish dog, side-on facing right (13×9), built like the agents: a body
+ * (head up, or down sniffing) plus legs plus a wagging tail.
+ *   o outline · k tan fur · d dark patch and ears · w white chest and tail tip · e eye · n nose
+ */
+export type DogFrame = 'stand' | 'strideA' | 'strideB' | 'sniff';
+const DOG_BODY = {
+  up: ['.........ooo.', '........okkko', '........dkeko', '...ooooodkkkn', '..okkkkkkkkwo', '..okkdddkkwo.', '..okkkkkkkwo.'],
+  sniff: ['.............', '.............', '.............', '...ooooo.....', '..okkkkkooo..', '..okkdddkdkko', '..okkkkkkdeko'],
+};
+const DOG_LEGS = {
+  stand: ['...kk...kk...', '...oo...oo...'],
+  strideA: ['..k..k.k..k..', '..o..o.o..o..'],
+  strideB: ['...k.k..k.k..', '...o.o..o.o..'],
+};
+export function dogGrid(frame: DogFrame, wag: boolean): Grid {
+  const rows = [...(frame === 'sniff' ? DOG_BODY.sniff : DOG_BODY.up), ...DOG_LEGS[frame === 'sniff' ? 'stand' : frame]];
+  if (frame === 'sniff') setPx(rows, 7, 12, 'n'); // nose to the ground
+  const tail: Array<[number, number, string]> = wag ? [[1, 1, 'w'], [2, 1, 'k'], [3, 2, 'k']] : [[2, 0, 'w'], [3, 1, 'k'], [3, 2, 'k']];
+  for (const [r, c, ch] of tail) setPx(rows, frame === 'sniff' ? r + 1 : r, c, ch);
+  return rows;
+}
+export const DOG_PAL = { o: K.ink, k: '#c98f55', d: '#7a4a2a', w: '#f3ead8', e: '#1e1512', n: '#1e1512' };
+/** Butterfly, wings open then closed. */
+export const BUTTERFLY: readonly Grid[] = [['w.w', '.k.'], ['.w.', '.k.']];
 /** Tree canopy (15×13): L dark leaf · l leaf · g highlight. */
 export const TREE: Grid = [
   '.....LLlL......',

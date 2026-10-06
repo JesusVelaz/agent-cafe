@@ -107,12 +107,29 @@ function tree(c: DrawCtx, x: number, y: number) {
   const dark = shade(base, -0.28);
   const light = shade(base, 0.22);
   const parts: Array<[number, number, number]> = [[-9, 4, 9], [9, 4, 9], [0, 6, 10], [-5, -5, 9], [6, -4, 9], [0, -10, 8]];
-  for (const [dx, dy, r] of parts) blob(c, q[0] + dx, q[1] + dy + 2, r, dark);
-  for (const [dx, dy, r] of parts) blob(c, q[0] + dx - 1, q[1] + dy, r - 2, base);
-  blob(c, q[0] - 4, q[1] - 9, 4, light);
-  blob(c, q[0] + 5, q[1] - 4, 3, light);
-  if (snowy(c)) for (const [dx, dy, r] of parts.slice(3)) blob(c, q[0] + dx - 1, q[1] + dy - r + 3, r - 3, '#ffffff');
+  // The upper canopy leans with the breeze, a pixel either way.
+  const sway = Math.round(Math.sin(c.t * 1.1 + x * 1.7) * 1.2);
+  const lean = (dy: number) => (dy < 0 ? sway : 0);
+  for (const [dx, dy, r] of parts) blob(c, q[0] + dx + lean(dy), q[1] + dy + 2, r, dark);
+  for (const [dx, dy, r] of parts) blob(c, q[0] + dx - 1 + lean(dy), q[1] + dy, r - 2, base);
+  blob(c, q[0] - 4 + sway, q[1] - 9, 4, light);
+  blob(c, q[0] + 5 + sway, q[1] - 4, 3, light);
+  if (snowy(c)) for (const [dx, dy, r] of parts.slice(3)) blob(c, q[0] + dx - 1 + sway, q[1] + dy - r + 3, r - 3, '#ffffff');
+  if (!snowy(c)) fallingLeaves(c, x, y, q[0], q[1], dark, base);
   if (theme === 'summer') for (let i = 0; i < 5; i++) R.px(q[0] - 8 + hash(i * 7) * 16, q[1] - 8 + hash(i * 3) * 14, '#f5a3c0');
+}
+
+/** Now and then a leaf lets go and drifts to the ground. */
+function fallingLeaves(c: DrawCtx, x: number, y: number, qx: number, qy: number, dark: string, base: string) {
+  const ground = c.P(x, y, 0)[1] + 3;
+  for (let i = 0; i < 3; i++) {
+    const per = 6.5 + i * 2.1, tt = c.t + x * 3 + i * 2.9, k = Math.floor(tt / per), ph = tt - k * per;
+    if (ph > 5.5) continue;
+    const lx = qx - 9 + hash(k * 13 + i * 7) * 18 + Math.sin(ph * 2.4) * 3 + ph * 2;
+    const ly = Math.min(qy + ph * 7, ground);
+    const a = ly >= ground ? Math.max(0, 1 - (ph - (ground - qy) / 7) / 1.2) : 1;
+    if (a > 0) c.R.rect(lx, ly, 2, 1, i % 2 ? dark : (c.theme === 'summer' ? base : K.amber), a);
+  }
 }
 
 function bench(c: DrawCtx, p: Prop) {
@@ -134,7 +151,9 @@ function parasolTable(c: DrawCtx, x: number, y: number) {
   box(R, P, x - 0.15, y + 0.05, z + 11, 0.13, 0.13, 3, K.white, { line: K.metalD });
   bistroChair(c, x + 0.85, y, z, 'x-');
   box(R, P, x - 0.03, y - 0.03, z + 11, 0.06, 0.06, 25, '#e9dcc3');
-  const top = P(x, y, z + 38);
+  const flutter = Math.round(Math.sin(c.t * 1.6 + y * 2) * 0.8);
+  const top0 = P(x, y, z + 38);
+  const top: Pt2 = [top0[0] + flutter, top0[1]];
   // Striped canopy.
   const pts = (r: number): Pt2[] => Array.from({ length: 8 }, (_, i) => {
     const a = (i / 8) * Math.PI * 2;
