@@ -57,45 +57,49 @@ export function SettingsDialog({
         if (e.target === e.currentTarget) onClose(); // click on the backdrop
       }}
       aria-label="Settings"
-      className="m-auto w-[min(760px,calc(100vw-2rem))] rounded-2xl border border-slate-line bg-night-2 p-0 text-chalk shadow-[0_30px_80px_rgba(0,0,0,.55)] transition-[opacity,scale] duration-200 backdrop:bg-black/50 backdrop:backdrop-blur-[2px] starting:scale-95 starting:opacity-0"
+      className="m-0 h-dvh max-h-none w-full max-w-none bg-night-2 p-0 text-chalk shadow-[0_30px_80px_rgba(0,0,0,.55)] transition-[opacity,scale] duration-200 backdrop:bg-black/50 backdrop:backdrop-blur-[2px] starting:scale-95 starting:opacity-0 sm:m-auto sm:h-fit sm:max-h-[calc(100%-2rem)] sm:w-[min(760px,calc(100vw-2rem))] sm:rounded-2xl sm:border sm:border-slate-line"
     >
-      <div className="grid h-[min(560px,calc(100dvh-4rem))] grid-cols-[180px_minmax(0,1fr)]">
-        <nav aria-label="Settings sections" className="flex flex-col gap-0.5 border-r border-slate-line p-3">
-          <h2 className="px-2.5 pb-3 pt-1 font-display text-[26px] font-normal leading-none">Settings</h2>
-          {SECTIONS.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              aria-current={section === s.id ? 'page' : undefined}
-              onClick={() => setSection(s.id)}
-              className={`rounded-lg px-2.5 py-2 text-left text-[13px] ${section === s.id ? 'bg-slate text-chalk' : 'text-chalk-dim hover:bg-slate hover:text-chalk'}`}
-            >
-              {s.label}
-            </button>
-          ))}
+      {/* Phones get the whole screen: a header with the sections as tabs, then the section below. */}
+      <div className="flex h-full flex-col sm:grid sm:h-[min(560px,calc(100dvh-4rem))] sm:grid-cols-[180px_minmax(0,1fr)]">
+        <nav aria-label="Settings sections" className="shrink-0 border-b border-slate-line sm:border-b-0 sm:border-r sm:p-3">
+          <h2 className="px-4 pb-2 pr-14 pt-4 font-display text-[26px] font-normal leading-none sm:px-2.5 sm:pb-3 sm:pt-1">Settings</h2>
+          <div className="scroll-chalk flex gap-1 overflow-x-auto px-3 pb-2 sm:flex-col sm:gap-0.5 sm:overflow-visible sm:p-0">
+            {SECTIONS.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                aria-current={section === s.id ? 'page' : undefined}
+                onClick={() => setSection(s.id)}
+                className={`shrink-0 rounded-lg px-3 py-2 text-left text-[13px] sm:px-2.5 ${section === s.id ? 'bg-slate text-chalk' : 'text-chalk-dim hover:bg-slate hover:text-chalk'}`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
         </nav>
-        <div className="scroll-chalk relative min-h-0 overflow-y-auto p-6">
-          <button
-            type="button"
-            aria-label="Close settings"
-            onClick={onClose}
-            className="absolute right-3 top-3 grid size-9 place-items-center rounded-lg text-chalk-dim hover:bg-slate hover:text-chalk"
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden><path d="M3 3l8 8M11 3l-8 8" /></svg>
-          </button>
+        <div className="scroll-chalk min-h-0 flex-1 overflow-y-auto p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-6">
           {section === 'general' && <General themeChoice={themeChoice} theme={theme} onTheme={onTheme} />}
           {section === 'agents' && <Agents />}
           {section === 'providers' && <Providers active={open} />}
           {section === 'projects' && <Projects />}
         </div>
       </div>
+      {/* On the dialog, not in the scrolling pane, so it stays put while a long section scrolls. */}
+      <button
+        type="button"
+        aria-label="Close settings"
+        onClick={onClose}
+        className="absolute right-3 top-3 grid size-9 place-items-center rounded-lg bg-night-2 text-chalk-dim hover:bg-slate hover:text-chalk"
+      >
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden><path d="M3 3l8 8M11 3l-8 8" /></svg>
+      </button>
     </dialog>
   );
 }
 
 function Heading({ title, children }: { title: string; children?: ReactNode }) {
   return (
-    <div className="mb-5 pr-10">
+    <div className="mb-5 sm:pr-10">
       <h3 className="text-[18px] font-semibold">{title}</h3>
       {children && <p className="mt-1 text-[13px] text-chalk-dim">{children}</p>}
     </div>
@@ -104,7 +108,7 @@ function Heading({ title, children }: { title: string; children?: ReactNode }) {
 
 function Row({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-6 border-b border-slate-line py-4 last:border-b-0">
+    <div className="flex items-center justify-between gap-4 border-b border-slate-line py-4 last:border-b-0">
       <div className="min-w-0">
         <p className="text-[13px] font-medium">{label}</p>
         {hint && <p className="mt-0.5 text-[12px] text-chalk-faint">{hint}</p>}
@@ -125,7 +129,7 @@ function General({ themeChoice, theme, onTheme }: { themeChoice: ThemeChoice; th
       <div className="border-b border-slate-line pb-4">
         <p className="text-[13px] font-medium">Café theme</p>
         <p className="mt-0.5 text-[12px] text-chalk-faint">Auto follows your local time and season.</p>
-        <div role="radiogroup" aria-label="Café theme" className="mt-3 grid grid-cols-3 gap-2">
+        <div role="radiogroup" aria-label="Café theme" className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
           {choices.map((c) => (
             <button
               key={c}
@@ -237,7 +241,7 @@ function AgentRow({ agent }: { agent: AgentDTO }) {
 
   return (
     <div className="rounded-xl border border-slate-line bg-slate">
-      <div className="flex items-center gap-3 p-3">
+      <div className="flex flex-wrap items-center gap-3 p-3">
         <button
           type="button"
           aria-label={`Change ${agent.name}'s look`}
@@ -266,15 +270,15 @@ function AgentRow({ agent }: { agent: AgentDTO }) {
               setName(agent.name);
             }
           }}
-          className="h-9 w-40 min-w-0 rounded-lg border border-transparent bg-transparent px-2 font-display text-[22px] leading-none text-chalk outline-none hover:border-slate-line focus:border-accent focus:bg-night-2"
+          className="h-9 min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-2 font-display text-[22px] leading-none text-chalk outline-none hover:border-slate-line focus:border-accent focus:bg-night-2 sm:w-40 sm:flex-none"
         />
-        {/* The same list as the composer's model picker; agents stay on their own floor. */}
-        <div className="min-w-0 flex-1">
+        {/* The same list as the composer's model picker; agents stay on their own floor. On phones it takes its own line. */}
+        <div className="min-w-0 basis-full sm:flex-1 sm:basis-0">
           <Popover
             label={`${agent.name}'s model`}
             side="auto"
             align="end"
-            className="w-[320px]"
+            className="w-[min(320px,calc(100vw-1rem))]"
             trigger={({ open, toggle }) => (
               <button
                 type="button"
@@ -311,7 +315,7 @@ function AgentRow({ agent }: { agent: AgentDTO }) {
 
       {picking && (
         <div className="border-t border-slate-line p-3">
-          <div role="radiogroup" aria-label={`${agent.name}'s look`} className="grid grid-cols-6 gap-2">
+          <div role="radiogroup" aria-label={`${agent.name}'s look`} className="grid grid-cols-4 gap-2 sm:grid-cols-6">
             {choices.map((seed, i) => {
               const on = seed === agent.spriteSeed;
               return (
@@ -329,11 +333,11 @@ function AgentRow({ agent }: { agent: AgentDTO }) {
               );
             })}
           </div>
-          <div className="mt-2.5 flex items-center justify-between gap-3">
+          <div className="mt-2.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
             <p className="text-[12px] text-chalk-faint">
               {agent.providerId === 'openai' ? 'Ground floor agents wear casual clothes.' : 'Upstairs agents wear office clothes.'}
             </p>
-            <div className="flex gap-1.5">
+            <div className="ml-auto flex gap-1.5">
               <button type="button" onClick={() => setPage((n) => n + 1)} className="h-8 rounded-lg border border-slate-line px-3 text-[12px] text-chalk-dim hover:bg-slate-2 hover:text-chalk">
                 Shuffle
               </button>
@@ -443,11 +447,11 @@ function ProviderCard({ id, active }: { id: ProviderId; active: boolean }) {
           <HarnessIcon harness={h.id} size={18} />
         </span>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-x-2">
             <p className="text-[15px] font-semibold">{h.account}</p>
             <span className={`text-[12px] ${status.tone}`}>● {status.text}</span>
           </div>
-          <p className="mt-0.5 truncate text-[12px] text-chalk-faint">
+          <p className="mt-0.5 text-[12px] text-chalk-faint sm:truncate">
             {[`${h.name}${c?.version ? ` ${c.version}` : ''}`, connected ? [c?.account, c?.plan].filter(Boolean).join(' · ') : null, FLOOR_ROLE[id]]
               .filter(Boolean)
               .join(' · ')}
@@ -521,10 +525,10 @@ function ProviderCard({ id, active }: { id: ProviderId; active: boolean }) {
       )}
 
       {connected && (
-        <div className="mt-3 flex items-center justify-end gap-1.5 border-t border-slate-line pt-3">
+        <div className="mt-3 flex flex-wrap items-center justify-end gap-1.5 border-t border-slate-line pt-3">
           {confirmOut ? (
             <>
-              <span className="mr-1 text-[12px] text-chalk-dim">Sign out of {h.name} on this computer? Your terminal sessions sign out too.</span>
+              <span className="mr-1 basis-full text-[12px] text-chalk-dim sm:basis-auto">Sign out of {h.name} on this computer? Your terminal sessions sign out too.</span>
               <button
                 type="button"
                 onClick={() => setConfirmOut(false)}
