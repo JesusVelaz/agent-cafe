@@ -19,7 +19,7 @@ import { CafeScene } from './CafeScene';
  * Callouts follow their agent every frame. Positions are written straight to the
  * DOM from the render loop so the page doesn't re-render at 15 fps.
  */
-export function CafeStage({ theme, collapsed }: { theme: ThemeId; collapsed: boolean }) {
+export function CafeStage({ theme, collapsed, onReady }: { theme: ThemeId; collapsed: boolean; onReady?: () => void }) {
   const state = useCafe();
   const now = useNow(1000);
   const attention = needsAttention(state, now, state.dismissed, DEFAULTS.stuckAfterSec);
@@ -74,7 +74,7 @@ export function CafeStage({ theme, collapsed }: { theme: ThemeId; collapsed: boo
 
   return (
     <div className="relative grid min-h-0">
-      <CafeScene theme={theme} onFrame={onFrame} overlay={overlay} />
+      <CafeScene theme={theme} onFrame={onFrame} overlay={overlay} onReady={onReady} />
     </div>
   );
 }

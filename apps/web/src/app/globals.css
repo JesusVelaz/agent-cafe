@@ -157,3 +157,27 @@ body {
     opacity: 1;
   }
 }
+
+/* First load: the logo waits for the loader's cup to land in its place. */
+[data-loading] [data-cafe-logo] {
+  visibility: hidden;
+}
+
+/* The loader's cup, waking up once it's full: a little hop, in pixel steps. */
+@keyframes cup-wake {
+  0%,
+  100% {
+    transform: none;
+  }
+  45% {
+    transform: translateY(-6px) scale(1.08);
+  }
+}
+.cup-wake {
+  animation: cup-wake 0.34s steps(4) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cup-wake {
+    animation: none !important;
+  }
+}

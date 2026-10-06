@@ -1,17 +1,19 @@
-import { cupPixels, type Mood, type Px } from '@/lib/cup';
+import { CUP_FILL_ROWS, cupFillPixels, cupPixels, type Mood, type Px } from '@/lib/cup';
 
 const PIXELS: Record<Mood, Px[]> = {
   quiet: cupPixels('quiet'),
   working: cupPixels('working'),
   alert: cupPixels('alert'),
 };
+const FILLS: Px[][] = Array.from({ length: CUP_FILL_ROWS + 1 }, (_, i) => cupFillPixels(i / CUP_FILL_ROWS));
 
 /**
  * The Agent Café mark, drawn crisp at any whole-pixel size, wearing the café's mood.
  * While working, the steam drifts between two frames (holds still under reduced motion).
+ * With `fill` (0–1) it's the empty cup filling up instead: the first-load meter.
  */
-export function CupIcon({ size = 28, mood = 'quiet' }: { size?: number; mood?: Mood }) {
-  const pixels = PIXELS[mood];
+export function CupIcon({ size = 28, mood = 'quiet', fill }: { size?: number; mood?: Mood; fill?: number }) {
+  const pixels = fill === undefined ? PIXELS[mood] : FILLS[Math.round(Math.min(1, Math.max(0, fill)) * CUP_FILL_ROWS)]!;
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" shapeRendering="crispEdges" aria-hidden className="shrink-0">
       {pixels.filter((p) => !p.steam).map((p) => (
