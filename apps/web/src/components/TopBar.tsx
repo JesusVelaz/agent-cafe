@@ -8,7 +8,7 @@ import { useNow } from '@/lib/useNow';
 import type { ThemeId } from '@/scene/atmosphere';
 import { useCafe } from '@/store/cafe';
 import { needsAttention } from '@/store/reduce';
-import { AgentPips } from './AgentPips';
+import { BrewingPill } from './BrewingPill';
 import { ConnectPrompt } from './ConnectPrompt';
 import { CupIcon } from './CupIcon';
 import { SettingsDialog, type Section } from './SettingsDialog';
@@ -24,8 +24,8 @@ export function TopBar({ themeChoice, theme, onTheme }: Props) {
   const now = useNow(1000);
   const all = Object.values(state.tasks);
   const working = all.filter((t) => t.status === 'running' || t.status === 'tool_wait').length;
-  const attention = needsAttention(state, now, state.dismissed, DEFAULTS.stuckAfterSec);
-  const needYou = attention.length;
+  const queued = all.filter((t) => t.status === 'queued').length;
+  const needYou = needsAttention(state, now, state.dismissed, DEFAULTS.stuckAfterSec).length;
   // The logo's face is the café's mood.
   const mood: Mood = needYou ? 'alert' : working ? 'working' : 'quiet';
   const conn = state.connection;
@@ -45,7 +45,6 @@ export function TopBar({ themeChoice, theme, onTheme }: Props) {
     state.selectAgent(null);
     requestAnimationFrame(() => document.getElementById('b-need')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
   };
-  const needLabel = `${needYou} ${needYou === 1 ? 'needs' : 'need'} you`;
 
   return (
     <header className="flex h-14 items-center gap-6 border-b border-slate-line bg-night-2 px-4">
@@ -60,22 +59,7 @@ export function TopBar({ themeChoice, theme, onTheme }: Props) {
       </div>
 
       <div className="ml-auto flex items-center gap-3">
-        {needYou > 0 && (
-          <button
-            type="button"
-            onClick={showNeeds}
-            aria-label={needLabel}
-            title={needLabel}
-            className="flex h-7 items-center gap-1.5 rounded-full border border-[#5a3128] bg-[#2a1915] px-2.5 text-[12px] font-semibold text-[#ff9b80] hover:bg-[#3a1f1a]"
-          >
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
-              <path d="M4 11V7a4 4 0 0 1 8 0v4l1.2 1.5H2.8L4 11z" />
-              <path d="M6.5 14.2a1.6 1.6 0 0 0 3 0" />
-            </svg>
-            {needYou}
-          </button>
-        )}
-        <AgentPips needYou={attention.map((a) => a.agentId)} />
+        <BrewingPill working={working} queued={queued} needYou={needYou} onNeeds={showNeeds} />
         <button
           type="button"
           onClick={() => setSettings('general')}

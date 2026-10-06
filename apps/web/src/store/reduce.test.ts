@@ -1,6 +1,6 @@
 import type { CafeEvent, TaskDTO } from '@agent-cafe/shared';
 import { describe, expect, it } from 'vitest';
-import { activeTaskFor, agentThreads, crewStates, emptyData, needsAttention, queuedFor, projectGroups, reduce, threadOf } from './reduce';
+import { activeTaskFor, agentThreads, emptyData, needsAttention, queuedFor, projectGroups, reduce, threadOf } from './reduce';
 
 const task = (over: Partial<TaskDTO> = {}): TaskDTO => ({
   id: 't1', agentId: 'a1', providerId: 'openai', model: 'gpt-6-sol', prompt: 'hi', status: 'queued',
@@ -297,32 +297,5 @@ describe('projectGroups', () => {
       done('other', 'shop', 10),
     );
     expect(projectGroups(s).map((g) => [g.projectId, g.working])).toEqual([['cafe', 0], ['shop', 0]]);
-  });
-});
-
-describe('crewStates', () => {
-  const agent = (id: string, createdAt: string) =>
-    ({ id, name: id, providerId: 'openai' as const, model: 'x', systemPrompt: '', spriteSeed: 1, projectId: null, permission: 'ask' as const, createdAt, archivedAt: null });
-
-  it('gives each agent its most urgent state, most urgent first', () => {
-    const s = {
-      ...emptyData(),
-      agents: { a: agent('a', '1'), b: agent('b', '2'), c: agent('c', '3'), d: agent('d', '4'), e: agent('e', '5') },
-      tasks: {
-        t1: task({ id: 't1', agentId: 'b', status: 'running' }),
-        t2: task({ id: 't2', agentId: 'c', status: 'queued' }),
-        t3: task({ id: 't3', agentId: 'd', status: 'tool_wait' }),
-        t4: task({ id: 't4', agentId: 'd', status: 'queued' }),
-        t5: task({ id: 't5', agentId: 'e', status: 'running' }),
-        t6: task({ id: 't6', agentId: 'a', status: 'completed' }),
-      },
-    };
-    expect(crewStates(s, ['e'])).toEqual([
-      { agentId: 'e', state: 'needs' },
-      { agentId: 'b', state: 'working' },
-      { agentId: 'd', state: 'working' },
-      { agentId: 'c', state: 'queued' },
-      { agentId: 'a', state: 'idle' },
-    ]);
   });
 });
