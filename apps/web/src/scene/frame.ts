@@ -15,7 +15,7 @@ export const plotOffset = (R: Pick<Raster, 'w' | 'h'>) => ({ x: Math.floor((R.w 
 export const perArea = (n: number, R: Pick<Raster, 'w' | 'h'>) => Math.round((n * R.w * R.h) / (SCENE_W * SCENE_H));
 
 /** The biggest frame worth drawing (only a tiny scale on a huge stage gets near it). */
-const MAX_FRAME = { w: 2560, h: 1600 };
+export const MAX_FRAME = { w: 2560, h: 1600 };
 
 /** The pixel scale that fits the plot in a stage of this many CSS px: whole when it fits (crisp pixels), fractional only when small. */
 export function fitScale(width: number, height: number, reserveBottom = 0): number {
