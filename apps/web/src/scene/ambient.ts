@@ -13,7 +13,7 @@ import { box, plane } from './iso';
 import { hash, K, mix, shade } from './palette';
 import type { DrawCtx } from './props';
 import type { Raster } from './raster';
-import { agentGrid, agentLook, BIRD, BUTTERFLY, DOG_PAL, dogGrid, PIGEON, PIGEON_PAL, type AgentFrame, type DogFrame } from './sprites';
+import { agentGrid, agentLook, BIRD, BUTTERFLY, DOG_COLLAR, DOG_PAL, DOG_W, dogGrid, PIGEON, PIGEON_PAL, type AgentFrame, type DogFrame } from './sprites';
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const sunny = (c: DrawCtx) => c.theme === 'day' || c.theme === 'summer';
@@ -242,15 +242,17 @@ function walker(c: DrawCtx, push: Push) {
     const { R, P } = c;
     const feet = P(dx, dy, 0);
     const g = dogGrid(frame, wag);
-    R.rect(feet[0] - 4, feet[1], 9, 1, '#000000', 0.15 * da);
-    R.grid(g, DOG_PAL, feet[0] - 6, feet[1] - g.length + 1, flip, '', da);
+    R.rect(feet[0] - 6, feet[1], 13, 1, '#000000', 0.15 * da);
+    R.grid(g, DOG_PAL, feet[0] - Math.floor(DOG_W / 2), feet[1] - g.length + 1, flip, '', da);
   });
   // The lead, drawn after both of them, sagging when there's slack.
   push(Math.max(w.x + wy + 0.2, dx + dy + 0.1) + 0.01, () => {
     const { R, P } = c;
     const feet = P(w.x, wy, 0), dfeet = P(dx, dy, 0);
     const hand: [number, number] = [feet[0] + (dfeet[0] > feet[0] ? 5 : -6), feet[1] - 5];
-    const collar: [number, number] = [dfeet[0] + (flip ? -2 : 2), dfeet[1] - (sniffing ? 3 : 4)];
+    // The collar cell of the sprite (mirrored when the dog faces left).
+    const left = dfeet[0] - Math.floor(DOG_W / 2), top = dfeet[1] - dogGrid('stand', false).length + 1;
+    const collar: [number, number] = [left + (flip ? DOG_W - 1 - DOG_COLLAR.x : DOG_COLLAR.x), top + DOG_COLLAR.y];
     const sag = Math.max(0, 4 - Math.hypot(collar[0] - hand[0], collar[1] - hand[1]) / 5);
     const mid: [number, number] = [(hand[0] + collar[0]) / 2, (hand[1] + collar[1]) / 2 + sag];
     const la = Math.min(a, da);
@@ -307,14 +309,30 @@ function car(c: DrawCtx, x: number, y: number, dir: number, col: string, a: numb
   plane(R, P, { y: y + 0.74 }, cab + 0.56, cab + 0.97, 8.5, 12, '#bfe3ea', a, dim);
   plane(R, P, { x: cab + 1.05 }, y + 0.14, y + 0.68, 8.5, 12, '#a9d3e0', a, dim);
   for (const wx of [0.3, CAR_LEN - 0.6]) box(R, P, x + wx, y + 0.72, 0, 0.32, 0.1, 4, '#1e1e22', { a });
-  // Lights: head at the front, tail at the back; only the +x end faces us.
-  const end = P(x + CAR_LEN, y + 0.62, 5);
-  R.rect(end[0] - 1, end[1] - 1, 2, 2, dir > 0 ? '#fff1c2' : '#e0475a', a, dim);
+  // Lights: a pair at each end. Only the +x end faces us, so it shows both of its
+  // lamps (heads going right, tails going left); the hidden end's lamps wrap round
+  // the near side as a sliver at that corner.
+  const near = dir > 0 ? HEADLIGHT : TAILLIGHT, far = dir > 0 ? TAILLIGHT : HEADLIGHT;
+  for (const ly of [0.15, 0.62]) {
+    const q = P(x + CAR_LEN, y + ly, 5);
+    // A dark housing so the lamp reads on any paint, the lamp, and a hot spot.
+    R.rect(q[0] - 1, q[1] - 1, 3, 3, LAMP_HOUSING, a);
+    R.rect(q[0] - 1, q[1] - 1, 2, 2, near.lamp, a, dim);
+    R.px(q[0] - 1, q[1] - 1, near.hot, a, dim);
+  }
+  const wrap = P(x + 0.04, y + 0.8, 5);
+  R.rect(wrap[0], wrap[1] - 1, 2, 1, far.lamp, a, dim);
   if (dim && a >= 1) {
     const front = dir > 0 ? P(x + CAR_LEN + 1.2, y + 0.4, 0) : P(x - 1.2, y + 0.4, 0);
     c.lights.push({ x: front[0], y: front[1], r: 34, col: [1, 0.93, 0.72], s: 1 });
+    const back = dir > 0 ? P(x - 0.3, y + 0.4, 2) : P(x + CAR_LEN + 0.3, y + 0.4, 2);
+    c.lights.push({ x: back[0], y: back[1], r: 12, col: [1, 0.3, 0.28], s: 0.6 });
   }
 }
+
+const HEADLIGHT = { lamp: '#fff1c2', hot: '#ffffff' };
+const TAILLIGHT = { lamp: '#e3203a', hot: '#ff9aa6' };
+const LAMP_HOUSING = '#2b2124';
 
 function traffic(c: DrawCtx, push: Push) {
   LANES.forEach((L, li) => {
