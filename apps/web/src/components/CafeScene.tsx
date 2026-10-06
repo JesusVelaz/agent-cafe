@@ -2,13 +2,11 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { THEMES, type ThemeId } from '@/scene/atmosphere';
+import { fitFrame } from '@/scene/frame';
 import { CafeRenderer, SCENE_H, SCENE_W, type AgentHit } from '@/scene/renderer';
 import { activityLabel, deriveActivity } from '@/sim/activity';
 import { useCafe } from '@/store/cafe';
 import { activeTaskFor, latestTaskFor } from '@/store/reduce';
-
-/** The biggest frame worth drawing (only a tiny scale on a huge stage gets near it). */
-const MAX_FRAME = { w: 2560, h: 1600 };
 
 interface Props {
   theme: ThemeId;
@@ -31,8 +29,11 @@ export function CafeScene({ theme, labels = true, reserveBottom = 0, onFrame, ov
   const wrapRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const tipRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<CafeRenderer | null>(null);
   const [view, setView] = useState({ scale: 2, w: SCENE_W, h: SCENE_H });
+  /** The latest size, ahead of React (the panel animation resizes the stage every frame). */
+  const viewRef = useRef(view);
   const { scale } = view;
   const [hoverId, setHoverId] = useState<string | null>(null);
   const live = useRef({ theme, labels, scale, onFrame });
@@ -43,18 +44,22 @@ export function CafeScene({ theme, labels = true, reserveBottom = 0, onFrame, ov
     if (!el) return;
     const ro = new ResizeObserver(([entry]) => {
       const { width, height } = entry!.contentRect;
-      const f = Math.min((width - 16) / SCENE_W, (height - 16 - reserveBottom) / SCENE_H);
-      const s = f >= 2 ? Math.floor(f) : Math.max(0.25, f);
-      const fit = (px: number, base: number, max: number) => Math.min(max, Math.max(base, Math.ceil(px / s)));
-      setView({ scale: s, w: fit(width, SCENE_W, MAX_FRAME.w), h: fit(height, SCENE_H, MAX_FRAME.h) });
+      const v = fitFrame(width, height, reserveBottom);
+      // Apply it now, before this frame paints, rather than after React re-renders: the
+      // stage, the scale the callouts use and the redrawn canvas all change together.
+      viewRef.current = v;
+      live.current.scale = v.scale;
+      const stage = stageRef.current;
+      if (stage) {
+        stage.style.width = `${v.w * v.scale}px`;
+        stage.style.height = `${v.h * v.scale}px`;
+      }
+      rendererRef.current?.resize(v.w, v.h);
+      setView(v);
     });
     ro.observe(el);
     return () => ro.disconnect();
   }, [reserveBottom]);
-
-  useEffect(() => {
-    rendererRef.current?.resize(view.w, view.h);
-  }, [view.w, view.h]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -82,6 +87,7 @@ export function CafeScene({ theme, labels = true, reserveBottom = 0, onFrame, ov
       },
     });
     r.mount(host);
+    r.resize(viewRef.current.w, viewRef.current.h);
     rendererRef.current = r;
     return () => {
       r.destroy();
@@ -96,7 +102,7 @@ export function CafeScene({ theme, labels = true, reserveBottom = 0, onFrame, ov
       className="relative flex min-h-0 min-w-0 items-center justify-center overflow-hidden"
       style={{ background: `linear-gradient(${bg0}, ${bg1})`, paddingBottom: reserveBottom }}
     >
-      <div className="relative shrink-0" style={{ width: view.w * scale, height: view.h * scale }} data-scene-stage>
+      <div ref={stageRef} className="relative shrink-0" style={{ width: view.w * scale, height: view.h * scale }} data-scene-stage>
         <div ref={hostRef} className="absolute inset-0" />
         <div ref={tipRef} className="pointer-events-none absolute left-0 top-0 z-10" hidden={!hoverId}>
           {hoverId && <AgentTooltip id={hoverId} />}
