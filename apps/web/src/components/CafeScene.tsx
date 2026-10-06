@@ -7,6 +7,9 @@ import { activityLabel, deriveActivity } from '@/sim/activity';
 import { useCafe } from '@/store/cafe';
 import { activeTaskFor, latestTaskFor } from '@/store/reduce';
 
+/** The biggest frame worth drawing (only a tiny scale on a huge stage gets near it). */
+const MAX_FRAME = { w: 2560, h: 1600 };
+
 interface Props {
   theme: ThemeId;
   /** Show pixel name tags over agents. */
@@ -20,14 +23,17 @@ interface Props {
 }
 
 /**
- * The café canvas. Rendered at 400×360 and scaled up by a whole number when it
- * fits (crisp pixels), fractionally only on small screens.
+ * The café canvas. The plot is sized to fit (SCENE_W×SCENE_H scaled up by a whole
+ * number when it fits, for crisp pixels; fractionally only on small screens), and the
+ * frame around it fills the whole stage at that scale, so the sky runs edge to edge.
  */
 export function CafeScene({ theme, labels = true, reserveBottom = 0, onFrame, overlay }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const tipRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(2);
+  const rendererRef = useRef<CafeRenderer | null>(null);
+  const [view, setView] = useState({ scale: 2, w: SCENE_W, h: SCENE_H });
+  const { scale } = view;
   const [hoverId, setHoverId] = useState<string | null>(null);
   const live = useRef({ theme, labels, scale, onFrame });
   live.current = { theme, labels, scale, onFrame };
@@ -38,11 +44,17 @@ export function CafeScene({ theme, labels = true, reserveBottom = 0, onFrame, ov
     const ro = new ResizeObserver(([entry]) => {
       const { width, height } = entry!.contentRect;
       const f = Math.min((width - 16) / SCENE_W, (height - 16 - reserveBottom) / SCENE_H);
-      setScale(f >= 2 ? Math.floor(f) : Math.max(0.25, f));
+      const s = f >= 2 ? Math.floor(f) : Math.max(0.25, f);
+      const fit = (px: number, base: number, max: number) => Math.min(max, Math.max(base, Math.ceil(px / s)));
+      setView({ scale: s, w: fit(width, SCENE_W, MAX_FRAME.w), h: fit(height, SCENE_H, MAX_FRAME.h) });
     });
     ro.observe(el);
     return () => ro.disconnect();
   }, [reserveBottom]);
+
+  useEffect(() => {
+    rendererRef.current?.resize(view.w, view.h);
+  }, [view.w, view.h]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -70,7 +82,11 @@ export function CafeScene({ theme, labels = true, reserveBottom = 0, onFrame, ov
       },
     });
     r.mount(host);
-    return () => r.destroy();
+    rendererRef.current = r;
+    return () => {
+      r.destroy();
+      rendererRef.current = null;
+    };
   }, []);
 
   const [bg0, bg1] = THEMES[theme].bg;
@@ -80,7 +96,7 @@ export function CafeScene({ theme, labels = true, reserveBottom = 0, onFrame, ov
       className="relative flex min-h-0 min-w-0 items-center justify-center overflow-hidden"
       style={{ background: `linear-gradient(${bg0}, ${bg1})`, paddingBottom: reserveBottom }}
     >
-      <div className="relative" style={{ width: SCENE_W * scale, height: SCENE_H * scale }} data-scene-stage>
+      <div className="relative shrink-0" style={{ width: view.w * scale, height: view.h * scale }} data-scene-stage>
         <div ref={hostRef} className="absolute inset-0" />
         <div ref={tipRef} className="pointer-events-none absolute left-0 top-0 z-10" hidden={!hoverId}>
           {hoverId && <AgentTooltip id={hoverId} />}

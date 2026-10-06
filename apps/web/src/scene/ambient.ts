@@ -8,6 +8,7 @@
  */
 import { BUILDING } from '@/sim/layout';
 import { isDim, THEMES } from './atmosphere';
+import { perArea, plotOffset, SCENE_W } from './frame';
 import { box, plane } from './iso';
 import { hash, K, mix, shade } from './palette';
 import type { DrawCtx } from './props';
@@ -19,8 +20,18 @@ const sunny = (c: DrawCtx) => c.theme === 'day' || c.theme === 'summer';
 
 // ── sky ─────────────────────────────────────────────────────────────────────
 
-/** Screen-space clouds, all in the sky above the plot. `y` is a fraction of the frame height. */
-const CLOUDS = [
+interface Cloud {
+  /** Fraction of the frame height. */
+  y: number;
+  w: number;
+  /** Drift speed (px/s) and starting phase (0–1). */
+  v: number;
+  s: number;
+  far: boolean;
+}
+
+/** Screen-space clouds, all in the sky above the plot. */
+const CLOUDS: Cloud[] = [
   { y: 0.04, w: 48, v: 2.6, s: 0.1, far: false },
   { y: 0.14, w: 30, v: 1.4, s: 0.55, far: true },
   { y: 0.22, w: 36, v: 1.9, s: 0.82, far: true },
@@ -28,7 +39,20 @@ const CLOUDS = [
   { y: 0.28, w: 40, v: 2.2, s: 0.68, far: false },
 ];
 /** Extra clouds when it rains. */
-const STORM = [{ y: 0.17, w: 40, v: 4.2, s: 0.62, far: false }, { y: 0.3, w: 34, v: 3.6, s: 0.12, far: true }, { y: 0.02, w: 44, v: 3.8, s: 0.87, far: false }];
+const STORM: Cloud[] = [{ y: 0.17, w: 40, v: 4.2, s: 0.62, far: false }, { y: 0.3, w: 34, v: 3.6, s: 0.12, far: true }, { y: 0.02, w: 44, v: 3.8, s: 0.87, far: false }];
+
+/** A seeded cloud for frames bigger than the base one; lower ones only show beside the plot. */
+function extraCloud(i: number, storm: boolean): Cloud {
+  const k = i * 19 + (storm ? 7 : 0);
+  const far = hash(k + 1) < 0.5;
+  return { y: 0.02 + 0.5 * hash(k + 2), w: 22 + Math.round(28 * hash(k + 3)), v: (far ? 1 : 1.8) + 1.2 * hash(k + 4), s: hash(k + 5), far };
+}
+
+/** The hand-placed clouds, plus seeded ones so a wider or taller frame stays as cloudy. */
+export function skyClouds(R: Pick<Raster, 'w' | 'h'>, storm: boolean): Cloud[] {
+  const fill = (base: Cloud[], isStorm: boolean) => [...base, ...Array.from({ length: Math.max(0, perArea(base.length, R) - base.length) }, (_, i) => extraCloud(i, isStorm))];
+  return storm ? [...fill(CLOUDS, false), ...fill(STORM, true)] : fill(CLOUDS, false);
+}
 
 function cloudColours(c: DrawCtx): [string, string] {
   switch (c.theme) {
@@ -64,7 +88,8 @@ function cloud(R: Raster, x: number, y: number, w: number, seed: number, body: s
 }
 
 function moon(R: Raster) {
-  const x = Math.round(R.w * 0.12), y = 34;
+  // Over the plot's top-left, wherever the plot sits in the frame.
+  const x = plotOffset(R).x + Math.round(SCENE_W * 0.12), y = 34;
   circle(R, x, y, 6, '#f4ecc8', y + 7);
   R.rect(x - 2, y - 2, 2, 2, '#ded3a8', 1, true);
   R.rect(x + 2, y + 1, 1, 1, '#ded3a8', 1, true);
@@ -77,7 +102,7 @@ export function drawSky(c: DrawCtx) {
   if (theme === 'night') moon(R);
   const [body, under] = cloudColours(c);
   const bg = THEMES[theme].bg[0];
-  const list = theme === 'rain' ? [...CLOUDS, ...STORM] : CLOUDS;
+  const list = skyClouds(R, theme === 'rain');
   const speed = theme === 'rain' ? 2 : 1;
   for (const far of [true, false]) {
     for (const [i, cl] of list.entries()) {
