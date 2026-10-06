@@ -88,9 +88,7 @@ export function CafeScene({ theme, labels = true, reserveBottom = 0, onFrame, ov
           const canvas = stage.querySelector('canvas');
           if (canvas) canvas.style.imageRendering = 'auto';
           const zoom = stage.animate([{ transform: `scale(${from / to})` }, { transform: 'scale(1)' }], { duration: ZOOM_MS, easing: 'cubic-bezier(.2,.8,.2,1)' });
-          const crisp = () => canvas?.style.removeProperty('image-rendering');
-          zoom.onfinish = crisp;
-          zoom.oncancel = crisp;
+          zoom.onfinish = () => canvas?.style.removeProperty('image-rendering');
         }
       }, SETTLE_MS);
     });
