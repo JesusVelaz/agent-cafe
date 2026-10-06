@@ -12,7 +12,7 @@ import { box, plane } from './iso';
 import { hash, K, mix, shade } from './palette';
 import type { DrawCtx } from './props';
 import type { Raster } from './raster';
-import { agentGrid, agentLook, BIRD, BUTTERFLY, DOG, PIGEON, PIGEON_PAL, type AgentFrame } from './sprites';
+import { agentGrid, agentLook, BIRD, BUTTERFLY, DOG_PAL, dogGrid, PIGEON, PIGEON_PAL, type AgentFrame, type DogFrame } from './sprites';
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const sunny = (c: DrawCtx) => c.theme === 'day' || c.theme === 'summer';
@@ -139,14 +139,36 @@ type Push = (d: number, f: () => void) => void;
 /** Fade in and out over the last tile at each end of the plot. */
 const edgeFade = (x: number, len = 0) => clamp(Math.min(x + 0.4, BUILDING.PW - x - len + 0.4), 0, 1);
 
-const WALK_LANE = 12.5;
 const WALK_CYCLE = 26;
+const WALK_SPEED = 1; // tiles per second
+
 /** Who is on the sidewalk at time t (one passer-by per cycle, alternating sides at random). */
 function walkerAt(t: number) {
   const k = Math.floor(t / WALK_CYCLE), ph = t - k * WALK_CYCLE;
   const dir = hash(k * 3 + 1) > 0.5 ? 1 : -1;
-  const x = dir > 0 ? -0.6 + ph : BUILDING.PW + 0.6 - ph;
+  const x = dir > 0 ? -0.6 + ph * WALK_SPEED : BUILDING.PW + 0.6 - ph * WALK_SPEED;
   return { k, ph, dir, x, on: ph < BUILDING.PW + 1.2 };
+}
+
+const smooth = (x: number, a: number, b: number) => { const u = clamp((x - a) / (b - a), 0, 1); return u * u * (3 - 2 * u); };
+/**
+ * The walking line along the shopfront: behind the A-board, clear of the bench,
+ * planters and bike rack, stepping out round the patio planter.
+ */
+const laneY = (x: number) => 11.45 + 0.5 * smooth(x, 14.1, 14.7) * (1 - smooth(x, 15.7, 16.3));
+/** The dog keeps to the street side of its owner, so it stays in view, and tucks in behind the A-board. */
+const dogLaneY = (x: number) => laneY(x) + 0.38 * (1 - smooth(x, 12.3, 12.8) * (1 - smooth(x, 13.7, 14.2)));
+
+/**
+ * How far the dog is ahead of its owner. Once per walk it stops to sniff
+ * (the owner walks on past it), then trots to catch up.
+ */
+function dogLead(k: number, ph: number) {
+  const lead = 0.95, stop = 1.6, s0 = 4 + hash(k * 9 + 4) * 10;
+  if (ph < s0) return lead;
+  if (ph < s0 + stop) return lead - (ph - s0) * WALK_SPEED;
+  if (ph < s0 + stop * 2) return lead - stop * WALK_SPEED + (ph - s0 - stop) * WALK_SPEED;
+  return lead;
 }
 
 function walkFrame(t: number, back: boolean): AgentFrame {
@@ -158,30 +180,57 @@ function walker(c: DrawCtx, push: Push) {
   const w = walkerAt(c.t);
   if (!w.on) return;
   const a = edgeFade(w.x);
-  if (a <= 0) return;
+  const wy = laneY(w.x);
   const look = agentLook(1000 + w.k * 17, w.k % 2 ? 'casual' : 'office');
   const back = w.dir < 0;
-  const dog = hash(w.k * 5 + 2) > 0.35;
-  push(w.x + WALK_LANE + 0.5, () => {
-    const { R, P, t, theme } = c;
-    const feet = P(w.x, WALK_LANE, 0);
-    const g = agentGrid(walkFrame(t, back), look);
-    R.rect(feet[0] - 3, feet[1] - 1, 7, 3, '#000000', 0.12 * a);
-    R.grid(g, look.palette, feet[0] - 7, feet[1] - g.length + 1, back, '', a);
-    if (theme === 'rain') {
-      // Umbrella over the head.
-      const top = feet[1] - 26;
-      R.poly([[feet[0] - 10, top + 5], [feet[0], top], [feet[0] + 10, top + 5]], K.teal, a);
-      R.rect(feet[0] - 10, top + 5, 21, 1, shade(K.teal, -0.3), a);
-      R.line(feet[0], top + 5, feet[0], top + 12, K.ink, a);
-    }
-    if (dog) {
-      const dx = w.x + w.dir * 0.85, dfeet = P(dx, WALK_LANE + 0.15, 0);
-      const fr = DOG[Math.floor(t * 8) % 2]!;
-      R.grid(fr, { o: K.ink, k: '#c49a6c', d: '#9c7650', n: K.ink }, dfeet[0] - 5, dfeet[1] - fr.length + 1, w.dir < 0, '', a);
-      const hand = [feet[0] + (back ? -5 : 5), feet[1] - 8], collar = [dfeet[0] + (w.dir > 0 ? 2 : -2), dfeet[1] - 4];
-      R.line(hand[0]!, hand[1]!, collar[0]!, collar[1]!, K.berry, a);
-    }
+  if (a > 0) {
+    // A small depth bias only: the A-board stands just in front of the lane.
+    push(w.x + wy + 0.2, () => {
+      const { R, P, t, theme } = c;
+      const feet = P(w.x, wy, 0);
+      const g = agentGrid(walkFrame(t, back), look);
+      R.rect(feet[0] - 3, feet[1] - 1, 7, 3, '#000000', 0.12 * a);
+      R.grid(g, look.palette, feet[0] - 7, feet[1] - g.length + 1, back, '', a);
+      if (theme === 'rain') {
+        // Umbrella over the head.
+        const top = feet[1] - 26;
+        R.poly([[feet[0] - 10, top + 5], [feet[0], top], [feet[0] + 10, top + 5]], K.teal, a);
+        R.rect(feet[0] - 10, top + 5, 21, 1, shade(K.teal, -0.3), a);
+        R.line(feet[0], top + 5, feet[0], top + 12, K.ink, a);
+      }
+    });
+  }
+
+  // About a third of passers-by walk a dog.
+  if (hash(w.k * 5 + 2) < 0.62) return;
+  const dogAt = (ph: number) => w.x + w.dir * dogLead(w.k, ph) + (ph - w.ph) * w.dir * WALK_SPEED;
+  const dx = dogAt(w.ph), dy = dogLaneY(dx);
+  const da = edgeFade(dx);
+  if (da <= 0 && a <= 0) return;
+  // Ground speed decides the gait: sniffing when stopped, a quicker trot when catching up.
+  const speed = Math.abs(dogAt(w.ph + 0.05) - dogAt(w.ph - 0.05)) / 0.1;
+  const sniffing = speed < 0.2;
+  const frame: DogFrame = sniffing ? 'sniff' : (['stand', 'strideA', 'stand', 'strideB'] as const)[Math.floor(Math.abs(dx) * 5) % 4]!;
+  const wag = Math.floor(c.t * (sniffing ? 8 : 4)) % 2 === 0;
+  const flip = w.dir < 0;
+  push(dx + dy + 0.1, () => {
+    const { R, P } = c;
+    const feet = P(dx, dy, 0);
+    const g = dogGrid(frame, wag);
+    R.rect(feet[0] - 4, feet[1], 9, 1, '#000000', 0.15 * da);
+    R.grid(g, DOG_PAL, feet[0] - 6, feet[1] - g.length + 1, flip, '', da);
+  });
+  // The lead, drawn after both of them, sagging when there's slack.
+  push(Math.max(w.x + wy + 0.2, dx + dy + 0.1) + 0.01, () => {
+    const { R, P } = c;
+    const feet = P(w.x, wy, 0), dfeet = P(dx, dy, 0);
+    const hand: [number, number] = [feet[0] + (dfeet[0] > feet[0] ? 5 : -6), feet[1] - 5];
+    const collar: [number, number] = [dfeet[0] + (flip ? -2 : 2), dfeet[1] - (sniffing ? 3 : 4)];
+    const sag = Math.max(0, 4 - Math.hypot(collar[0] - hand[0], collar[1] - hand[1]) / 5);
+    const mid: [number, number] = [(hand[0] + collar[0]) / 2, (hand[1] + collar[1]) / 2 + sag];
+    const la = Math.min(a, da);
+    R.line(hand[0], hand[1], mid[0], mid[1], K.berry, la);
+    R.line(mid[0], mid[1], collar[0], collar[1], K.berry, la);
   });
 }
 

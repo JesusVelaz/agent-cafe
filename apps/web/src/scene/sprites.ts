@@ -226,11 +226,29 @@ export const PIGEON: readonly Grid[] = [
   ['.......', '.gggg..', 'Gggggh.', '..o.ohb'],
 ];
 export const PIGEON_PAL = { g: '#9aa0ab', G: '#6f7480', h: '#5c6a7a', b: '#e0a84a', o: '#c46b6b' };
-/** Small dog trotting right, two frames. o outline · k fur · d darker fur · n nose. */
-export const DOG: readonly Grid[] = [
-  ['.......oo.', 'o.....okko', '.o....okkn', '.okkkkkkk.', '..kdkkdk..', '..k.k.k.k.'],
-  ['.......oo.', '.o....okko', '.o....okkn', '.okkkkkkk.', '..kdkkdk..', '...kk..kk.'],
-];
+/**
+ * A beagle-ish dog, side-on facing right (13×9), built like the agents: a body
+ * (head up, or down sniffing) plus legs plus a wagging tail.
+ *   o outline · k tan fur · d dark patch and ears · w white chest and tail tip · e eye · n nose
+ */
+export type DogFrame = 'stand' | 'strideA' | 'strideB' | 'sniff';
+const DOG_BODY = {
+  up: ['.........ooo.', '........okkko', '........dkeko', '...ooooodkkkn', '..okkkkkkkkwo', '..okkdddkkwo.', '..okkkkkkkwo.'],
+  sniff: ['.............', '.............', '.............', '...ooooo.....', '..okkkkkooo..', '..okkdddkdkko', '..okkkkkkdeko'],
+};
+const DOG_LEGS = {
+  stand: ['...kk...kk...', '...oo...oo...'],
+  strideA: ['..k..k.k..k..', '..o..o.o..o..'],
+  strideB: ['...k.k..k.k..', '...o.o..o.o..'],
+};
+export function dogGrid(frame: DogFrame, wag: boolean): Grid {
+  const rows = [...(frame === 'sniff' ? DOG_BODY.sniff : DOG_BODY.up), ...DOG_LEGS[frame === 'sniff' ? 'stand' : frame]];
+  if (frame === 'sniff') setPx(rows, 7, 12, 'n'); // nose to the ground
+  const tail: Array<[number, number, string]> = wag ? [[1, 1, 'w'], [2, 1, 'k'], [3, 2, 'k']] : [[2, 0, 'w'], [3, 1, 'k'], [3, 2, 'k']];
+  for (const [r, c, ch] of tail) setPx(rows, frame === 'sniff' ? r + 1 : r, c, ch);
+  return rows;
+}
+export const DOG_PAL = { o: K.ink, k: '#c98f55', d: '#7a4a2a', w: '#f3ead8', e: '#1e1512', n: '#1e1512' };
 /** Butterfly, wings open then closed. */
 export const BUTTERFLY: readonly Grid[] = [['w.w', '.k.'], ['.w.', '.k.']];
 /** Tree canopy (15×13): L dark leaf · l leaf · g highlight. */
