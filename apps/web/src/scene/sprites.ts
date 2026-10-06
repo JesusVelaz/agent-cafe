@@ -214,6 +214,25 @@ export const POTHOS: Grid = ['.gLlLg.', 'gLlLlLg', 'L.lLl.L', 'l..L..l', 'L..l..
 export const POTHOS_PAL = { g: '#9fd07a', l: K.leaf, L: '#3f7a3a' };
 export const CLOCK: Grid = ['..kkkkk..', '.kwwwwwk.', 'kwwwkwwwk', 'kwwwkwwwk', 'kwwwkkwwk', 'kwwwwwwwk', '.kwwwwwk.', '..kkkkk..'];
 export const CLOCK_PAL = { k: K.ink, w: '#fbf6e8' };
+/** The clock without hands; the hands are drawn from the real time. */
+export const CLOCK_FACE: Grid = ['..kkkkk..', '.kwwwwwk.', 'kwwwwwwwk', 'kwwwwwwwk', 'kwwwwwwwk', 'kwwwwwwwk', '.kwwwwwk.', '..kkkkk..'];
+
+// ── Ambient critters ──
+/** A distant bird, wings up then down. */
+export const BIRD: readonly Grid[] = [['k...k', '.k.k.', '..k..'], ['.....', 'kk.kk', '..k..']];
+/** Side-on pigeon facing right: standing, then pecking. g body · G tail · h head · b beak · o feet. */
+export const PIGEON: readonly Grid[] = [
+  ['....hh.', '.gggghb', 'Gggggg.', '..o.o..'],
+  ['.......', '.gggg..', 'Gggggh.', '..o.ohb'],
+];
+export const PIGEON_PAL = { g: '#9aa0ab', G: '#6f7480', h: '#5c6a7a', b: '#e0a84a', o: '#c46b6b' };
+/** Small dog trotting right, two frames. o outline · k fur · d darker fur · n nose. */
+export const DOG: readonly Grid[] = [
+  ['.......oo.', 'o.....okko', '.o....okkn', '.okkkkkkk.', '..kdkkdk..', '..k.k.k.k.'],
+  ['.......oo.', '.o....okko', '.o....okkn', '.okkkkkkk.', '..kdkkdk..', '...kk..kk.'],
+];
+/** Butterfly, wings open then closed. */
+export const BUTTERFLY: readonly Grid[] = [['w.w', '.k.'], ['.w.', '.k.']];
 /** Tree canopy (15×13): L dark leaf · l leaf · g highlight. */
 export const TREE: Grid = [
   '.....LLlL......',

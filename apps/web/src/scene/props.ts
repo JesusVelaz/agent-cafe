@@ -10,7 +10,7 @@ import { box, disc, plane, planePt, quad, type Plane, type Proj } from './iso';
 import { hash, K, mix, shade } from './palette';
 import type { Raster } from './raster';
 import { drawOutdoor } from './outdoor';
-import { CLOCK, CLOCK_PAL, FIG, FIG_PAL, PLANT_HANG, PLANT_PAL, PLANT_SMALL, POTHOS, POTHOS_PAL } from './sprites';
+import { CLOCK_FACE, CLOCK_PAL, FIG, FIG_PAL, PLANT_HANG, PLANT_PAL, PLANT_SMALL, POTHOS, POTHOS_PAL } from './sprites';
 
 export interface DrawCtx {
   R: Raster;
@@ -165,6 +165,7 @@ function espresso(c: DrawCtx, x: number, y: number, z: number) {
   R.px(g[0], g[1], '#c24a3a');
   const w0 = P(x + 1.15, y + 0.5, z + 8), w1 = P(x + 1.25, y + 0.7, z + 3);
   R.line(w0[0], w0[1], w1[0], w1[1], K.chromeD); // steam wand
+  steamPuff(c, w1[0], w1[1] - 1, x);
   for (let i = 0; i < 4; i++) mug(c, x + 0.22 + i * 0.25, y + 0.22, z + 13, i % 2 ? '#efe6d6' : K.white); // cup warmer
   const l = P(x + 0.1, y + 0.48, z + 10);
   R.px(l[0], l[1], '#ff5a4a', 1, true);
@@ -653,6 +654,28 @@ export function drawProp(c: DrawCtx, p: Prop, z: number, ceiling: number): void 
   }
 }
 
+/** The barista steams milk every few seconds: a puff rising off the wand. */
+function steamPuff(c: DrawCtx, x: number, y: number, seed: number) {
+  const ph = (c.t + seed) % 6;
+  if (ph > 2.6) return;
+  for (let k = 0; k < 4; k++) {
+    const age = ph - k * 0.3;
+    if (age < 0 || age > 1.6) continue;
+    c.R.rect(x + Math.round(Math.sin(age * 5 + k) * 1.2), y - 2 - Math.round(age * 7), 2, 2, '#ffffff', 0.75 * (1 - age / 1.6));
+  }
+}
+
+/** Wall clock showing the real time. */
+function clock(R: Raster, cx: number, cy: number) {
+  R.grid(CLOCK_FACE, CLOCK_PAL, cx - 4, cy - 4);
+  const now = new Date();
+  const m = now.getMinutes() + now.getSeconds() / 60, h = (now.getHours() % 12) + m / 60;
+  const hand = (turns: number, len: number) => { const a = turns * Math.PI * 2; R.line(cx, cy, cx + Math.round(Math.sin(a) * len), cy - Math.round(Math.cos(a) * len), K.ink); };
+  hand(h / 12, 2);
+  hand(m / 60, 3);
+  R.px(cx, cy, K.coral);
+}
+
 // ── wall decor ──────────────────────────────────────────────────────────────
 
 export function windowPane(c: DrawCtx, pl: Plane, a0: number, a1: number, v0: number, v1: number) {
@@ -816,7 +839,7 @@ export function drawDecor(c: DrawCtx, d: Decor): void {
     case 'menu': return menuBoard(c, pl, d.a0, d.a1, d.v0, d.v1);
     case 'mugShelf': return mugShelf(c, pl, d.a0, d.a1, d.v0);
     case 'sconce': return sconce(c, pl, d.a0, d.v0);
-    case 'clock': { const q = planePt(P, pl, d.a0, d.v0); R.grid(CLOCK, CLOCK_PAL, q[0] - 4, q[1] - 4); return; }
+    case 'clock': { const q = planePt(P, pl, d.a0, d.v0); return clock(R, q[0], q[1]); }
     case 'framed': return framed(c, pl, d.a0, d.a1, d.v0, d.v1, d.color ?? K.teal);
     case 'kanban': return kanban(c, pl, d.a0, d.a1, d.v0, d.v1);
     case 'curtains': return curtains(c, pl, d.a0, d.a1, d.v0, d.v1);

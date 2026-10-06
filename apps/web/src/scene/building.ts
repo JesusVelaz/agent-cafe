@@ -13,6 +13,7 @@ import { BUILDING, FLOORS, GROUND, OUTDOOR, UPSTAIRS, underUpperFloor, type Dir,
 import type { CatView } from '@/sim/cats';
 import type { Bubble, Pose } from '@/sim/world';
 import { backdrop, frontWeather, grade, type ThemeId } from './atmosphere';
+import { cloudShadows, drawSky, streetLife } from './ambient';
 import { text, textW } from './font';
 import { iso } from './iso';
 import { drawStreet } from './outdoor';
@@ -88,6 +89,7 @@ export function renderScene(R: Raster, agents: SceneAgent[], o: SceneOptions): A
   const TOP = H1 + H2;
 
   backdrop(R, o.theme, o.t, Boolean(o.transparent));
+  drawSky(c);
   drawStreet(c);
   floorTiles(c, W, D, 0, GROUND.floor);
 
@@ -154,6 +156,8 @@ export function renderScene(R: Raster, agents: SceneAgent[], o: SceneOptions): A
     list.push({ d: cat.x + cat.y + 0.3, f: () => drawCat(c, cat, z) });
   }
 
+  streetLife(c, (d, f) => front.push({ d, f }));
+
   for (const L of [under, up, front]) {
     L.sort((p, q) => p.d - q.d);
     for (const it of L) it.f();
@@ -163,6 +167,7 @@ export function renderScene(R: Raster, agents: SceneAgent[], o: SceneOptions): A
   stringLights(c, [[0, UD, H1 - 1], [0, 8.5, H1 - 1], [0, D, H1 - 1]], 2);
   stringLights(c, [[0, 0, TOP - 2], [4.5, 0, TOP - 2], [UW, 0, TOP - 2]], 3);
 
+  cloudShadows(c);
   if (o.theme === 'summer') c.lights.push({ x: R.w * 0.62, y: R.h * 0.45, r: 120, col: [1, 0.9, 0.6], s: 1.4 });
   grade(R, o.theme, c.lights);
   frontWeather(R, o.theme, o.t);

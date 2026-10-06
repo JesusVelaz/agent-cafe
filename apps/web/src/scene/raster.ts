@@ -105,7 +105,7 @@ export class Raster {
   }
 
   /** Draw a palette-indexed grid; chars listed in `emit` glow. */
-  grid(g: readonly string[], pal: Record<string, string>, x: number, y: number, flip = false, emit = ''): void {
+  grid(g: readonly string[], pal: Record<string, string>, x: number, y: number, flip = false, emit = '', a = 1): void {
     x = Math.round(x);
     y = Math.round(y);
     for (let r = 0; r < g.length; r++) {
@@ -115,7 +115,7 @@ export class Raster {
         const col = pal[ch];
         if (!col) continue;
         const px = x + (flip ? row.length - 1 - ci : ci);
-        this.span(y + r, px, px, rgb(col), 1, emit.includes(ch));
+        this.span(y + r, px, px, rgb(col), a, emit.includes(ch));
       }
     }
   }
