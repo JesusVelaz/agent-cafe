@@ -29,6 +29,16 @@ export const phoneRoutes =
       }
     });
 
+    // "Fix it": lets phones through Windows Firewall (Windows asks for permission first).
+    app.post('/api/phone/fix', { onRequest: localOnly }, async (_req, reply) => {
+      try {
+        return { available: phone.available, sharing: await phone.repair() };
+      } catch (err) {
+        if (err instanceof RemoteSetupError) return reply.code(400).send({ error: err.message });
+        throw err;
+      }
+    });
+
     app.delete('/api/phone', { onRequest: localOnly }, async () => {
       await phone.stop();
       return { available: phone.available, sharing: null };

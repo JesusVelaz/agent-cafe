@@ -68,13 +68,22 @@ export interface CreateTaskInput {
 /** Phone access (the "Phone" button): whether the café can open to phones, and how it is open now. */
 export interface PhoneStatus {
   available: boolean;
-  sharing: { via: 'tailscale' | 'lan' | 'address'; link: string } | null;
+  sharing: {
+    via: 'tailscale' | 'lan' | 'address';
+    link: string;
+    /** A device got through to the café (so the network and firewall are fine). */
+    reached: boolean;
+    /** Windows Firewall in the way, as far as the café can tell. */
+    firewall: { kind: 'blocked' | 'not-allowed'; network: 'Public' | 'Private' | 'DomainAuthenticated' | null; fixable: boolean } | null;
+  } | null;
 }
 
 export const api = {
   phone: () => request<PhoneStatus>('/api/phone'),
   /** `via`: tailscale or lan. */
   sharePhone: (via: string) => post<PhoneStatus>('/api/phone', { via }),
+  /** Lets phones through Windows Firewall; Windows asks for permission first. */
+  fixPhone: () => post<PhoneStatus>('/api/phone/fix'),
   stopPhone: () => request<PhoneStatus>('/api/phone', { method: 'DELETE' }),
   catalog: () => request<{ asOf: string; models: ModelInfo[] }>('/api/catalog'),
   createTask: (input: CreateTaskInput) => post<TaskDTO>('/api/tasks', input),

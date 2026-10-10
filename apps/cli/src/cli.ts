@@ -39,9 +39,10 @@ const open = () => (options.openBrowser ? openBrowser(url) : Promise.resolve());
 interface PhoneSharing {
   via: 'tailscale' | 'lan' | 'address';
   link: string;
+  firewall: { fixable: boolean } | null;
 }
 
-async function printPairing({ via, link }: PhoneSharing) {
+async function printPairing({ via, link, firewall }: PhoneSharing) {
   console.log('\n📱 To open it on your phone, scan this with the phone’s camera:\n');
   console.log(await QRCode.toString(link, { type: 'terminal', small: true }));
   console.log(`   or open ${link}`);
@@ -53,6 +54,10 @@ async function printPairing({ via, link }: PhoneSharing) {
     console.log('   ⚠ Your phone has to be on the same network, and the connection isn’t encrypted:');
     console.log('     use this on a network you trust (your home), never on public Wi-Fi.');
     console.log('     To use the café from anywhere, encrypted, use --host tailscale.');
+  }
+  if (firewall) {
+    console.log('   ⚠ Windows Firewall will stop your phone from loading the café.');
+    console.log(firewall.fixable ? '     To fix it, click “Phone” in the café, then “Fix it”.' : '     This network is managed by your organization: ask your IT team to allow Agent Café.');
   }
   console.log('');
 }

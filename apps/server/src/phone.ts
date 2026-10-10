@@ -1,5 +1,6 @@
 import { createServer, type Server } from 'node:http';
 import type { FastifyInstance } from 'fastify';
+import { checkFirewall, fixFirewall, type FirewallProblem } from './firewall.js';
 import { remoteAddress, RemoteSetupError, type RemoteKind } from './network.js';
 import { hostPort, remoteHandler, type RemoteAccess } from './remote.js';
 import { pairingToken } from './token.js';
@@ -9,6 +10,17 @@ export interface PhoneSharing {
   via: RemoteKind;
   /** The pairing link (it carries the token): show it as a QR code, only on this computer. */
   link: string;
+  /** A device has reached the café on this address since phone access was turned on. */
+  reached: boolean;
+  /** What would stop a phone getting through (Windows Firewall), or null if nothing we can see. */
+  firewall: FirewallProblem | null;
+}
+
+interface Options {
+  /** How a choice (`tailscale`, `lan`, an address) becomes an address. */
+  resolve?: (choice: string) => { address: string; kind: RemoteKind };
+  check?: (address: string, port: number) => Promise<FirewallProblem | null>;
+  fix?: (address: string, port: number) => Promise<void>;
 }
 
 /**
@@ -19,13 +31,22 @@ export class PhoneAccess {
   private app?: FastifyInstance;
   private server?: Server;
   private access?: RemoteAccess & { via: RemoteKind };
+  private reached = false;
+  private firewall: FirewallProblem | null = null;
+  private readonly resolve: NonNullable<Options['resolve']>;
+  private readonly check: NonNullable<Options['check']>;
+  private readonly fix: NonNullable<Options['fix']>;
 
   /** `dataDir` keeps the pairing token. Without one (or without the built UI to serve), there is no phone access. */
   constructor(
     private readonly port: number,
     private readonly dataDir: string | undefined,
-    private readonly resolve: (choice: string) => { address: string; kind: RemoteKind } = remoteAddress,
-  ) {}
+    options: Options = {},
+  ) {
+    this.resolve = options.resolve ?? remoteAddress;
+    this.check = options.check ?? checkFirewall;
+    this.fix = options.fix ?? fixFirewall;
+  }
 
   get available(): boolean {
     return this.dataDir !== undefined;
@@ -40,7 +61,12 @@ export class PhoneAccess {
 
   status(): PhoneSharing | null {
     if (!this.access) return null;
-    return { via: this.access.via, link: `http://${hostPort(this.access.host, this.port)}/?token=${this.access.token}` };
+    return {
+      via: this.access.via,
+      link: `http://${hostPort(this.access.host, this.port)}/?token=${this.access.token}`,
+      reached: this.reached,
+      firewall: this.reached ? null : this.firewall,
+    };
   }
 
   /** Turns phone access on: `tailscale`, `lan` or one of this computer's addresses. */
@@ -50,7 +76,11 @@ export class PhoneAccess {
     if (this.access?.host === address) return this.status()!;
     await this.stop();
 
-    const server = createServer(remoteHandler(this.app));
+    const handle = remoteHandler(this.app);
+    const server = createServer((req, res) => {
+      this.reached = true; // the way in is open, whatever happens next
+      handle(req, res);
+    });
     try {
       await new Promise<void>((resolve, reject) => {
         server.once('error', reject);
@@ -64,13 +94,36 @@ export class PhoneAccess {
     }
     this.server = server;
     this.access = { host: address, token: pairingToken(this.dataDir).token, via: kind };
+    this.reached = false;
+    // Looked up before the person scans, so the page can say what's wrong while they try.
+    this.firewall = await this.check(address, this.port);
     return this.status()!;
+  }
+
+  /**
+   * Fixes what the firewall check found (Windows asks the person first), then checks again.
+   * Throws a RemoteSetupError when it couldn't.
+   */
+  async repair(): Promise<PhoneSharing> {
+    if (!this.access) throw new RemoteSetupError('Phone access is off.');
+    if (!this.firewall?.fixable) throw new RemoteSetupError('There’s nothing here the café can fix.');
+    const { host } = this.access;
+    try {
+      await this.fix(host, this.port);
+    } catch {
+      throw new RemoteSetupError('Windows didn’t make the change. Click Yes when it asks for permission, then try again.');
+    }
+    if (this.access?.host === host) this.firewall = await this.check(host, this.port);
+    const status = this.status();
+    if (!status) throw new RemoteSetupError('Phone access is off.');
+    return status;
   }
 
   /** Turns phone access off. Paired devices stay paired for next time. */
   async stop() {
     const server = this.server;
     this.access = undefined;
+    this.firewall = null;
     this.server = undefined;
     if (!server) return;
     server.closeAllConnections();
