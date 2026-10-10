@@ -23,8 +23,8 @@ No Node or pnpm needed: each release ships the café with everything it runs on.
 
 - **Windows:** download `AgentCafeSetup.exe` from the
   [latest release](https://github.com/JesusVelaz/agent-cafe/releases/latest) and run it. Open
-  **Agent Café** from the Start menu. The installer can also let phones on your home Wi-Fi reach the
-  café (a Windows Firewall rule for private networks only). It isn't code-signed yet, so Windows
+  **Agent Café** from the Start menu. The installer can also let phones on your home Wi-Fi through
+  Windows Firewall (private networks only), so [network access](#on-your-phone) works straight away. It isn't code-signed yet, so Windows
   may say it "protected your PC": click **More info → Run anyway**.
 - **macOS and Linux:** run this in a terminal, then open **Agent Café** from Applications (in your
   home folder) or your app menu, or run `agent-cafe`:

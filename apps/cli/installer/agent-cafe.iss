@@ -12,7 +12,7 @@
 #endif
 
 #define AppName "Agent Café"
-#define FirewallRule "Agent Café (phone access)"
+#define FirewallRule "Agent Café (network access)"
 
 [Setup]
 AppId={{6F0B8C2E-4D1A-4E7B-9C35-2A8E5D9B7C41}
@@ -50,8 +50,9 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\agent-cafe.cmd"; WorkingDir: 
 Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
 
 [Run]
-; The same rule the café's own "Fix it" button adds, so either one finds the other's.
-Filename: "powershell.exe"; Parameters: "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command ""Remove-NetFirewallRule -DisplayName '{#FirewallRule}' -ErrorAction SilentlyContinue; New-NetFirewallRule -DisplayName '{#FirewallRule}' -Direction Inbound -Action Allow -Protocol TCP -LocalPort 4318 -Program '{app}\node.exe' -Profile Private -RemoteAddress LocalSubnet | Out-Null"""; Flags: runhidden waituntilterminated; StatusMsg: "Letting phones on your home Wi-Fi reach the café..."; Tasks: phones
+; The rule the café's own "Fix it" (Settings → Connections) adds, by the same name, so either replaces
+; the other. It covers any port, since the café moves off 4318 when another program holds it.
+Filename: "powershell.exe"; Parameters: "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command ""Remove-NetFirewallRule -DisplayName '{#FirewallRule}' -ErrorAction SilentlyContinue; New-NetFirewallRule -DisplayName '{#FirewallRule}' -Direction Inbound -Action Allow -Protocol TCP -Program '{app}\node.exe' -Profile Private -RemoteAddress LocalSubnet | Out-Null"""; Flags: runhidden waituntilterminated; StatusMsg: "Letting phones on your home Wi-Fi reach the café..."; Tasks: phones
 Filename: "{app}\agent-cafe.cmd"; WorkingDir: "{app}"; Description: "Open {#AppName} now"; Flags: postinstall nowait skipifsilent shellexec runasoriginaluser
 
 [UninstallRun]
