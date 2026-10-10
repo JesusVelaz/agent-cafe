@@ -120,8 +120,8 @@ export function CafeLoader({ settled, hydrated, sceneReady, connection, onDone }
         <div className="max-w-sm text-center">
           <p className="font-display text-3xl leading-none">The café is closed</p>
           <p className="mt-2 text-xs text-chalk-dim">
-            The server isn’t answering on 127.0.0.1:4318. Start everything with <code className="font-mono text-accent">pnpm dev</code> from the repo root.
-            This page reconnects by itself.
+            The café server isn’t answering. Start it again with <code className="font-mono text-accent">agent-cafe</code> (or{' '}
+            <code className="font-mono text-accent">pnpm dev</code> in the repo). This page reconnects by itself.
           </p>
         </div>
       )}

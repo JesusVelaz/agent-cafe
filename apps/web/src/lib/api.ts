@@ -13,7 +13,9 @@ import type {
   TaskEventDTO,
 } from '@agent-cafe/shared';
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:4318';
+// Under `pnpm dev`, Next serves the UI on :3000 and the API has its own port. A built UI is
+// served by the café server itself, so it calls the API on its own origin.
+export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'development' ? 'http://127.0.0.1:4318' : '');
 
 export class ApiError extends Error {
   constructor(
@@ -32,7 +34,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       headers: init?.body ? { 'content-type': 'application/json' } : undefined,
     });
   } catch {
-    throw new ApiError('Can’t reach the café server. Is `pnpm dev` running?', 0);
+    throw new ApiError('Can’t reach the café server. Is it still running?', 0);
   }
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new ApiError((body as { error?: string }).error ?? `Request failed (${res.status})`, res.status);

@@ -1,6 +1,5 @@
 import type { CafeEvent } from '@agent-cafe/shared';
 import type { FastifyPluginAsync } from 'fastify';
-import { ALLOWED_ORIGINS } from '../config.js';
 import type { Services } from '../services.js';
 
 const HEARTBEAT_MS = 15_000;
@@ -11,7 +10,7 @@ const HEARTBEAT_MS = 15_000;
  * EventSource gives reconnects for free.
  */
 export const streamRoutes =
-  ({ bus, orchestrator }: Services): FastifyPluginAsync =>
+  ({ bus, orchestrator }: Services, origins: string[]): FastifyPluginAsync =>
   async (app) => {
     app.get('/api/stream', async (req, reply) => {
       reply.hijack();
@@ -21,7 +20,7 @@ export const streamRoutes =
         'cache-control': 'no-cache, no-transform',
         connection: 'keep-alive',
         'x-accel-buffering': 'no',
-        ...(origin && ALLOWED_ORIGINS.includes(origin) ? { 'access-control-allow-origin': origin, vary: 'Origin' } : {}),
+        ...(origin && origins.includes(origin) ? { 'access-control-allow-origin': origin, vary: 'Origin' } : {}),
       });
 
       const send = (e: CafeEvent) => reply.raw.write(`data: ${JSON.stringify(e)}\n\n`);
