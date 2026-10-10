@@ -14,6 +14,8 @@ export const phoneRoutes =
   (phone: PhoneAccess): FastifyPluginAsync =>
   async (app) => {
     const localOnly = async (req: FastifyRequest, reply: FastifyReply) => {
+      // The answer carries the pairing link, and the page polls it for "connected": never cache it.
+      reply.header('cache-control', 'no-store');
       if (isRemote(req)) return reply.code(403).send({ error: 'Phone access can only be changed on the computer running the café.' });
     };
 

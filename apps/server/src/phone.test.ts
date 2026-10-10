@@ -67,7 +67,9 @@ function get(port: number, path: string, headers: Record<string, string> = {}) {
 describe('connect your phone', () => {
   it('starts off, then opens to phones from the café page', async () => {
     const { port, dataDir, local } = await cafe();
-    expect((await local('GET')).json()).toEqual({ available: true, sharing: null });
+    const off = await local('GET');
+    expect(off.json()).toEqual({ available: true, sharing: null });
+    expect(off.headers['cache-control']).toBe('no-store');
     await expect(get(port, '/')).rejects.toThrow(/ECONNREFUSED/);
 
     const on = (await local('POST', { via: 'lan' })).json();
