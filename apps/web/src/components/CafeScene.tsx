@@ -34,6 +34,7 @@ interface Props {
  * centred; a new scale is eased into once the stage is still.
  */
 export function CafeScene({ theme, labels = true, reserveBottom = 0, onFrame, overlay, onReady }: Props) {
+  useTurnKeys();
   const wrapRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const tipRef = useRef<HTMLDivElement>(null);
@@ -158,7 +159,6 @@ export function CafeScene({ theme, labels = true, reserveBottom = 0, onFrame, ov
         </div>
         {overlay}
       </div>
-      <TurnButtons />
     </div>
   );
 }
@@ -178,29 +178,6 @@ function useTurnKeys() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
-}
-
-/** Turn the café a quarter either way. Top right, where the diorama leaves sky. */
-function TurnButtons() {
-  useTurnKeys();
-  const turnView = useCafe((s) => s.turnView);
-  const button = 'flex size-8 items-center justify-center rounded-lg text-chalk-dim hover:bg-slate-2 hover:text-chalk';
-  return (
-    <div className="absolute right-3 top-3 z-20 flex items-center gap-0.5 rounded-xl border border-slate-line bg-night-2/85 p-0.5 shadow-lg backdrop-blur">
-      <button type="button" className={button} onClick={() => turnView(1)} aria-label="Turn the café left" title="Turn left (Q)">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
-          <path d="M3.5 7.5a5 5 0 1 1 1.4 4.6" />
-          <path d="M3.2 3.6v4h4" />
-        </svg>
-      </button>
-      <button type="button" className={button} onClick={() => turnView(-1)} aria-label="Turn the café right" title="Turn right (E)">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
-          <path d="M12.5 7.5a5 5 0 1 0-1.4 4.6" />
-          <path d="M12.8 3.6v4h-4" />
-        </svg>
-      </button>
-    </div>
-  );
 }
 
 function AgentTooltip({ id }: { id: string }) {
