@@ -4,7 +4,7 @@ import QRCode from 'qrcode';
 import { useEffect, useState, type ReactNode } from 'react';
 import { api, ApiError, type PhoneStatus } from '@/lib/api';
 import { networkPrefix } from '@/lib/phone';
-import { Toggle } from './ui';
+import { Caret, Toggle } from './ui';
 
 /**
  * Settings → Connections: opens the café to phones (over Tailscale or the home network) and shows
@@ -74,20 +74,26 @@ export function Connections({ active }: { active: boolean }) {
         </Row>
         {available && (
           <Row title="Connect over" hint={CHOICES[via]}>
-            <select
-              aria-label="Connect over"
-              value={via}
-              disabled={busy !== null}
-              onChange={(e) => {
-                const next = e.target.value as Via;
-                setVia(next);
-                if (sharing) void run('start', () => api.sharePhone(next));
-              }}
-              className="h-9 w-44 rounded-lg border border-slate-line bg-night-2 px-3 text-[13px] text-chalk outline-none hover:border-chalk-faint focus:border-accent disabled:opacity-60"
-            >
-              <option value="lan">Home network</option>
-              <option value="tailscale">Tailscale</option>
-            </select>
+            <div className="relative">
+              <select
+                aria-label="Connect over"
+                value={via}
+                disabled={busy !== null}
+                onChange={(e) => {
+                  const next = e.target.value as Via;
+                  setVia(next);
+                  if (sharing) void run('start', () => api.sharePhone(next));
+                }}
+                className="h-9 w-44 appearance-none rounded-lg border border-slate-line bg-night-2 pl-3 pr-9 text-[13px] text-chalk outline-none hover:border-chalk-faint focus:border-accent disabled:opacity-60"
+              >
+                <option value="lan">Home network</option>
+                <option value="tailscale">Tailscale</option>
+              </select>
+              {/* Our own arrow: the browser's can't be moved in from the edge. */}
+              <span className="pointer-events-none absolute inset-y-0 right-3.5 flex items-center text-chalk">
+                <Caret />
+              </span>
+            </div>
           </Row>
         )}
         {sharing && <Sharing sharing={sharing} busy={busy} onFix={() => run('fix', api.fixPhone)} />}
