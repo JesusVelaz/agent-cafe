@@ -23,7 +23,7 @@ describe('serving the built UI', () => {
   };
 
   it('serves the page and its files next to the API', async () => {
-    const app = await buildApp(undefined, { port: 4318, webDir: webDir() });
+    const app = await buildApp(undefined, { webDir: webDir() });
     const page = await app.inject('/');
     expect(page.statusCode).toBe(200);
     expect(page.headers['content-type']).toMatch(/^text\/html/);
@@ -32,7 +32,7 @@ describe('serving the built UI', () => {
   });
 
   it('answers other page paths with the page, but unknown API paths with a JSON 404', async () => {
-    const app = await buildApp(undefined, { port: 4318, webDir: webDir() });
+    const app = await buildApp(undefined, { webDir: webDir() });
     const deep = await app.inject('/some/where');
     expect(deep.statusCode).toBe(200);
     expect(deep.body).toContain('Agent Café');
@@ -48,7 +48,7 @@ describe('serving the built UI', () => {
 
 describe('origins', () => {
   const change = (app: Awaited<ReturnType<typeof buildApp>>, origin: string) =>
-    app.inject({ method: 'POST', url: '/api/health', headers: { origin } }).then((r) => r.statusCode);
+    app.inject({ method: 'POST', url: '/api/health', headers: { host: '127.0.0.1:4400', origin } }).then((r) => r.statusCode);
 
   it("accepts changes from the dev UI and the server's own port, nothing else", async () => {
     const app = await buildApp(undefined, { port: 4400 });

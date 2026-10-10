@@ -9,20 +9,22 @@ import type { ThemeId } from '@/scene/atmosphere';
 import { useCafe } from '@/store/cafe';
 import { AddProjectDialog } from './AddProjectDialog';
 import { Avatar } from './Avatar';
+import { Connections } from './Connections';
 import { THEME_LABELS, ThemeIcon } from './ThemePicker';
 import { ModelList } from './pickers';
-import { Caret, FolderIcon, HarnessIcon, Popover } from './ui';
+import { Caret, FolderIcon, HarnessIcon, Popover, Toggle } from './ui';
 
-export type Section = 'general' | 'agents' | 'providers' | 'projects';
+export type Section = 'general' | 'agents' | 'providers' | 'projects' | 'connections';
 
 const SECTIONS: Array<{ id: Section; label: string }> = [
   { id: 'general', label: 'General' },
   { id: 'agents', label: 'Agents' },
   { id: 'providers', label: 'Providers' },
   { id: 'projects', label: 'Projects' },
+  { id: 'connections', label: 'Connections' },
 ];
 
-/** App settings in a modal: general, providers (connect Claude / ChatGPT, floor modes) and projects. */
+/** App settings in a modal: general, providers (connect Claude / ChatGPT, floor modes), projects and connections (your phone). */
 export function SettingsDialog({
   open,
   onClose,
@@ -70,7 +72,8 @@ export function SettingsDialog({
                 type="button"
                 aria-current={section === s.id ? 'page' : undefined}
                 onClick={() => setSection(s.id)}
-                className={`shrink-0 rounded-lg px-3 py-2 text-left text-[13px] sm:px-2.5 ${section === s.id ? 'bg-slate text-chalk' : 'text-chalk-dim hover:bg-slate hover:text-chalk'}`}
+                // The outline goes inside: the tab row scrolls sideways on phones, which clips anything outside.
+                className={`shrink-0 rounded-lg px-3 py-2 text-left text-[13px] outline-offset-[-2px] sm:px-2.5 ${section === s.id ? 'bg-slate text-chalk' : 'text-chalk-dim hover:bg-slate hover:text-chalk'}`}
               >
                 {s.label}
               </button>
@@ -82,6 +85,7 @@ export function SettingsDialog({
           {section === 'agents' && <Agents />}
           {section === 'providers' && <Providers active={open} />}
           {section === 'projects' && <Projects />}
+          {section === 'connections' && <Connections active={open} />}
         </div>
       </div>
       {/* On the dialog, not in the scrolling pane, so it stays put while a long section scrolls. */}
@@ -151,22 +155,6 @@ function General({ themeChoice, theme, onTheme }: { themeChoice: ThemeChoice; th
         <Toggle checked={settings.ambient} onChange={(on) => void api.updateSettings({ ambient: on })} label="Demo traffic" />
       </Row>
     </>
-  );
-}
-
-function Toggle({ checked, onChange, label, disabled }: { checked: boolean; onChange: (on: boolean) => void; label: string; disabled?: boolean }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      disabled={disabled}
-      onClick={() => onChange(!checked)}
-      className={`relative h-6 w-10 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${checked ? 'bg-accent' : 'bg-slate-line'}`}
-    >
-      <span className={`absolute top-0.5 size-5 rounded-full bg-white shadow transition-[left] ${checked ? 'left-[18px]' : 'left-0.5'}`} />
-    </button>
   );
 }
 

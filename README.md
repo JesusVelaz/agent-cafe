@@ -43,7 +43,33 @@ pnpm start
 This is the `agent-cafe` command (`apps/cli`). It opens http://127.0.0.1:4318 in your browser
 and keeps its data in `~/.agent-cafe`, apart from the dev database. Options: `--port`,
 `--data-dir`, `--no-browser` (see `agent-cafe --help`). Like `pnpm dev`, it only listens on
-this computer. Once the package is published, `npx agent-cafe` does the same with no checkout.
+this computer unless you open it to your phone (below). Once the package is published,
+`npx agent-cafe` does the same with no checkout.
+
+### On your phone
+
+The café keeps running on your computer; your phone becomes another screen for it. Open
+**Settings → Connections** in the café, turn on **Network access** and pick how your phone reaches it
+(it stays on when the café restarts, until you turn it off), or start it with `--host`
+(from the repo: `pnpm start --host tailscale`; this also works while the café is already open):
+
+| | Works | Connection |
+|---|---|---|
+| `--host tailscale` | Anywhere your phone has [Tailscale](https://tailscale.com) on (install it on both, same account) | Encrypted |
+| `--host lan` | Only on the same home network (Wi-Fi or router) as your computer | Not encrypted: use it on a network you trust, never public Wi-Fi |
+
+The café shows a QR code (the command prints it too). Scan it with your phone's camera and the café opens; the phone
+stays paired (a cookie) from then on. The code holds a long random token, saved in
+`~/.agent-cafe/pairing-token`: anyone with it can control the café, so keep it to yourself.
+`--new-token` (with the café closed) makes a new one and signs out every paired device; turning
+**Network access** off closes the café to phones until you turn it on again. The first time, your computer's
+firewall may ask whether to accept incoming connections: allow it (on Windows, for private
+networks only).
+
+How it works: the café still listens on 127.0.0.1 for this computer, and adds a second listener
+on the chosen address (`apps/server/src/phone.ts`). Every request through that one needs the token, and the server checks
+the `Host` header on both (`apps/server/src/remote.ts`). The computer has to be on and the café
+running for the phone to reach it.
 
 ### Going live with your Claude subscription
 
@@ -243,7 +269,7 @@ Key decisions:
 
 ```
 packages/shared/src     domain.ts · events.ts · catalog.ts (demo models + prices, dated)
-apps/server/src         app.ts · main.ts (startup) · index.ts (dev entry) · services.ts (composition root)
+apps/server/src         app.ts · main.ts (startup) · index.ts (dev entry) · remote.ts (phone pairing) · services.ts (composition root)
   orchestrator/         orchestrator.ts · runner.ts · ambient.ts
   providers/            harness.ts · live.ts · claude.ts · codex.ts · codexRpc.ts · config.ts · mock.ts · registry.ts · types.ts
   tools/                registry.ts · calculator.ts · files.ts   (demo runs)
@@ -255,7 +281,7 @@ apps/web/src
   sim/                  layout.ts · pathfinding.ts · activity.ts · world.ts · cats.ts
   scene/                renderer.ts · building.ts · props.ts · outdoor.ts · atmosphere.ts · sprites.ts · raster.ts
   lib/                  api.ts · stream.ts · theme.ts (auto themes) · format.ts
-apps/cli/src            cli.ts · options.ts · browser.ts   (the `agent-cafe` command; build.mjs bundles it)
+apps/cli/src            cli.ts · options.ts · browser.ts · network.ts · token.ts   (the `agent-cafe` command; build.mjs bundles it)
 docs/                   specs/ (design decisions) · plans/ (implementation plans)
 ```
 
