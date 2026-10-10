@@ -29,7 +29,9 @@
     "@agent-cafe/server": "workspace:*",
     "@agent-cafe/web": "workspace:*",
     "@types/node": "^24",
+    "@types/qrcode": "^1.5.6",
     "esbuild": "^0.28.2",
+    "qrcode": "^1.5.4",
     "typescript": "~6.0.3",
     "vitest": "^5.0.2"
   }

@@ -16,15 +16,28 @@ That starts the café on this computer and opens http://127.0.0.1:4318. It needs
   downstairs. Install them, then press **Connect** in **Settings → Providers**. Agent Café never
   sees or stores your credentials.
 
+## On your phone
+
+```bash
+npx agent-cafe --host tailscale   # anywhere, encrypted (Tailscale on computer and phone)
+npx agent-cafe --host lan         # same home network only, not encrypted: trusted networks only
+```
+
+Or open **Settings → Connections** in the café and turn on **Network access**; it stays on when the café restarts, until you turn it off. Scan the QR code with your phone's camera. The phone stays paired after that. Anyone
+with the code can control your café, so keep it to yourself; `--new-token` signs out every
+paired device. Your computer has to be on, with the café running.
+
 ## Options
 
 ```
 -p, --port <port>     Port to serve the café on (default 4318)
+    --host <where>    Also open the café to devices you pair: tailscale, lan or an address
+    --new-token       Make a new pairing code; devices paired before must scan again
     --data-dir <dir>  Where the café keeps its data (default ~/.agent-cafe)
     --no-browser      Don't open the café in your browser
 ```
 
-`AGENT_CAFE_PORT` and `AGENT_CAFE_HOME` set the same defaults. The café only listens on this
-computer (127.0.0.1).
+`AGENT_CAFE_PORT` and `AGENT_CAFE_HOME` set the same defaults. Without `--host`, the café only
+listens on this computer (127.0.0.1).
 
 Source and docs: https://github.com/JesusVelaz/agent-cafe
