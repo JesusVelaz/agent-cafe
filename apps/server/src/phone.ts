@@ -81,12 +81,34 @@ export class PhoneAccess {
     };
   }
 
-  /** Turns phone access on: `tailscale`, `lan` or one of this computer's addresses. */
+  /**
+   * Turning on, switching and turning off take turns, each finishing before the next begins:
+   * otherwise a switch still opening its listener could reopen access after "off" had finished.
+   */
+  private queue: Promise<unknown> = Promise.resolve();
+  private serial<T>(task: () => Promise<T>): Promise<T> {
+    const run = this.queue.then(task, task);
+    this.queue = run.catch(() => {});
+    return run;
+  }
+
+  /** Turns network access on: `tailscale`, `lan` or one of this computer's addresses. */
   async start(choice: string): Promise<PhoneSharing> {
+    const access = await this.serial(() => this.open(choice));
+    // Looked up before the person scans, so the page can say what's wrong while they try. Outside
+    // the turns (it can take a while), so it only counts if access is still the one it checked.
+    const firewall = await this.check(access.host, this.port);
+    if (this.access === access) this.firewall = firewall;
+    const status = this.status();
+    if (!status) throw new RemoteSetupError('Network access is off.');
+    return status;
+  }
+
+  private async open(choice: string): Promise<NonNullable<PhoneAccess['access']>> {
     if (!this.app || !this.dataDir) throw new RemoteSetupError('Network access needs the café started with `pnpm start` or `agent-cafe`.');
     const { address, kind } = this.resolve(choice);
-    if (this.access?.host === address) return this.status()!;
-    await this.stop();
+    if (this.access?.host === address) return this.access;
+    await this.close();
 
     const handle = remoteHandler(this.app);
     const server = createServer((req, res) => {
@@ -107,11 +129,9 @@ export class PhoneAccess {
     this.server = server;
     this.access = { host: address, token: pairingToken(this.dataDir).token, via: kind };
     this.reached = false;
-    // Looked up before the person scans, so the page can say what's wrong while they try.
     // Stays on next time the café starts, until it's turned off.
     writeFileSync(join(this.dataDir, 'phone-access'), `${choice}\n`);
-    this.firewall = await this.check(address, this.port);
-    return this.status()!;
+    return this.access;
   }
 
   /**
@@ -121,26 +141,35 @@ export class PhoneAccess {
   async repair(): Promise<PhoneSharing> {
     if (!this.access) throw new RemoteSetupError('Network access is off.');
     if (!this.firewall?.fixable) throw new RemoteSetupError('There’s nothing here the café can fix.');
-    const { host } = this.access;
+    const access = this.access;
     try {
-      await this.fix(host, this.port);
+      await this.fix(access.host, this.port);
     } catch {
       throw new RemoteSetupError('Windows didn’t make the change. Click Yes when it asks for permission, then try again.');
     }
-    if (this.access?.host === host) this.firewall = await this.check(host, this.port);
+    if (this.access === access) {
+      const firewall = await this.check(access.host, this.port);
+      if (this.access === access) this.firewall = firewall;
+    }
     const status = this.status();
     if (!status) throw new RemoteSetupError('Network access is off.');
     return status;
   }
 
-  /** Turns phone access off, for next time too. Paired devices stay paired. */
-  async turnOff() {
-    await this.stop();
-    if (this.dataDir) rmSync(join(this.dataDir, 'phone-access'), { force: true });
+  /** Turns network access off, for next time too. Paired devices stay paired. */
+  turnOff(): Promise<void> {
+    return this.serial(async () => {
+      await this.close();
+      if (this.dataDir) rmSync(join(this.dataDir, 'phone-access'), { force: true });
+    });
   }
 
-  /** Closes the way in for now (the café is closing, or switching addresses). */
-  async stop() {
+  /** Closes the way in for now, after any switch in progress (the café is closing). */
+  stop(): Promise<void> {
+    return this.serial(() => this.close());
+  }
+
+  private async close() {
     const server = this.server;
     this.access = undefined;
     this.firewall = null;

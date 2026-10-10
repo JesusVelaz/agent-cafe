@@ -105,6 +105,16 @@ describe('connect your phone', () => {
     expect(phone.saved()).toBeUndefined();
   });
 
+  it('stays off when turned off while still opening', async () => {
+    const { port, local, phone } = await cafe();
+    const opening = phone.start('lan').catch((err: Error) => err.message);
+    await phone.turnOff();
+    expect(await opening).toBe('Network access is off.');
+    expect((await local('GET')).json()).toEqual({ available: true, sharing: null });
+    expect(phone.saved()).toBeUndefined();
+    await expect(get(port, '/')).rejects.toThrow(/ECONNREFUSED/);
+  });
+
   it('says why it can’t open', async () => {
     const { local } = await cafe();
     const res = await local('POST', { via: 'nowhere' });
