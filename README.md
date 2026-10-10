@@ -30,6 +30,21 @@ Open http://localhost:3000. The first run creates `apps/server/data/cafe.db`, se
 agents (Mocha, Chai and Biscotti downstairs; Earl, Matcha and Scone upstairs), and turns on
 **Demo traffic**, so idle demo agents pick up sample orders by themselves.
 
+### Running it as one app
+
+`pnpm dev` runs the UI (Next on :3000) and the server (:4318) separately, with hot reload. To
+run the café the way it ships, as one process that serves the UI and the API on one port:
+
+```bash
+pnpm build
+pnpm start
+```
+
+This is the `agent-cafe` command (`apps/cli`). It opens http://127.0.0.1:4318 in your browser
+and keeps its data in `~/.agent-cafe`, apart from the dev database. Options: `--port`,
+`--data-dir`, `--no-browser` (see `agent-cafe --help`). Like `pnpm dev`, it only listens on
+this computer. Once the package is published, `npx agent-cafe` does the same with no checkout.
+
 ### Going live with your Claude subscription
 
 1. Install [Claude Code](https://code.claude.com).
@@ -184,6 +199,9 @@ changes in agent settings are also validated against the offered models.
 
 Useful scripts: `pnpm test`, `pnpm typecheck`, `pnpm db:reset` (wipe and reseed).
 
+The server brings the database up to date when it starts, from `apps/server/prisma/migrations`.
+After changing `schema.prisma`, run `pnpm db:migrate` to add a migration (a test fails until you do).
+
 ## Architecture
 
 ```
@@ -225,7 +243,7 @@ Key decisions:
 
 ```
 packages/shared/src     domain.ts · events.ts · catalog.ts (demo models + prices, dated)
-apps/server/src         app.ts · index.ts · services.ts (composition root)
+apps/server/src         app.ts · main.ts (startup) · index.ts (dev entry) · services.ts (composition root)
   orchestrator/         orchestrator.ts · runner.ts · ambient.ts
   providers/            harness.ts · live.ts · claude.ts · codex.ts · codexRpc.ts · config.ts · mock.ts · registry.ts · types.ts
   tools/                registry.ts · calculator.ts · files.ts   (demo runs)
@@ -237,6 +255,7 @@ apps/web/src
   sim/                  layout.ts · pathfinding.ts · activity.ts · world.ts · cats.ts
   scene/                renderer.ts · building.ts · props.ts · outdoor.ts · atmosphere.ts · sprites.ts · raster.ts
   lib/                  api.ts · stream.ts · theme.ts (auto themes) · format.ts
+apps/cli/src            cli.ts · options.ts · browser.ts   (the `agent-cafe` command; build.mjs bundles it)
 docs/                   specs/ (design decisions) · plans/ (implementation plans)
 ```
 

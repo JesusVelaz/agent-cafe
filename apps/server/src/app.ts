@@ -1,6 +1,9 @@
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import Fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
-import { ALLOWED_ORIGINS } from './config.js';
+import fastifyStatic from '@fastify/static';
+import { allowedOrigins } from './config.js';
 import { ZodError } from 'zod';
 import { OrchestratorError } from './orchestrator/orchestrator.js';
 import { ConfigError } from './providers/config.js';
@@ -13,10 +16,17 @@ import { taskRoutes } from './routes/tasks.js';
 import { threadRoutes } from './routes/threads.js';
 import type { Services } from './services.js';
 
+export interface AppOptions {
+  /** The port the server listens on; the UI it serves itself comes from that origin. */
+  port?: number;
+  /** The built web UI to serve next to the API. */
+  webDir?: string;
+}
 
-export async function buildApp(services?: Services): Promise<FastifyInstance> {
+export async function buildApp(services?: Services, options: AppOptions = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
-  await app.register(cors, { origin: ALLOWED_ORIGINS, methods: ['GET', 'POST', 'PATCH', 'DELETE'] });
+  const origins = allowedOrigins(options.port);
+  await app.register(cors, { origin: origins, methods: ['GET', 'POST', 'PATCH', 'DELETE'] });
 
   app.setErrorHandler((err, _req, reply) => {
     if (err instanceof ZodError) {
@@ -38,7 +48,7 @@ export async function buildApp(services?: Services): Promise<FastifyInstance> {
   app.addHook('onRequest', async (req, reply) => {
     if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return;
     const origin = req.headers.origin;
-    if (origin && !ALLOWED_ORIGINS.includes(origin)) return reply.code(403).send({ error: 'Not allowed from this origin.' });
+    if (origin && !origins.includes(origin)) return reply.code(403).send({ error: 'Not allowed from this origin.' });
   });
 
   app.get('/api/health', async () => ({ ok: true }));
@@ -50,7 +60,17 @@ export async function buildApp(services?: Services): Promise<FastifyInstance> {
     await app.register(providerRoutes(services));
     await app.register(projectRoutes(services));
     await app.register(folderRoutes());
-    await app.register(streamRoutes(services));
+    await app.register(streamRoutes(services, origins));
+  }
+
+  if (options.webDir) {
+    if (!existsSync(join(options.webDir, 'index.html'))) throw new Error(`No built web UI in ${options.webDir}. Run \`pnpm build\` first.`);
+    await app.register(fastifyStatic, { root: options.webDir });
+    // The UI is a single page: any other path that isn't the API gets it too.
+    app.setNotFoundHandler((req, reply) => {
+      if (req.method === 'GET' && !req.url.startsWith('/api/')) return reply.sendFile('index.html');
+      return reply.code(404).send({ error: 'Not found' });
+    });
   }
   return app;
 }
