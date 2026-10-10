@@ -62,9 +62,12 @@ function refuse(req: FastifyRequest, reply: FastifyReply) {
 }
 
 /** Requires pairing for requests that came in through the remote listener. */
-export function requirePairing(app: FastifyInstance, { token }: RemoteAccess) {
+export function requirePairing(app: FastifyInstance, remote: () => RemoteAccess | undefined) {
   app.addHook('onRequest', async (req, reply) => {
     if (!isRemote(req)) return;
+    // Phone access was just turned off: the listener is closing, so nothing gets through.
+    const token = remote()?.token;
+    if (!token) return refuse(req, reply);
     const url = new URL(req.url, 'http://cafe');
     const offered = url.searchParams.get('token');
     if (offered !== null) {

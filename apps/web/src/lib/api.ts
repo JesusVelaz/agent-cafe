@@ -65,7 +65,17 @@ export interface CreateTaskInput {
   continueTaskId?: string;
 }
 
+/** Phone access (the "Phone" button): whether the café can open to phones, and how it is open now. */
+export interface PhoneStatus {
+  available: boolean;
+  sharing: { via: 'tailscale' | 'lan' | 'address'; link: string } | null;
+}
+
 export const api = {
+  phone: () => request<PhoneStatus>('/api/phone'),
+  /** `via`: tailscale or lan. */
+  sharePhone: (via: string) => post<PhoneStatus>('/api/phone', { via }),
+  stopPhone: () => request<PhoneStatus>('/api/phone', { method: 'DELETE' }),
   catalog: () => request<{ asOf: string; models: ModelInfo[] }>('/api/catalog'),
   createTask: (input: CreateTaskInput) => post<TaskDTO>('/api/tasks', input),
   cancelTask: (id: string) => post<TaskDTO>(`/api/tasks/${id}/cancel`),

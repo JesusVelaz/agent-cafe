@@ -1,7 +1,6 @@
 import type { NetworkInterfaceInfo } from 'node:os';
 import { describe, expect, it } from 'vitest';
-import { isTailscale, remoteAddress } from './network.js';
-import { CliError } from './options.js';
+import { isTailscale, remoteAddress, RemoteSetupError } from './network.js';
 
 const v4 = (address: string, internal = false) => ({ address, family: 'IPv4', internal }) as NetworkInterfaceInfo;
 const v6 = (address: string) => ({ address, family: 'IPv6', internal: false }) as NetworkInterfaceInfo;
@@ -62,7 +61,7 @@ describe('remoteAddress', () => {
   });
 
   it('refuses addresses that are everywhere, nowhere or only here', () => {
-    for (const bad of ['0.0.0.0', '::', '10.9.9.9', '127.0.0.1']) expect(() => remoteAddress(bad, laptop)).toThrow(CliError);
+    for (const bad of ['0.0.0.0', '::', '10.9.9.9', '127.0.0.1']) expect(() => remoteAddress(bad, laptop)).toThrow(RemoteSetupError);
   });
 });
 

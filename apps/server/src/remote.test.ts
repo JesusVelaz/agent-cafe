@@ -24,7 +24,7 @@ async function remoteCafe(): Promise<{ app: FastifyInstance; port: number }> {
   const port = (server.address() as AddressInfo).port;
   const webDir = mkdtempSync(join(tmpdir(), 'agent-cafe-web-'));
   writeFileSync(join(webDir, 'index.html'), '<!doctype html><title>Agent Café</title>');
-  const app = await buildApp(undefined, { port, webDir, remote: { host: '127.0.0.1', token: TOKEN } });
+  const app = await buildApp(undefined, { port, webDir, remote: () => ({ host: '127.0.0.1', token: TOKEN }) });
   await app.ready();
   handle = remoteHandler(app);
   cleanup.push(() => server.close(), () => app.close());

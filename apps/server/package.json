@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "exports": { "./main": "./src/main.ts" },
+  "exports": { "./main": "./src/main.ts", "./network": "./src/network.ts", "./token": "./src/token.ts" },
   "scripts": {
     "dev": "node --watch --import tsx src/index.ts",
     "start": "tsx src/index.ts",

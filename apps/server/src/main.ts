@@ -1,4 +1,3 @@
-import { createServer, type Server } from 'node:http';
 import { PROVIDER_IDS } from '@agent-cafe/shared';
 import { buildApp } from './app.js';
 import type { ServerConfig } from './config.js';
@@ -6,7 +5,7 @@ import { createDb } from './db/client.js';
 import { migrate, MIGRATIONS_DIR } from './db/migrate.js';
 import { seed } from './db/seed.js';
 import { databaseUrl } from './paths.js';
-import { hostPort, remoteHandler } from './remote.js';
+import { PhoneAccess, type PhoneSharing } from './phone.js';
 import { createServices } from './services.js';
 
 export interface StartOptions {
@@ -16,9 +15,9 @@ export interface StartOptions {
 
 /**
  * Starts the café server: database, agents, harness checks and the HTTP API. Returns its URL, and
- * the address paired devices use when remote access is on.
+ * the pairing link when it was asked to open to phones from the start.
  */
-export async function startServer(config: ServerConfig, options: StartOptions = {}): Promise<{ url: string; remoteUrl?: string }> {
+export async function startServer(config: ServerConfig, options: StartOptions = {}): Promise<{ url: string; phone?: PhoneSharing }> {
   const url = options.databaseUrl ?? databaseUrl();
   migrate(url, options.migrationsDir ?? MIGRATIONS_DIR);
   const db = createDb(url);
@@ -35,33 +34,28 @@ export async function startServer(config: ServerConfig, options: StartOptions = 
       .catch((err) => console.error(`[harness] ${id} check failed`, err));
   }
 
+  // Phones need the built UI to load, and a data folder to keep the pairing token in.
+  const phone = new PhoneAccess(config.port, config.webDir ? config.dataDir : undefined);
   const app = await buildApp(services, {
     port: config.port,
     ...(config.webDir ? { webDir: config.webDir } : {}),
-    ...(config.remote ? { remote: config.remote } : {}),
+    remote: phone.current,
+    phone,
   });
-  let remote: Server | undefined;
+  phone.attach(app);
   async function close() {
     services.ambient.stop();
     services.providers.harnesses.close();
     await services.orchestrator.shutdown();
-    remote?.closeAllConnections();
-    remote?.close();
+    await phone.stop();
     await app.close();
     await db.$disconnect();
   }
 
+  let sharing: PhoneSharing | undefined;
   try {
     await app.listen({ host: config.host, port: config.port });
-    if (config.remote) {
-      // A second listener on the remote address, serving the same app to paired devices only.
-      const server = createServer(remoteHandler(app));
-      await new Promise<void>((resolve, reject) => {
-        server.once('error', reject);
-        server.listen(config.port, config.remote!.host, () => resolve());
-      });
-      remote = server;
-    }
+    if (config.phone) sharing = await phone.start(config.phone);
   } catch (err) {
     await close();
     throw err;
@@ -77,8 +71,5 @@ export async function startServer(config: ServerConfig, options: StartOptions = 
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 
-  return {
-    url: `http://${config.host}:${config.port}`,
-    ...(config.remote ? { remoteUrl: `http://${hostPort(config.remote.host, config.port)}` } : {}),
-  };
+  return { url: `http://${config.host}:${config.port}`, ...(sharing ? { phone: sharing } : {}) };
 }

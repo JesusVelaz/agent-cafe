@@ -1,8 +1,10 @@
 import { execFileSync } from 'node:child_process';
 import { networkInterfaces, type NetworkInterfaceInfo } from 'node:os';
-import { CliError } from './options.js';
 
 export type RemoteKind = 'tailscale' | 'lan' | 'address';
+
+/** Why phone access can't be turned on, in words for the person who asked. */
+export class RemoteSetupError extends Error {}
 type Interfaces = NodeJS.Dict<NetworkInterfaceInfo[]>;
 
 /**
@@ -72,21 +74,21 @@ export function remoteAddress(
   };
   if (choice === 'tailscale') {
     const found = all.find((i) => tailscale().includes(i.address));
-    if (!found) throw new CliError('No Tailscale address on this computer. Is Tailscale installed and connected?');
+    if (!found) throw new RemoteSetupError('No Tailscale address on this computer. Is Tailscale installed and connected?');
     return { address: found.address, kind: 'tailscale' };
   }
   if (choice === 'lan') {
     const found = all
       .filter((i) => !VIRTUAL.test(i.name) && lanRank(i.address) !== null)
       .sort((x, y) => lanRank(x.address)! - lanRank(y.address)!)[0];
-    if (!found) throw new CliError('No Wi-Fi or home network address found. Is this computer on a network?');
+    if (!found) throw new RemoteSetupError('No Wi-Fi or home network address found. Is this computer on a network?');
     return { address: found.address, kind: 'lan' };
   }
   if (choice === '0.0.0.0' || choice === '::') {
-    throw new CliError('Listening on every address would expose the café on networks you didn’t choose. Pick one: --host tailscale, --host lan, or an address.');
+    throw new RemoteSetupError('Listening on every address would expose the café on networks you didn’t choose. Pick one: --host tailscale, --host lan, or an address.');
   }
   const known = Object.values(interfaces).flatMap((infos) => (infos ?? []).map((i) => i.address));
-  if (!known.includes(choice)) throw new CliError(`${choice} isn't an address of this computer.`);
-  if (choice.startsWith('127.') || choice === '::1') throw new CliError('That address is only reachable from this computer. Leave out --host for that.');
+  if (!known.includes(choice)) throw new RemoteSetupError(`${choice} isn't an address of this computer.`);
+  if (choice.startsWith('127.') || choice === '::1') throw new RemoteSetupError('That address is only reachable from this computer. Leave out --host for that.');
   return { address: choice, kind: isTailscale(choice) && tailscale().includes(choice) ? 'tailscale' : 'address' };
 }

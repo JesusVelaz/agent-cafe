@@ -14,7 +14,9 @@ import { providerRoutes } from './routes/providers.js';
 import { streamRoutes } from './routes/stream.js';
 import { taskRoutes } from './routes/tasks.js';
 import { threadRoutes } from './routes/threads.js';
+import type { PhoneAccess } from './phone.js';
 import { hostPort, isRemote, requirePairing, type RemoteAccess } from './remote.js';
+import { phoneRoutes } from './routes/phone.js';
 import type { Services } from './services.js';
 
 export interface AppOptions {
@@ -22,23 +24,27 @@ export interface AppOptions {
   port?: number;
   /** The built web UI to serve next to the API. */
   webDir?: string;
-  /** Paired devices reach the café on this address too (see remote.ts). */
-  remote?: RemoteAccess;
+  /** Where paired devices reach the café right now, if anywhere (see remote.ts). */
+  remote?: () => RemoteAccess | undefined;
+  /** Lets the café page on this computer turn phone access on and off (see phone.ts). */
+  phone?: PhoneAccess;
 }
 
 export async function buildApp(services?: Services, options: AppOptions = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
-  const origins = allowedOrigins(options.port, options.remote?.host);
-  await app.register(cors, { origin: origins, methods: ['GET', 'POST', 'PATCH', 'DELETE'] });
+  // Phone access can come and go while the café runs, so origins are checked against it each time.
+  const allowedOrigin = (origin: string) => allowedOrigins(options.port, options.remote?.()?.host).includes(origin);
+  await app.register(cors, { origin: (origin, cb) => cb(null, origin !== undefined && allowedOrigin(origin)), methods: ['GET', 'POST', 'PATCH', 'DELETE'] });
 
   // A page on another site can point its own hostname at this computer (DNS rebinding) and then
   // read the API as if it were the café. Its Host header still names that site, so check it.
   if (options.port) {
     const port = options.port;
     const localHosts = [`127.0.0.1:${port}`, `localhost:${port}`];
-    const remoteHosts = options.remote ? [hostPort(options.remote.host, port)] : [];
     app.addHook('onRequest', async (req, reply) => {
-      if (!(isRemote(req) ? remoteHosts : localHosts).includes(req.headers.host ?? '')) {
+      const remote = options.remote?.();
+      const hosts = isRemote(req) ? (remote ? [hostPort(remote.host, port)] : []) : localHosts;
+      if (!hosts.includes(req.headers.host ?? '')) {
         return reply.code(403).send({ error: 'Not allowed from this host.' });
       }
     });
@@ -65,7 +71,7 @@ export async function buildApp(services?: Services, options: AppOptions = {}): P
   app.addHook('onRequest', async (req, reply) => {
     if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return;
     const origin = req.headers.origin;
-    if (origin && !origins.includes(origin)) return reply.code(403).send({ error: 'Not allowed from this origin.' });
+    if (origin && !allowedOrigin(origin)) return reply.code(403).send({ error: 'Not allowed from this origin.' });
   });
 
   app.get('/api/health', async () => ({ ok: true }));
@@ -77,8 +83,9 @@ export async function buildApp(services?: Services, options: AppOptions = {}): P
     await app.register(providerRoutes(services));
     await app.register(projectRoutes(services));
     await app.register(folderRoutes());
-    await app.register(streamRoutes(services, origins));
+    await app.register(streamRoutes(services, allowedOrigin));
   }
+  if (options.phone) await app.register(phoneRoutes(options.phone));
 
   if (options.webDir) {
     if (!existsSync(join(options.webDir, 'index.html'))) throw new Error(`No built web UI in ${options.webDir}. Run \`pnpm build\` first.`);

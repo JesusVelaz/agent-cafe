@@ -1,6 +1,6 @@
 import { isAbsolute, resolve } from 'node:path';
 import { REPO_ROOT } from './paths.js';
-import { hostPort, type RemoteAccess } from './remote.js';
+import { hostPort } from './remote.js';
 
 export interface ServerConfig {
   host: '127.0.0.1';
@@ -12,8 +12,13 @@ export interface ServerConfig {
    * Unset under `pnpm dev`, where Next serves the UI on :3000.
    */
   webDir?: string;
-  /** Also serve the café on this address, to paired devices only (`agent-cafe --host`). */
-  remote?: RemoteAccess;
+  /**
+   * Where the pairing token lives. Set by the `agent-cafe` command, which serves the built UI:
+   * with it, the café can be opened to phones (at start with `phone`, or later from the page).
+   */
+  dataDir?: string;
+  /** Open the café to phones from the start: tailscale, lan or an address (`agent-cafe --host`). */
+  phone?: string;
 }
 
 const fromRepo = (p: string) => (isAbsolute(p) ? p : resolve(REPO_ROOT, p));

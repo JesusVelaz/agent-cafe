@@ -48,23 +48,25 @@ this computer unless you open it to your phone (below). Once the package is publ
 
 ### On your phone
 
-The café keeps running on your computer; your phone becomes another screen for it. Start it
-with `--host` (from the repo: `pnpm start --host tailscale`):
+The café keeps running on your computer; your phone becomes another screen for it. Click
+**Phone** in the café's top bar and pick how your phone reaches it, or start it with `--host`
+(from the repo: `pnpm start --host tailscale`; this also works while the café is already open):
 
 | | Works | Connection |
 |---|---|---|
 | `--host tailscale` | Anywhere your phone has [Tailscale](https://tailscale.com) on (install it on both, same account) | Encrypted |
 | `--host lan` | Only on the same Wi-Fi as your computer | Not encrypted: use it on a network you trust, never public Wi-Fi |
 
-The command prints a QR code. Scan it with your phone's camera and the café opens; the phone
+The café shows a QR code (the command prints it too). Scan it with your phone's camera and the café opens; the phone
 stays paired (a cookie) from then on. The code holds a long random token, saved in
 `~/.agent-cafe/pairing-token`: anyone with it can control the café, so keep it to yourself.
-`--new-token` (with the café closed) makes a new one and signs out every paired device. The first time, your computer's
+`--new-token` (with the café closed) makes a new one and signs out every paired device; **Close to
+phones** in the same dialog stops phone access until you open it again. The first time, your computer's
 firewall may ask whether to accept incoming connections: allow it (on Windows, for private
 networks only).
 
 How it works: the café still listens on 127.0.0.1 for this computer, and adds a second listener
-on the chosen address. Every request through that one needs the token, and the server checks
+on the chosen address (`apps/server/src/phone.ts`). Every request through that one needs the token, and the server checks
 the `Host` header on both (`apps/server/src/remote.ts`). The computer has to be on and the café
 running for the phone to reach it.
 

@@ -23,7 +23,7 @@ npx agent-cafe --host tailscale   # anywhere, encrypted (Tailscale on computer a
 npx agent-cafe --host lan         # same Wi-Fi only, not encrypted: trusted networks only
 ```
 
-Scan the QR code it prints with your phone's camera. The phone stays paired after that. Anyone
+Or click **Phone** in the café once it's open. Scan the QR code with your phone's camera. The phone stays paired after that. Anyone
 with the code can control your café, so keep it to yourself; `--new-token` signs out every
 paired device. Your computer has to be on, with the café running.
 
