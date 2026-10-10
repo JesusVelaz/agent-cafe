@@ -85,7 +85,7 @@ if (running === 'cafe') {
   if (options.newToken) fail(`Agent Café is already open at ${url}. Close it (Ctrl+C in its window), then run this again to make a new pairing code.`);
   console.log(`☕ Agent Café is already open at ${url}`);
   if (options.host) {
-    // Ask the running café to open to phones, as its "Connect your phone" button does.
+    // Ask the running café to open to phones, as Settings → Connections does.
     const res = await call(`${url}/api/phone`, { method: 'POST', json: { via: options.host }, timeoutMs: 10_000 }).catch(() => undefined);
     let body: { sharing?: PhoneSharing; error?: string } = {};
     try {

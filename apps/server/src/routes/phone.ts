@@ -1,5 +1,5 @@
 /**
- * "Connect your phone": the café page on this computer turns phone access on or off and gets the
+ * Settings → Connections: the café page on this computer turns network access on or off and gets the
  * pairing link to show as a QR code. Never from a phone: the link is the key to the café.
  */
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';

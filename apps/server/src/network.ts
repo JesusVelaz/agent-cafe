@@ -20,7 +20,7 @@ export function isTailscale(ip: string): boolean {
 const TAILSCALE_CLIS = ['tailscale', ...(process.platform === 'darwin' ? ['/Applications/Tailscale.app/Contents/MacOS/Tailscale'] : [])];
 
 /** This computer's Tailscale IPv4 addresses, as the tailscale command reports them (empty if it can't). */
-export function tailscaleCliAddresses(): string[] {
+function tailscaleCliAddresses(): string[] {
   for (const cli of TAILSCALE_CLIS) {
     try {
       const out = execFileSync(cli, ['ip', '-4'], { encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true });
