@@ -25,7 +25,10 @@ export function PhoneDialog({ open, onClose }: { open: boolean; onClose: () => v
     if (open && !d.open) {
       setError(null);
       setStatus(null);
-      api.phone().then(setStatus, (err) => setError(err instanceof ApiError ? err.message : String(err)));
+      api.phone().then(setStatus, (err) =>
+        // The page was rebuilt while an older café server kept running (it serves the new files).
+        setError(err instanceof ApiError && err.status === 404 ? 'This café is still running an older version. Close it (Ctrl+C in its window), then start it again.' : err instanceof ApiError ? err.message : String(err)),
+      );
       d.showModal();
     } else if (!open && d.open) d.close();
   }, [open]);
