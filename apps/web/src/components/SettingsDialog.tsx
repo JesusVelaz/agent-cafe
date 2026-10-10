@@ -72,7 +72,8 @@ export function SettingsDialog({
                 type="button"
                 aria-current={section === s.id ? 'page' : undefined}
                 onClick={() => setSection(s.id)}
-                className={`shrink-0 rounded-lg px-3 py-2 text-left text-[13px] sm:px-2.5 ${section === s.id ? 'bg-slate text-chalk' : 'text-chalk-dim hover:bg-slate hover:text-chalk'}`}
+                // The outline goes inside: the tab row scrolls sideways on phones, which clips anything outside.
+                className={`shrink-0 rounded-lg px-3 py-2 text-left text-[13px] outline-offset-[-2px] sm:px-2.5 ${section === s.id ? 'bg-slate text-chalk' : 'text-chalk-dim hover:bg-slate hover:text-chalk'}`}
               >
                 {s.label}
               </button>
