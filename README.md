@@ -59,7 +59,7 @@ with `--host` (from the repo: `pnpm start --host tailscale`):
 The command prints a QR code. Scan it with your phone's camera and the café opens; the phone
 stays paired (a cookie) from then on. The code holds a long random token, saved in
 `~/.agent-cafe/pairing-token`: anyone with it can control the café, so keep it to yourself.
-`--new-token` makes a new one and signs out every paired device. The first time, your computer's
+`--new-token` (with the café closed) makes a new one and signs out every paired device. The first time, your computer's
 firewall may ask whether to accept incoming connections: allow it (on Windows, for private
 networks only).
 

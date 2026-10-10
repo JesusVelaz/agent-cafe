@@ -38,6 +38,8 @@ const open = () => options.openBrowser && openBrowser(url);
 
 const running = await probe(url);
 if (running === 'cafe') {
+  // The running café keeps the pairing code it started with, so a new one would change nothing yet.
+  if (options.newToken) fail(`Agent Café is already open at ${url}. Close it (Ctrl+C in its window), then run this again to make a new pairing code.`);
   console.log(`☕ Agent Café is already open at ${url}`);
   if (options.host) console.log('   To open it to your phone, close it first, then start it again with --host.');
   open();
