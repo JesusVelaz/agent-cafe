@@ -14,6 +14,7 @@ import { providerRoutes } from './routes/providers.js';
 import { streamRoutes } from './routes/stream.js';
 import { taskRoutes } from './routes/tasks.js';
 import { threadRoutes } from './routes/threads.js';
+import { hostPort, isRemote, requirePairing, type RemoteAccess } from './remote.js';
 import type { Services } from './services.js';
 
 export interface AppOptions {
@@ -21,12 +22,28 @@ export interface AppOptions {
   port?: number;
   /** The built web UI to serve next to the API. */
   webDir?: string;
+  /** Paired devices reach the café on this address too (see remote.ts). */
+  remote?: RemoteAccess;
 }
 
 export async function buildApp(services?: Services, options: AppOptions = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
-  const origins = allowedOrigins(options.port);
+  const origins = allowedOrigins(options.port, options.remote?.host);
   await app.register(cors, { origin: origins, methods: ['GET', 'POST', 'PATCH', 'DELETE'] });
+
+  // A page on another site can point its own hostname at this computer (DNS rebinding) and then
+  // read the API as if it were the café. Its Host header still names that site, so check it.
+  if (options.port) {
+    const port = options.port;
+    const localHosts = [`127.0.0.1:${port}`, `localhost:${port}`];
+    const remoteHosts = options.remote ? [hostPort(options.remote.host, port)] : [];
+    app.addHook('onRequest', async (req, reply) => {
+      if (!(isRemote(req) ? remoteHosts : localHosts).includes(req.headers.host ?? '')) {
+        return reply.code(403).send({ error: 'Not allowed from this host.' });
+      }
+    });
+  }
+  if (options.remote) requirePairing(app, options.remote);
 
   app.setErrorHandler((err, _req, reply) => {
     if (err instanceof ZodError) {

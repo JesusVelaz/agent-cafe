@@ -1,3 +1,4 @@
+import { createServer, type Server } from 'node:http';
 import { PROVIDER_IDS } from '@agent-cafe/shared';
 import { buildApp } from './app.js';
 import type { ServerConfig } from './config.js';
@@ -5,6 +6,7 @@ import { createDb } from './db/client.js';
 import { migrate, MIGRATIONS_DIR } from './db/migrate.js';
 import { seed } from './db/seed.js';
 import { databaseUrl } from './paths.js';
+import { hostPort, remoteHandler } from './remote.js';
 import { createServices } from './services.js';
 
 export interface StartOptions {
@@ -12,8 +14,11 @@ export interface StartOptions {
   migrationsDir?: string;
 }
 
-/** Starts the café server: database, agents, harness checks and the HTTP API. Returns its URL. */
-export async function startServer(config: ServerConfig, options: StartOptions = {}): Promise<{ url: string }> {
+/**
+ * Starts the café server: database, agents, harness checks and the HTTP API. Returns its URL, and
+ * the address paired devices use when remote access is on.
+ */
+export async function startServer(config: ServerConfig, options: StartOptions = {}): Promise<{ url: string; remoteUrl?: string }> {
   const url = options.databaseUrl ?? databaseUrl();
   migrate(url, options.migrationsDir ?? MIGRATIONS_DIR);
   const db = createDb(url);
@@ -30,22 +35,50 @@ export async function startServer(config: ServerConfig, options: StartOptions = 
       .catch((err) => console.error(`[harness] ${id} check failed`, err));
   }
 
-  const app = await buildApp(services, { port: config.port, ...(config.webDir ? { webDir: config.webDir } : {}) });
-  await app.listen({ host: config.host, port: config.port });
+  const app = await buildApp(services, {
+    port: config.port,
+    ...(config.webDir ? { webDir: config.webDir } : {}),
+    ...(config.remote ? { remote: config.remote } : {}),
+  });
+  let remote: Server | undefined;
+  async function close() {
+    services.ambient.stop();
+    services.providers.harnesses.close();
+    await services.orchestrator.shutdown();
+    remote?.closeAllConnections();
+    remote?.close();
+    await app.close();
+    await db.$disconnect();
+  }
+
+  try {
+    await app.listen({ host: config.host, port: config.port });
+    if (config.remote) {
+      // A second listener on the remote address, serving the same app to paired devices only.
+      const server = createServer(remoteHandler(app));
+      await new Promise<void>((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(config.port, config.remote!.host, () => resolve());
+      });
+      remote = server;
+    }
+  } catch (err) {
+    await close();
+    throw err;
+  }
 
   let closing = false;
   async function shutdown() {
     if (closing) return;
     closing = true;
-    services.ambient.stop();
-    services.providers.harnesses.close();
-    await services.orchestrator.shutdown();
-    await app.close();
-    await db.$disconnect();
+    await close();
     process.exit(0);
   }
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 
-  return { url: `http://${config.host}:${config.port}` };
+  return {
+    url: `http://${config.host}:${config.port}`,
+    ...(config.remote ? { remoteUrl: `http://${hostPort(config.remote.host, config.port)}` } : {}),
+  };
 }

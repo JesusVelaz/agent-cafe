@@ -30,6 +30,8 @@ await build({
   format: 'esm',
   target: 'node22',
   external,
+  // Bundled CommonJS packages (the QR code renderer) call require(); give the ES module one.
+  banner: { js: "import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);" },
   logLevel: 'warning',
 });
 cpSync(web, join(dist, 'web'), { recursive: true });

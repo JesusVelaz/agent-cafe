@@ -7,6 +7,7 @@ describe('parseCliArgs', () => {
   it('defaults to the café port, ~/.agent-cafe and opening the browser', () => {
     expect(parseCliArgs([], {})).toEqual({
       port: DEFAULT_PORT,
+      newToken: false,
       dataDir: join(homedir(), '.agent-cafe'),
       openBrowser: true,
       help: false,
@@ -21,6 +22,7 @@ describe('parseCliArgs', () => {
       openBrowser: false,
     });
     expect(parseCliArgs(['--port=5001'], {}).port).toBe(5001);
+    expect(parseCliArgs(['--host', 'tailscale', '--new-token'], {})).toMatchObject({ host: 'tailscale', newToken: true });
     expect(parseCliArgs(['-h'], {}).help).toBe(true);
     expect(parseCliArgs(['--version'], {}).version).toBe(true);
   });
@@ -33,6 +35,8 @@ describe('parseCliArgs', () => {
 
   it('rejects bad ports and unknown flags', () => {
     for (const port of ['0', '65536', 'abc', '80.5', '']) expect(() => parseCliArgs(['--port', port], {})).toThrow(CliError);
-    expect(() => parseCliArgs(['--host', '0.0.0.0'], {})).toThrow(CliError);
+    expect(() => parseCliArgs(['--bind', '0.0.0.0'], {})).toThrow(CliError);
+    expect(() => parseCliArgs(['--host', ' '], {})).toThrow(CliError);
+    expect(() => parseCliArgs(['--host'], {})).toThrow(CliError);
   });
 });

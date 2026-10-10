@@ -1,5 +1,6 @@
 import { isAbsolute, resolve } from 'node:path';
 import { REPO_ROOT } from './paths.js';
+import { hostPort, type RemoteAccess } from './remote.js';
 
 export interface ServerConfig {
   host: '127.0.0.1';
@@ -11,6 +12,8 @@ export interface ServerConfig {
    * Unset under `pnpm dev`, where Next serves the UI on :3000.
    */
   webDir?: string;
+  /** Also serve the café on this address, to paired devices only (`agent-cafe --host`). */
+  remote?: RemoteAccess;
 }
 
 const fromRepo = (p: string) => (isAbsolute(p) ? p : resolve(REPO_ROOT, p));
@@ -28,9 +31,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
 
 /**
  * The web UI's origins. The API is only reachable from these (plus direct localhost tools):
- * the dev UI on :3000, and the server's own port when it serves the built UI itself.
+ * the dev UI on :3000, the server's own port when it serves the built UI itself, and the
+ * remote address paired devices use.
  */
-export function allowedOrigins(port?: number): string[] {
+export function allowedOrigins(port?: number, remoteHost?: string): string[] {
   const ports = port ? [3000, port] : [3000];
-  return ports.flatMap((p) => [`http://localhost:${p}`, `http://127.0.0.1:${p}`]);
+  const local = ports.flatMap((p) => [`http://localhost:${p}`, `http://127.0.0.1:${p}`]);
+  return port && remoteHost ? [...local, `http://${hostPort(remoteHost, port)}`] : local;
 }
