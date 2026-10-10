@@ -26,7 +26,7 @@ import {
 } from './props';
 import type { Raster } from './raster';
 import { outfitFor } from './avatar';
-import { agentGrid, agentLook, CAT, CAT_FURS, ICON_PAL, ICONS, type AgentFrame, type CatFrame, type IconName } from './sprites';
+import { agentLook, agentSprite, CAT, CAT_FURS, ICON_PAL, ICONS, type AgentFrame, type CatFrame, type IconName, type Mood } from './sprites';
 
 export { SCENE_H, SCENE_W };
 /** Screen position of the plot's back corner in a base-size frame: centres the street plot. */
@@ -218,6 +218,9 @@ function frameFor(a: SceneAgent): { frame: AgentFrame; bob: number } {
   }
 }
 
+/** The face backs up the bubble, so you can read the room from a distance. */
+const MOOD: Partial<Record<Bubble['kind'], Mood>> = { think: 'think', tool: 'focus', ask: 'ask', done: 'done', fail: 'fail' };
+
 function drawAgent(c: DrawCtx, a: SceneAgent, z: number, selected: boolean): AgentHit {
   const { R, P } = c;
   const feet = P(a.x, a.y, z);
@@ -230,9 +233,9 @@ function drawAgent(c: DrawCtx, a: SceneAgent, z: number, selected: boolean): Age
   }
   R.rect(feet[0] - 4, feet[1], 9, 1, '#000000', 0.22);
   R.rect(feet[0] - 3, feet[1] - 1, 7, 3, '#000000', 0.12);
-  const g = agentGrid(frame, look);
+  const { grid: g, palette } = agentSprite(frame, look, a.bubble ? MOOD[a.bubble.kind] : undefined);
   const top = feet[1] - g.length + 1 + (seated ? -2 : 0) + bob;
-  R.grid(g, look.palette, feet[0] - 7, top, a.face === 'y+' || a.face === 'x-');
+  R.grid(g, palette, feet[0] - 7, top, a.face === 'y+' || a.face === 'x-');
   const headY = top + (seated ? 3 : 0);
   return { id: a.id, x0: feet[0] - 7, y0: headY - 2, x1: feet[0] + 7, y1: feet[1] + 2, headX: feet[0], headY };
 }

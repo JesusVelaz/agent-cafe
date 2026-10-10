@@ -78,18 +78,16 @@ describe('scene snapshot', () => {
 
 describe('character sheet', () => {
   it.skipIf(!process.env.SHEET)('renders every look', async () => {
-    const { agentGrid, agentLook, AGENT_W, AGENT_H } = await import('./sprites');
+    const { agentLook, agentSprite, AGENT_W, AGENT_H, MOODS } = await import('./sprites');
     const frames = ['stand', 'walkA', 'sit', 'typeB', 'sleep', 'backStand'] as const;
     const seeds = [11, 23, 37, 41, 53, 67, 5, 99];
-    const R = new Raster((AGENT_W + 4) * frames.length * 2, (AGENT_H + 4) * seeds.length / 2);
+    const cols = frames.length + MOODS.length;
+    const R = new Raster((AGENT_W + 4) * cols, (AGENT_H + 4) * seeds.length);
     R.rect(0, 0, R.w, R.h, '#efe3cf');
     seeds.forEach((seed, i) => {
-      const outfit = i % 2 ? 'office' : 'casual';
-      const look = agentLook(seed, outfit);
-      frames.forEach((f, j) => {
-        const col = (i % 2) * frames.length + j, row = Math.floor(i / 2);
-        R.grid(agentGrid(f, look), look.palette, 2 + col * (AGENT_W + 4), 2 + row * (AGENT_H + 4));
-      });
+      const look = agentLook(seed, i % 2 ? 'office' : 'casual');
+      const cells = [...frames.map((f) => agentSprite(f, look)), ...MOODS.map((m) => agentSprite('stand', look, m))];
+      cells.forEach(({ grid, palette }, j) => R.grid(grid, palette, 2 + j * (AGENT_W + 4), 2 + i * (AGENT_H + 4)));
     });
     writeFileSync(process.env.SHEET!, png(R, 6));
   });

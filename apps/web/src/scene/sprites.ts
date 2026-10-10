@@ -2,61 +2,74 @@
  * Hand-authored pixel sprites as palette-indexed string grids ('.' = transparent).
  * Swapping in a real sprite sheet later only means replacing what these return.
  */
-import { HAIR, K, SKIN, shade } from './palette';
+import { HAIR, K, mix, rgb, SKIN, shade, type RGB } from './palette';
 
 export type Grid = readonly string[];
 
 // ── Agents: chibi, 14×20 ─────────────────────────────────────────────────────
-// Big heads (10 rows), 2-pixel eyes, blush. Built from symmetric halves that are
-// mirrored, then layered: head (hairstyle) + body (outfit) + legs (pose) + accessory.
-//   o outline · h/H hair · s skin · E eyes · b blush · m mouth · w shirt · T tie
-//   c/C clothing · a/A apron · p pants · k shoes
+// Big heads (10 rows), 1×2 eyes with a catchlight beside them, blush. Lit from the upper left,
+// so rows aren't mirrored: the left side carries highlights, the right side shade.
+// Layered: head (hairstyle) + body (outfit) + legs (pose) + accessory + mood.
+//   o outline · h/H/d hair (base, lit, dark) · s/S skin (base, shade) · E eye · e catchlight
+//   b blush · m mouth · r tongue · c/L/C clothing (base, lit, shade) · w shirt · T/t tie
+//   a/A apron · p/P trousers · k/K shoes · X hair tie · G glasses · Q/q headphones
+//   B/U beanie knit · W beanie cuff · V/v visor · Y sweat drop
+// agentSprite() then tints each outline pixel from the colours it borders.
 
 export const AGENT_W = 14;
 export const AGENT_H = 20;
 
-const sym = (half: string) => half + [...half].reverse().join('');
-const S = (halves: string[]) => halves.map(sym);
+export type HairStyle = 'short' | 'bob' | 'long' | 'ponytail' | 'curly' | 'bun';
+export const HAIR_STYLES: HairStyle[] = ['short', 'bob', 'long', 'ponytail', 'curly', 'bun'];
 
-const HEAD_TOP = S(['....ooo', '...ohhh', '..ohhhh', '.ohhhhh', '.ohHhhh']);
-
-export type HairStyle = 'short' | 'bob' | 'long' | 'ponytail';
-
-const FACE: Record<HairStyle, string[]> = {
-  short: S(['.ohhsss', '.ohssEs', '.ohssEs', '.ohsbsm', '..ossss']),
-  bob: S(['.ohhhss', '.ohssEs', '.ohssEs', '.ohsbsm', '.ohosss']),
-  long: S(['.ohhhss', '.ohssEs', '.ohssEs', '.ohsbsm', '.ohosss']),
-  ponytail: S(['.ohhsss', '.ohssEs', '.ohssEs', '.ohsbsm', '..ossss']),
+/** Rows 0–5: crown and fringe. */
+const TOP: Record<HairStyle, string[]> = {
+  // Side-swept, the fringe falling to the left.
+  short: ['....oooooo....', '...oHHHhhho...', '..oHHhhhhhdo..', '.oHHhhhhhhhdo.', '.oHhhhhhhhhdo.', '.ohhhhdssssho.'],
+  bob: ['....oooooo....', '..ooHHHhhhoo..', '.oHHhhhhhhhdo.', 'oHHhhhhhhhhhdo', 'oHhhhhhhhhhhdo', 'ohhhhhhhhhhhdo'],
+  long: ['....oooooo....', '..ooHHHhhhoo..', '.oHHhhhhhhhdo.', 'oHHhhhhhhhhhdo', 'oHhhhhhhhhhhdo', 'ohhhhhhdhhhhdo'],
+  ponytail: ['....oooooo....', '...oHHHhhhoo..', '..oHHhhhhhdXo.', '.oHHhhhhhhhdho', '.oHhhhhhhhhdhd', '.ohhhhhhsssdho'],
+  curly: ['...oo.oo.oo...', '..oHHoHHohho..', '.oHHhHhhhhhdo.', 'oHHhhhhhhhhhdo', 'oHhhhhhhhhhhdo', 'ohhhhhhhhhhddo'],
+  bun: ['.....oooo.....', '....oHhhdo....', '..oooXXXXooo..', '.oHHhhhhhhhdo.', '.oHhhhhhhhhdo.', '.ohhsssssshdo.'],
 };
-const HEAD_BACK = [...HEAD_TOP, ...S(['.ohhhhh', '.ohhhhh', '.ohHhhh', '.ohhhhh', '..ohhhh'])];
+/** Rows 6–9 seen from the front: eyes, blush and mouth, chin. */
+const FACE = ['.ohseEseEsSho.', '.ohssEssEsSho.', '.ohsbsmmsbSho.', '..oosssssSoo..'];
+/** Rows 5–9 seen from behind: hair down to the nape. */
+const NAPE = ['.ohhhhhhhhhdo.', '.ohhhhhhhhhdo.', '.ohhhhhhhhddo.', '.ohhhhhhhhddo.', '..oosssssSoo..'];
+/** Hair that frames the face wider than the head (rows 5–9 get extra side columns). */
+const WIDE = new Set<HairStyle>(['bob', 'long', 'curly']);
 
 export type Outfit = 'casual' | 'office' | 'apron';
 
-const BODY: Record<Outfit, { front: string[]; typing: string[]; back: string[] }> = {
+const BODY: Record<Outfit, { front: string[]; back: string[]; typeA: string[]; typeB: string[] }> = {
+  // Jacket with a lit left side, shirt collar and tie.
   office: {
-    front: S(['...oCcw', '..oCccT', '.oCcccT', '.oCcccc', '.osCccc', '..oCccc', '..oCCCC']),
-    typing: S(['...oCcw', '..oCccT', '.oCcccT', '.oCcccc', '.oCcssc', '..oCccc', '..oCCCC']),
-    back: S(['...oCcc', '..oCccc', '.oCcccc', '.oCcccc', '.osCccc', '..oCccc', '..oCCCC']),
+    front: ['..oLcwSSwcCo..', '.oLLcwTTwccCo.', '.oLCccTtccCCo.', '.oLCcccTccCCo.', '.osCcccccccSo.', '..oCccccccCo..', '..oCCCooCCCo..'],
+    back: ['..oLccccccCo..', '.oLLccccccCCo.', '.oLCccccccCCo.', '.oLCccccccCCo.', '.osCccccccCSo.', '..oCccccccCo..', '..oCCCCCCCCo..'],
+    typeA: ['..oLcwSSwcCo..', '.oLLcwTTwccCo.', '.oLCccTtccCCo.', '.oLCcccTccCCo.', '.oLCssccSsCCo.', '..oCccccccCo..', '..oCCCooCCCo..'],
+    typeB: ['..oLcwSSwcCo..', '.oLLcwTTwccCo.', '.oLCccTtccCCo.', '.oLCcssSscCCo.', '.oLCccccccCCo.', '..oCccccccCo..', '..oCCCooCCCo..'],
   },
   // Hoodie with drawstrings and a front pocket.
   casual: {
-    front: S(['...oCcc', '..oCcwc', '.oCccwc', '.oCcccc', '.osCcCC', '..oCccc', '..oCCCC']),
-    typing: S(['...oCcc', '..oCcwc', '.oCccwc', '.oCcccc', '.oCcsCC', '..oCccc', '..oCCCC']),
-    back: S(['...oCCC', '..oCccc', '.oCcccc', '.oCcccc', '.osCccc', '..oCccc', '..oCCCC']),
+    front: ['..oLCcSScCCo..', '.oLLcwccwcCCo.', '.oLCcLccLcCCo.', '.oLCccccccCCo.', '.osCcCCCCcCSo.', '..oCcCccCcCo..', '..oCCCCCCCCo..'],
+    back: ['..oLCCCCCCCo..', '.oLLcCccCcCCo.', '.oLCccCCccCCo.', '.oLCccccccCCo.', '.osCccccccCSo.', '..oCccccccCo..', '..oCCCCCCCCo..'],
+    typeA: ['..oLCcSScCCo..', '.oLLcwccwcCCo.', '.oLCcLccLcCCo.', '.oLCccccccCCo.', '.oLCssCCSsCCo.', '..oCcCccCcCo..', '..oCCCCCCCCo..'],
+    typeB: ['..oLCcSScCCo..', '.oLLcwccwcCCo.', '.oLCcLccLcCCo.', '.oLCcssSscCCo.', '.oLCcCCCCcCCo.', '..oCcCccCcCo..', '..oCCCCCCCCo..'],
   },
   // The barista: a shirt under a bib apron with a front pocket; ties cross at the back.
   apron: {
-    front: S(['...oCca', '..oCcaa', '.oCcaaa', '.oCcaaa', '.osaaAA', '..oaaaa', '..oAAAA']),
-    typing: S(['...oCca', '..oCcaa', '.oCcaaa', '.oCcaaa', '.oaassA', '..oaaaa', '..oAAAA']),
-    back: S(['...oCcc', '..oCcAc', '.oCccAc', '.oCcccA', '.osAAAA', '..oCccc', '..oCCCC']),
+    front: ['..oLcaSSacCo..', '.oLLcaaaacCCo.', '.oLCaaaaaaCCo.', '.oLCaaaaaaACo.', '.osCaAAAAaASo.', '..oaaAaaAaAo..', '..oAAAAAAAAo..'],
+    back: ['..oLccccccCo..', '.oLLcAccAcCCo.', '.oLCccAAccCCo.', '.oLCcAccAcCCo.', '.osAAAAAAAASo.', '..oCccccccCo..', '..oCCCCCCCCo..'],
+    typeA: ['..oLcaSSacCo..', '.oLLcaaaacCCo.', '.oLCaaaaaaCCo.', '.oLCaaaaaaACo.', '.oLCssAASsCCo.', '..oaaAaaAaAo..', '..oAAAAAAAAo..'],
+    typeB: ['..oLcaSSacCo..', '.oLLcaaaacCCo.', '.oLCaaaaaaCCo.', '.oLCassSsaCCo.', '.oLCaAAAAaCCo.', '..oaaAaaAaAo..', '..oAAAAAAAAo..'],
   },
 };
 
 const LEGS = {
-  stand: S(['...oppo', '...okko', '...oooo']),
-  walkA: ['...oppooppo...', '...okko.oppo..', '...oooo.okko..'],
-  walkB: ['...oppooppo...', '..oppo.okko...', '..okko.oooo...'],
-  sit: S(['...okko']),
+  stand: ['...oppoopPo...', '..okKkookkko..', '..oooo..oooo..'],
+  walkA: ['...oppoopPo...', '..okKko.opPo..', '..oooo..okko..'],
+  walkB: ['...oppoopPo...', '..oppo.okKko..', '..okko..oooo..'],
+  sit: ['...okKookKo...'],
 };
 const BLANK2 = ['..............', '..............'];
 
@@ -67,6 +80,14 @@ export const isSeatedFrame = (f: AgentFrame) => f === 'sit' || f === 'typeA' || 
 export const isBackFrame = (f: AgentFrame) => f.startsWith('back');
 
 export type Accessory = 'none' | 'glasses' | 'phones' | 'visor' | 'beanie';
+
+/**
+ * What the face and one arm show about the work: squinting at a tool, eyes up
+ * while thinking, a raised hand when it needs you, a grin when done, a sweat
+ * drop when it failed. Front-facing frames only.
+ */
+export type Mood = 'focus' | 'think' | 'ask' | 'done' | 'fail';
+export const MOODS: Mood[] = ['focus', 'think', 'ask', 'done', 'fail'];
 
 export interface AgentLook {
   hair: HairStyle;
@@ -82,41 +103,145 @@ function setPx(rows: string[], r: number, c: number, ch: string) {
 }
 
 /** Compose one animation frame for a look. */
-export function agentGrid(frame: AgentFrame, look: Pick<AgentLook, 'hair' | 'outfit' | 'accessory'>): Grid {
+export function agentGrid(frame: AgentFrame, look: Pick<AgentLook, 'hair' | 'outfit' | 'accessory'>, mood?: Mood): Grid {
   const back = isBackFrame(frame);
   const seated = isSeatedFrame(frame);
-  let head = back ? [...HEAD_BACK] : [...HEAD_TOP, ...FACE[look.hair]];
-  if (frame === 'sleep') head = head.map((r, i) => (i === 6 ? r.replaceAll('E', 's') : i === 7 ? r.replaceAll('E', 'o') : r));
+  const { hair } = look;
+  const wide = WIDE.has(hair);
+
+  const head = back ? [...TOP[hair].slice(0, 5), ...NAPE] : [...TOP[hair], ...FACE];
+  if (back && hair === 'bun') head[5] = '.ohhhhhhhhhdo.';
+  if (wide) {
+    for (let r = 5; r <= 8; r++) { setPx(head, r, 0, 'o'); setPx(head, r, 1, 'h'); setPx(head, r, 12, 'd'); setPx(head, r, 13, 'o'); }
+    head[9] = back ? 'ohhhhhhhhhhddo' : 'ohhosssssSoddo';
+  }
+  if (hair === 'ponytail' && !back) for (let r = 6; r <= 8; r++) setPx(head, r, 13, r === 8 ? 'o' : 'd');
+  if (frame === 'sleep') {
+    // Closed eyes: a short lash line under each.
+    head[6] = head[6]!.replace(/[eE]/g, 's');
+    head[7] = head[7]!.slice(0, 4) + 'ddsdd' + head[7]!.slice(9);
+    head[8] = head[8]!.replace('mm', 'sm');
+  }
+
   const b = BODY[look.outfit];
-  const body = back ? b.back : frame === 'typeB' ? b.typing : b.front;
+  const body = back ? b.back : frame === 'typeA' ? b.typeA : frame === 'typeB' ? b.typeB : b.front;
   const legs = seated ? LEGS.sit : frame === 'walkA' || frame === 'backWalkA' ? LEGS.walkA : frame === 'walkB' || frame === 'backWalkB' ? LEGS.walkB : LEGS.stand;
   const rows = [...head, ...body, ...legs];
 
   // Hair that reaches past the head.
-  if (look.hair === 'long') {
-    if (back) for (let r = 10; r <= 13; r++) for (let c = 3; c <= 10; c++) setPx(rows, r, c, 'h');
-    else for (let r = 10; r <= 12; r++) { setPx(rows, r, 2, 'h'); setPx(rows, r, 11, 'h'); }
+  if (wide) { setPx(rows, 10, 1, 'o'); setPx(rows, 10, 12, 'o'); }
+  if (hair === 'long') {
+    if (back) {
+      for (let r = 10; r <= 12; r++) for (let c = 3; c <= 10; c++) setPx(rows, r, c, c >= 9 ? 'd' : c === 3 ? 'H' : 'h');
+      for (let c = 4; c <= 9; c++) setPx(rows, 13, c, c >= 8 ? 'd' : 'h');
+    } else {
+      for (let r = 10; r <= 12; r++) { setPx(rows, r, 0, 'o'); setPx(rows, r, 1, 'h'); setPx(rows, r, 12, 'd'); setPx(rows, r, 13, 'o'); }
+      setPx(rows, 13, 1, 'o'); setPx(rows, 13, 12, 'o');
+    }
   }
-  if (look.hair === 'ponytail') {
-    if (back) for (let r = 8; r <= 12; r++) { setPx(rows, r, 6, 'h'); setPx(rows, r, 7, 'H'); }
-    else { for (let r = 3; r <= 8; r++) setPx(rows, r, 13, r % 2 ? 'h' : 'H'); setPx(rows, 9, 13, 'o'); }
+  if (hair === 'ponytail' && back) {
+    for (let r = 8; r <= 13; r++) { setPx(rows, r, 6, r === 8 ? 'X' : 'h'); setPx(rows, r, 7, r === 8 ? 'X' : 'd'); }
+    setPx(rows, 14, 6, 'o'); setPx(rows, 14, 7, 'o');
   }
+
   // Accessories.
-  if (look.accessory === 'glasses' && !back) {
-    // Light frames around the eyes (a solid dark bar reads as sunglasses).
-    for (const c of [4, 5, 8, 9]) setPx(rows, 5, c, 'G');
-    for (const r of [6, 7]) for (const c of [3, 6, 7, 10]) setPx(rows, r, c, 'G');
+  const acc = look.accessory;
+  if (acc === 'glasses' && !back) {
+    // Light wire frames: at this size dark frames read as a mask.
+    for (let c = 3; c <= 10; c++) setPx(rows, 5, c, 'G');
+    for (const r of [6, 7]) { setPx(rows, r, 3, 'G'); setPx(rows, r, 10, 'G'); }
+    setPx(rows, 6, 6, 'G'); setPx(rows, 6, 7, 'G');
   }
-  if (look.accessory === 'phones') {
+  if (acc === 'phones') {
     for (let c = 4; c <= 9; c++) setPx(rows, 0, c, 'Q');
-    for (const r of [5, 6, 7]) { setPx(rows, r, 0, 'Q'); setPx(rows, r, 13, 'Q'); }
-    setPx(rows, 1, 3, 'Q'); setPx(rows, 1, 10, 'Q');
+    setPx(rows, 1, 3, 'Q'); setPx(rows, 1, 10, 'Q'); setPx(rows, 2, 2, 'Q'); setPx(rows, 2, 11, 'Q');
+    for (const r of [5, 6, 7, 8]) {
+      const edge = r === 5 || r === 8;
+      setPx(rows, r, 0, edge ? 'o' : 'Q'); setPx(rows, r, 1, r === 6 ? 'q' : 'Q');
+      setPx(rows, r, 12, 'Q'); setPx(rows, r, 13, edge ? 'o' : 'Q');
+    }
   }
-  if (look.accessory === 'visor') for (let c = 1; c <= 12; c++) { setPx(rows, 3, c, 'V'); if (!back && c >= 3 && c <= 10) setPx(rows, 4, c, 'v'); }
-  if (look.accessory === 'beanie') {
-    rows[1] = sym('...oBBB'); rows[2] = sym('..oBBBB'); rows[3] = sym('.oBBBBB'); rows[4] = sym('.oWWWWW');
+  if (acc === 'visor') for (let c = 1; c <= 12; c++) { setPx(rows, 3, c, 'V'); if (!back && c >= 2 && c <= 11) setPx(rows, 4, c, 'v'); }
+  if (acc === 'beanie') {
+    rows[0] = '....oooooo....';
+    rows[1] = '..oBUBUBUBUo..';
+    rows[2] = '.oBUBUBUBUBUo.';
+    rows[3] = '.oBUBUBUBUBUo.';
+    rows[4] = 'oWWWWWWWWWWWWo';
   }
+
+  if (mood && !back && frame !== 'sleep') applyMood(rows, mood);
   return seated ? [...BLANK2, ...rows] : rows;
+}
+
+function applyMood(rows: string[], mood: Mood) {
+  const put = (r: number, c: number, ch: string) => setPx(rows, r, c, ch);
+  const span = (r: number, c: number, s: string) => [...s].forEach((ch, i) => put(r, c + i, ch));
+  switch (mood) {
+    case 'focus': // brows drawn in, mouth set
+      put(5, 5, 'd'); put(5, 8, 'd'); put(8, 6, 'o'); put(8, 7, 'o');
+      break;
+    case 'think': // eyes up and aside, a hand at the chin
+      span(6, 3, 'sEesEe'); span(7, 3, 'ssssss');
+      put(8, 6, 's'); put(8, 7, 'm');
+      put(9, 8, 's'); put(10, 8, 's'); put(9, 9, 'S'); put(10, 9, 'o'); put(11, 8, 'c'); put(11, 9, 'C');
+      break;
+    case 'ask': // hand up
+      for (let r = 5; r <= 11; r++) { put(r, 12, r === 11 ? 'C' : 'c'); put(r, 13, 'o'); }
+      put(2, 12, 'o'); put(3, 12, 'o'); put(3, 13, 'o'); put(4, 12, 's'); put(4, 13, 'o');
+      break;
+    case 'done': // ^^ eyes and an open smile
+      span(6, 3, 'sEEssEEs'); span(7, 3, 'EssEEssE');
+      put(8, 6, 'E'); put(8, 7, 'E'); put(9, 6, 'r'); put(9, 7, 'r');
+      break;
+    case 'fail': // worried brows, a wobbly mouth, a sweat drop
+      put(5, 4, 'd'); put(5, 9, 'd');
+      span(8, 5, 'msms'); put(9, 6, 'm');
+      put(4, 12, 'Y'); put(5, 12, 'Y'); put(5, 13, 'Y'); put(4, 13, 'o');
+      break;
+  }
+}
+
+/** A grid with its outlines resolved: every char maps to a colour in `palette`. */
+export interface AgentSprite {
+  grid: Grid;
+  palette: Record<string, string>;
+}
+
+const OUTLINE_KEYS = 0xe000; // private-use chars for the per-sprite outline colours
+const spriteCache = new Map<string, AgentSprite>();
+
+/**
+ * The frame ready to draw. Outline pixels take a dark tone of the colours they
+ * border (brown around skin, deep navy around a navy jacket) instead of one ink
+ * colour; edges against the background stay a little closer to ink.
+ */
+export function agentSprite(frame: AgentFrame, look: AgentLook, mood?: Mood): AgentSprite {
+  const key = `${frame}|${mood ?? ''}|${look.hair}|${look.outfit}|${look.accessory}|${look.palette.h}${look.palette.s}${look.palette.c}${look.palette.T}${look.palette.B}${look.palette.X}`;
+  const hit = spriteCache.get(key);
+  if (hit) return hit;
+  const g = agentGrid(frame, look, mood);
+  const pal = look.palette;
+  const out: Record<string, string> = { ...pal };
+  const tones = new Map<string, string>();
+  const at = (x: number, y: number) => g[y]?.[x] ?? '.';
+  const grid = g.map((row, y) => [...row].map((ch, x) => {
+    if (ch !== 'o') return ch;
+    const ns = [at(x, y + 1), at(x, y - 1), at(x - 1, y), at(x + 1, y)];
+    const fills = ns.filter((n) => n !== '.' && n !== 'o' && pal[n]);
+    if (!fills.length) return ch;
+    const sum: RGB = [0, 0, 0];
+    for (const n of fills) { const c = rgb(pal[n]!); sum[0] += c[0]; sum[1] += c[1]; sum[2] += c[2]; }
+    const avg = '#' + sum.map((v) => Math.round(v / fills.length).toString(16).padStart(2, '0')).join('');
+    const col = ns.includes('.') ? mix(shade(avg, -0.62), K.ink, 0.25) : shade(avg, -0.45);
+    let k = tones.get(col);
+    if (!k) { k = String.fromCharCode(OUTLINE_KEYS + tones.size); tones.set(col, k); out[k] = col; }
+    return k;
+  }).join(''));
+  const sprite = { grid, palette: out };
+  if (spriteCache.size > 4000) spriteCache.clear();
+  spriteCache.set(key, sprite);
+  return sprite;
 }
 
 function seeded(seed: number) {
@@ -133,6 +258,7 @@ const JACKETS = ['#34405a', '#4a3a57', '#5b4a3c', '#2f4f4f', '#6b3f3f', '#3d4a3a
 const TIES = [K.berry, K.teal, K.amber, '#8a6fb8', '#e76f51'];
 const SHIRTS = ['#efe7da', '#3a3f47', '#c9b79c'];
 const HOODIES = ['#d9a441', '#4f9aa5', '#c46b4e', '#8a6fb8', '#5d7fb8', '#7a8c4a', '#e8b4b8', '#6b4a3a'];
+const HAIR_TIES = [K.berry, K.teal, K.amber, '#8a6fb8'];
 
 /**
  * Deterministic look from an agent's spriteSeed (an agent always looks the
@@ -142,20 +268,30 @@ const HOODIES = ['#d9a441', '#4f9aa5', '#c46b4e', '#8a6fb8', '#5d7fb8', '#7a8c4a
 export function agentLook(seed: number, outfit: Outfit): AgentLook {
   const rnd = seeded(seed);
   const pick = <T,>(xs: readonly T[]) => xs[Math.floor(rnd() * xs.length)]!;
-  const hair = pick(['short', 'bob', 'long', 'ponytail'] as const);
+  const base = pick(['short', 'bob', 'long', 'ponytail'] as const);
   const hairCol = pick(HAIR);
   const skin = pick(SKIN);
   const accessory = pick(['none', 'glasses', 'phones', 'beanie', 'none'] as const);
   const cloth = outfit === 'office' ? pick(JACKETS) : outfit === 'apron' ? pick(SHIRTS) : pick(HOODIES);
+  const beanie = pick(['#5d7fb8', '#b5536a', '#e0a84a']);
+  const tie = pick(TIES);
+  // A second stream for what came later, so existing agents keep their colours.
+  const more = seeded(seed * 31 + 7);
+  const r = more();
+  const hair: HairStyle = base === 'short' && r < 0.45 ? 'curly' : base === 'bob' && r < 0.4 ? 'bun' : base === 'long' && r < 0.25 ? 'curly' : base;
+  const hairTie = HAIR_TIES[Math.floor(more() * HAIR_TIES.length)]!;
   return {
     hair,
     outfit,
     accessory,
     palette: {
-      o: K.ink, E: '#1e1512', G: '#a08672', Q: '#3a3f47', V: '#4a6b52', v: '#5f8568', B: pick(['#5d7fb8', '#b5536a', '#e0a84a']), W: '#efe7da',
-      h: hairCol, H: shade(hairCol, 0.22), s: skin, b: '#f09a8f', m: shade(skin, -0.35),
-      w: '#fbf6ec', T: pick(TIES), c: cloth, C: shade(cloth, -0.25),
-      a: '#4a6b52', A: '#3a5541', p: '#2e2c3a', k: '#3a2a22',
+      o: K.ink, E: '#1e1512', e: '#ffffff', b: '#f09a8f', r: '#d9706a', Y: '#8fd3ff',
+      h: hairCol, H: shade(hairCol, 0.28), d: shade(hairCol, -0.32), X: hairTie,
+      s: skin, S: shade(skin, -0.13), m: shade(skin, -0.45),
+      c: cloth, L: shade(cloth, 0.16), C: shade(cloth, -0.28),
+      w: '#fbf6ec', T: tie, t: shade(tie, -0.25),
+      a: '#4a6b52', A: '#3a5541', p: '#33313f', P: '#25232f', k: '#3a2a22', K: '#7a5a46',
+      G: '#c4bcb0', Q: '#3a3f47', q: '#8b95a3', B: beanie, U: shade(beanie, -0.22), W: '#efe7da', V: '#4a6b52', v: '#5f8568',
     },
   };
 }
