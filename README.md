@@ -55,7 +55,7 @@ The café keeps running on your computer; your phone becomes another screen for 
 | | Works | Connection |
 |---|---|---|
 | `--host tailscale` | Anywhere your phone has [Tailscale](https://tailscale.com) on (install it on both, same account) | Encrypted |
-| `--host lan` | Only on the same Wi-Fi as your computer | Not encrypted: use it on a network you trust, never public Wi-Fi |
+| `--host lan` | Only on the same home network (Wi-Fi or router) as your computer | Not encrypted: use it on a network you trust, never public Wi-Fi |
 
 The café shows a QR code (the command prints it too). Scan it with your phone's camera and the café opens; the phone
 stays paired (a cookie) from then on. The code holds a long random token, saved in

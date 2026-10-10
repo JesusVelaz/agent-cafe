@@ -20,7 +20,7 @@ That starts the café on this computer and opens http://127.0.0.1:4318. It needs
 
 ```bash
 npx agent-cafe --host tailscale   # anywhere, encrypted (Tailscale on computer and phone)
-npx agent-cafe --host lan         # same Wi-Fi only, not encrypted: trusted networks only
+npx agent-cafe --host lan         # same home network only, not encrypted: trusted networks only
 ```
 
 Or click **Phone** in the café once it's open. Scan the QR code with your phone's camera. The phone stays paired after that. Anyone

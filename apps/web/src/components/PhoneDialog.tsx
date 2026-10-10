@@ -6,7 +6,7 @@ import { api, ApiError, type PhoneStatus } from '@/lib/api';
 
 const CHOICES = [
   { via: 'tailscale', title: 'Over Tailscale', hint: 'Works anywhere, encrypted. Needs Tailscale on this computer and your phone.' },
-  { via: 'lan', title: 'On this Wi-Fi', hint: 'Your phone must be on the same network. Not encrypted, so only at home.' },
+  { via: 'lan', title: 'On your home network', hint: 'Your phone must be on the same Wi-Fi or router as this computer. Not encrypted, so only at home.' },
 ] as const;
 
 /**
@@ -127,11 +127,11 @@ function firewallText({ kind, network }: NonNullable<Shared['firewall']>) {
     kind === 'blocked'
       ? 'Windows Firewall is blocking the café, so your phone can’t load it.'
       : network === 'Public'
-        ? 'Windows treats this Wi-Fi as a public network and won’t let your phone in.'
+        ? 'Windows treats this network as public and won’t let your phone in.'
         : 'Windows Firewall isn’t letting your phone in yet.';
   const fix =
     network === 'Public'
-      ? 'Fix it marks this Wi-Fi as your home (private) network and lets phones on it reach the café. Windows will ask for permission.'
+      ? 'Fix it marks this network as your home (private) network and lets phones on it reach the café. Windows will ask for permission.'
       : 'Fix it lets phones on your home network reach the café. Windows will ask for permission.';
   return { problem, fix };
 }
@@ -240,7 +240,7 @@ function Progress({ sharing, slow, fixing, onFix }: { sharing: Shared; slow: boo
         <p className="mt-1.5 text-[12px] text-chalk-faint">
           {sharing.via === 'tailscale'
             ? 'Still loading on your phone? Check that Tailscale is on there, signed in to the same account.'
-            : 'Still loading on your phone? Check that it’s on the same Wi-Fi as this computer, not a guest network, and that mobile data isn’t taking over.'}
+            : 'Still loading on your phone? Check that it’s on the same network as this computer (same router, not a guest Wi-Fi), and that mobile data isn’t taking over.'}
         </p>
       )}
     </div>
