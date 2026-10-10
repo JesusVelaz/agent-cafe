@@ -7,7 +7,7 @@ import { HAIR, K, mix, rgb, SKIN, shade, type RGB } from './palette';
 export type Grid = readonly string[];
 
 // ── Agents: chibi, 14×20 ─────────────────────────────────────────────────────
-// Big heads (10 rows), 2×2 eyes with a catchlight, blush. Lit from the upper left,
+// Big heads (10 rows), 1×2 eyes with a catchlight beside them, blush. Lit from the upper left,
 // so rows aren't mirrored: the left side carries highlights, the right side shade.
 // Layered: head (hairstyle) + body (outfit) + legs (pose) + accessory + mood.
 //   o outline · h/H/d hair (base, lit, dark) · s/S skin (base, shade) · E eye · e catchlight
@@ -33,7 +33,7 @@ const TOP: Record<HairStyle, string[]> = {
   bun: ['.....oooo.....', '....oHhhdo....', '..oooXXXXooo..', '.oHHhhhhhhhdo.', '.oHhhhhhhhhdo.', '.ohhsssssshdo.'],
 };
 /** Rows 6–9 seen from the front: eyes, blush and mouth, chin. */
-const FACE = ['.ohseEsseESho.', '.ohsEEssEESho.', '.ohsbsmmsbSho.', '..oosssssSoo..'];
+const FACE = ['.ohseEseEsSho.', '.ohssEssEsSho.', '.ohsbsmmsbSho.', '..oosssssSoo..'];
 /** Rows 5–9 seen from behind: hair down to the nape. */
 const NAPE = ['.ohhhhhhhhhdo.', '.ohhhhhhhhhdo.', '.ohhhhhhhhddo.', '.ohhhhhhhhddo.', '..oosssssSoo..'];
 /** Hair that frames the face wider than the head (rows 5–9 get extra side columns). */
@@ -117,8 +117,9 @@ export function agentGrid(frame: AgentFrame, look: Pick<AgentLook, 'hair' | 'out
   }
   if (hair === 'ponytail' && !back) for (let r = 6; r <= 8; r++) setPx(head, r, 13, r === 8 ? 'o' : 'd');
   if (frame === 'sleep') {
+    // Closed eyes: a short lash line under each.
     head[6] = head[6]!.replace(/[eE]/g, 's');
-    head[7] = head[7]!.replace(/E/g, 'd');
+    head[7] = head[7]!.slice(0, 4) + 'ddsdd' + head[7]!.slice(9);
     head[8] = head[8]!.replace('mm', 'sm');
   }
 
