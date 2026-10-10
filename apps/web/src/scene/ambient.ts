@@ -13,7 +13,7 @@ import { box, plane } from './iso';
 import { hash, K, mix, shade } from './palette';
 import type { DrawCtx } from './props';
 import type { Raster } from './raster';
-import { agentGrid, agentLook, BIRD, BUTTERFLY, DOG_COLLAR, DOG_PAL, DOG_W, dogGrid, PIGEON, PIGEON_PAL, type AgentFrame, type DogFrame } from './sprites';
+import { agentLook, agentSprite, BIRD, BUTTERFLY, DOG_COLLAR, DOG_PAL, DOG_W, dogGrid, PIGEON, PIGEON_PAL, type AgentFrame, type DogFrame } from './sprites';
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const sunny = (c: DrawCtx) => c.theme === 'day' || c.theme === 'summer';
@@ -231,9 +231,9 @@ function walker(c: DrawCtx, push: Push) {
     push(w.x + wy + 0.2, () => {
       const { R, P, t, theme } = c;
       const feet = P(w.x, wy, 0);
-      const g = agentGrid(walkFrame(t, back), look);
+      const { grid: g, palette } = agentSprite(walkFrame(t, back), look);
       R.rect(feet[0] - 3, feet[1] - 1, 7, 3, '#000000', 0.12 * a);
-      R.grid(g, look.palette, feet[0] - 7, feet[1] - g.length + 1, back, '', a);
+      R.grid(g, palette, feet[0] - 7, feet[1] - g.length + 1, back, '', a);
       if (theme === 'rain') {
         // Umbrella over the head.
         const top = feet[1] - 26;

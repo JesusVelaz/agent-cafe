@@ -12,7 +12,7 @@
 import { box } from './iso';
 import { K } from './palette';
 import type { DrawCtx } from './props';
-import { agentGrid, agentLook, type AgentFrame, type AgentLook } from './sprites';
+import { agentLook, agentSprite, type AgentFrame, type AgentLook } from './sprites';
 
 type Act = 'brew' | 'serve' | 'wipe' | 'shelf' | 'idle';
 type Face = 'x+' | 'x-' | 'y+' | 'y-';
@@ -110,9 +110,9 @@ export function barista(c: DrawCtx, push: Push) {
     const { R, P } = c;
     const feet = P(s.x, s.y, DUCKBOARD);
     const { frame, bob } = frameOf(s);
-    const g = agentGrid(frame, LOOK);
+    const { grid: g, palette } = agentSprite(frame, LOOK);
     const top = feet[1] - g.length + 1 + bob;
-    R.grid(g, LOOK.palette, feet[0] - 7, top, s.face === 'y+' || s.face === 'x-');
+    R.grid(g, palette, feet[0] - 7, top, s.face === 'y+' || s.face === 'x-');
     if (s.carrying) {
       // A takeaway cup at chest height, on the side they're heading.
       const hx = feet[0] + (s.face === 'x-' ? -7 : 5), hy = top + 11;
