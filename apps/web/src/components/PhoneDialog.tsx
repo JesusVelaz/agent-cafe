@@ -3,6 +3,7 @@
 import QRCode from 'qrcode';
 import { useEffect, useRef, useState } from 'react';
 import { api, ApiError, type PhoneStatus } from '@/lib/api';
+import { networkPrefix } from '@/lib/phone';
 
 const CHOICES = [
   { via: 'tailscale', title: 'Over Tailscale', hint: 'Works anywhere, encrypted. Needs Tailscale on this computer and your phone.' },
@@ -240,7 +241,7 @@ function Progress({ sharing, slow, fixing, onFix }: { sharing: Shared; slow: boo
         <p className="mt-1.5 text-[12px] text-chalk-faint">
           {sharing.via === 'tailscale'
             ? 'Still loading on your phone? Check that Tailscale is on there, signed in to the same account.'
-            : 'Still loading on your phone? Check that it’s on the same network as this computer (same router, not a guest Wi-Fi), and that mobile data isn’t taking over.'}
+            : `Still loading on your phone? It has to be on the same network as this computer: in its Wi-Fi settings, its IP address should start with ${networkPrefix(sharing.link)}. If it doesn’t, join the Wi-Fi this computer uses (not a guest network, not a second router’s), and turn off mobile data.`}
         </p>
       )}
     </div>
