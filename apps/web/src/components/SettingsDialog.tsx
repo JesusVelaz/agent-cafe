@@ -57,7 +57,7 @@ export function SettingsDialog({
         if (e.target === e.currentTarget) onClose(); // click on the backdrop
       }}
       aria-label="Settings"
-      className="m-0 h-dvh max-h-none w-full max-w-none bg-night-2 p-0 text-chalk shadow-[0_30px_80px_rgba(0,0,0,.55)] transition-[opacity,scale] duration-200 backdrop:bg-black/50 backdrop:backdrop-blur-[2px] starting:scale-95 starting:opacity-0 sm:m-auto sm:h-fit sm:max-h-[calc(100%-2rem)] sm:w-[min(760px,calc(100vw-2rem))] sm:rounded-2xl sm:border sm:border-slate-line"
+      className="m-0 h-dvh max-h-none w-full max-w-none overflow-hidden bg-night-2 p-0 text-chalk shadow-[0_30px_80px_rgba(0,0,0,.55)] transition-[opacity,scale] duration-200 backdrop:bg-black/50 backdrop:backdrop-blur-[2px] starting:scale-95 starting:opacity-0 sm:m-auto sm:h-fit sm:max-h-[calc(100%-2rem)] sm:w-[min(760px,calc(100vw-2rem))] sm:rounded-2xl sm:border sm:border-slate-line"
     >
       {/* Phones get the whole screen: a header with the sections as tabs, then the section below. */}
       <div className="flex h-full flex-col sm:grid sm:h-[min(560px,calc(100dvh-4rem))] sm:grid-cols-[180px_minmax(0,1fr)]">
