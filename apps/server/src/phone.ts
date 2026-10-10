@@ -1,4 +1,6 @@
+import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
+import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { checkFirewall, fixFirewall, type FirewallProblem } from './firewall.js';
 import { remoteAddress, RemoteSetupError, type RemoteKind } from './network.js';
@@ -52,6 +54,16 @@ export class PhoneAccess {
     return this.dataDir !== undefined;
   }
 
+  /** How phones reached the café when it last closed (`tailscale`, `lan` or an address), if they could. */
+  saved(): string | undefined {
+    if (!this.dataDir) return undefined;
+    try {
+      return readFileSync(join(this.dataDir, 'phone-access'), 'utf8').trim() || undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   /** Where paired devices reach the café right now, for the app's checks. */
   readonly current = (): RemoteAccess | undefined => this.access;
 
@@ -96,6 +108,8 @@ export class PhoneAccess {
     this.access = { host: address, token: pairingToken(this.dataDir).token, via: kind };
     this.reached = false;
     // Looked up before the person scans, so the page can say what's wrong while they try.
+    // Stays on next time the café starts, until it's turned off.
+    writeFileSync(join(this.dataDir, 'phone-access'), `${choice}\n`);
     this.firewall = await this.check(address, this.port);
     return this.status()!;
   }
@@ -119,7 +133,13 @@ export class PhoneAccess {
     return status;
   }
 
-  /** Turns phone access off. Paired devices stay paired for next time. */
+  /** Turns phone access off, for next time too. Paired devices stay paired. */
+  async turnOff() {
+    await this.stop();
+    if (this.dataDir) rmSync(join(this.dataDir, 'phone-access'), { force: true });
+  }
+
+  /** Closes the way in for now (the café is closing, or switching addresses). */
   async stop() {
     const server = this.server;
     this.access = undefined;

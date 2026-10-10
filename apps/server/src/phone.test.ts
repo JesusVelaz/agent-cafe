@@ -50,7 +50,7 @@ async function cafe({ withData = true, blocked = false, allowFix = true } = {}) 
   cleanup.push(() => phone.stop(), () => app.close());
   const local = (method: 'GET' | 'POST' | 'DELETE', payload?: unknown, url = '/api/phone') =>
     app.inject({ method, url, headers: { host: `127.0.0.1:${port}`, origin: `http://127.0.0.1:${port}` }, ...(payload ? { payload } : {}) });
-  return { port, dataDir, local };
+  return { port, dataDir, local, phone };
 }
 
 function get(port: number, path: string, headers: Record<string, string> = {}) {
@@ -92,6 +92,17 @@ describe('connect your phone', () => {
     await local('POST', { via: 'lan' });
     expect((await local('DELETE')).json()).toEqual({ available: true, sharing: null });
     await expect(get(port, '/')).rejects.toThrow(/ECONNREFUSED/);
+  });
+
+  it('remembers the switch for next time, until it is turned off', async () => {
+    const { local, phone } = await cafe();
+    expect(phone.saved()).toBeUndefined();
+    await local('POST', { via: 'lan' });
+    await phone.stop(); // the café closing
+    expect(phone.saved()).toBe('lan');
+    await local('POST', { via: 'lan' });
+    await local('DELETE');
+    expect(phone.saved()).toBeUndefined();
   });
 
   it('says why it can’t open', async () => {

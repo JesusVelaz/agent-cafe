@@ -109,12 +109,18 @@ const CHOICES: Record<Via, string> = {
   tailscale: 'Works anywhere, encrypted. Needs Tailscale on this computer and your phone.',
 };
 
-function accessHint(onThisComputer: boolean, status: PhoneStatus | null, sharing: Shared | null | undefined) {
+function accessHint(onThisComputer: boolean, status: PhoneStatus | null, sharing: Shared | null | undefined): ReactNode {
   if (!onThisComputer) return 'You’re on a paired device. Phone access is set up on the computer running the café.';
   if (!status) return 'Checking…';
-  if (!status.available) return 'Works when the café runs with pnpm start or the agent-cafe command.';
+  if (!status.available) return 'Not while developing with pnpm dev. Run pnpm build, then pnpm start, to use it.';
   if (!sharing) return 'Limited to this computer.';
-  return sharing.via === 'tailscale' ? 'Open to your phone over Tailscale.' : 'Open to phones on your home network.';
+  const { origin } = new URL(sharing.link);
+  return (
+    <>
+      Reachable at <span className="text-chalk-dim">{origin}</span>
+      {sharing.via === 'tailscale' ? ' over Tailscale' : ''}. Stays on when the café restarts.
+    </>
+  );
 }
 
 /** A settings row: what it is on the left, its control on the right. */
@@ -246,7 +252,7 @@ function Status({ sharing, slow, fixing, onFix }: { sharing: Shared; slow: boole
           ? sharing.via === 'tailscale'
             ? 'Still loading on your phone? Check that Tailscale is on there, signed in to the same account.'
             : `Still loading on your phone? It has to be on the same network as this computer: in its Wi-Fi settings, its IP address should start with ${networkPrefix(sharing.link)}. If it doesn’t, join the Wi-Fi this computer uses (not a guest network, not a second router’s), and turn off mobile data.`
-          : 'Scan the code below with your phone.'
+          : 'Scan the pairing code with your phone.'
       }
     >
       <span role="status" className="flex items-center gap-2 text-[13px] text-chalk-dim">

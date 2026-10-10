@@ -49,7 +49,8 @@ this computer unless you open it to your phone (below). Once the package is publ
 ### On your phone
 
 The café keeps running on your computer; your phone becomes another screen for it. Open
-**Settings → Connections** in the café and pick how your phone reaches it, or start it with `--host`
+**Settings → Connections** in the café, turn on **Phone access** and pick how your phone reaches it
+(it stays on when the café restarts, until you turn it off), or start it with `--host`
 (from the repo: `pnpm start --host tailscale`; this also works while the café is already open):
 
 | | Works | Connection |

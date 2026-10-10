@@ -42,7 +42,7 @@ export const phoneRoutes =
     });
 
     app.delete('/api/phone', { onRequest: localOnly }, async () => {
-      await phone.stop();
+      await phone.turnOff();
       return { available: phone.available, sharing: null };
     });
   };

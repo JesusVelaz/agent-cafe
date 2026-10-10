@@ -56,6 +56,11 @@ export async function startServer(config: ServerConfig, options: StartOptions = 
   try {
     await app.listen({ host: config.host, port: config.port });
     if (config.phone) sharing = await phone.start(config.phone);
+    else {
+      // Phone access was on when the café last closed: turn it back on, if this computer still allows it.
+      const saved = phone.saved();
+      if (saved) sharing = await phone.start(saved).catch((err: Error) => (console.warn(`Phone access is off: ${err.message}`), undefined));
+    }
   } catch (err) {
     await close();
     throw err;
