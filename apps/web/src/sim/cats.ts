@@ -98,6 +98,13 @@ class CatSim {
     if (this.restFor <= 0) this.wander(taken);
   }
 
+  /** Someone gave this cat a scratch. Awake and settled, it sits up and stays a while; asleep, it sleeps on. */
+  pet(): void {
+    if (this.path.length || this.view.pose === 'sleep') return;
+    this.setPose('sit', 0);
+    this.restFor = Math.max(this.restFor, 6);
+  }
+
   private rest(spot: CatSpot) {
     const r = this.rand();
     const pose: CatPose = spot.nap ? (r < 0.7 ? 'sleep' : 'loaf') : r < 0.5 ? 'sit' : r < 0.8 ? 'loaf' : 'sleep';
@@ -155,6 +162,11 @@ export class Cats {
 
   get views(): CatView[] {
     return this.sims.map((s) => s.view);
+  }
+
+  /** Pet a cat by id (unknown ids are ignored). */
+  pet(id: string): void {
+    this.sims.find((s) => s.view.id === id)?.pet();
   }
 
   update(dt: number): void {

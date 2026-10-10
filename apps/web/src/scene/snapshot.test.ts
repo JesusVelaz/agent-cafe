@@ -2,7 +2,7 @@
  * Visual snapshot helper: renders the real scene to a PNG for eyeballing.
  * Runs only when SNAP is set: `SNAP=out.png THEME=night npx vitest run snapshot`.
  * FRAME=WxH renders a bigger frame (the plot stays centred); T=seconds picks the moment;
- * SCALE=n sets the zoom.
+ * SCALE=n sets the zoom; ANGLE=degrees turns the camera (90 = one quarter turn).
  */
 import { writeFileSync } from 'node:fs';
 import zlib from 'node:zlib';
@@ -52,8 +52,9 @@ describe('scene snapshot', () => {
     const [fw, fh] = (process.env.FRAME ?? `${SCENE_W}x${SCENE_H}`).split('x').map(Number) as [number, number];
     const R = new Raster(fw, fh);
     const frames = themes.map((theme) => {
-      const hits = renderScene(R, crew, { theme, t: Number(process.env.T ?? 3), selectedId: 'earl', floors: { openai: { mode: 'mock', closed: false }, anthropic: { mode: 'live', closed: false } }, cats });
-      expect(hits).toHaveLength(crew.length);
+      const angle = (Number(process.env.ANGLE ?? 0) * Math.PI) / 180;
+      const hits = renderScene(R, crew, { theme, t: Number(process.env.T ?? 3), selectedId: 'earl', floors: { openai: { mode: 'mock', closed: false }, anthropic: { mode: 'live', closed: false } }, cats, angle });
+      expect(hits.agents).toHaveLength(crew.length);
       return png(R, Number(process.env.SCALE ?? 2));
     });
     frames.forEach((buf, i) => writeFileSync(process.env.SNAP!.replace('.png', `-${themes[i]}.png`), buf));

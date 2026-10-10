@@ -27,7 +27,7 @@ describe('ambient motion', () => {
 describe('a bigger frame', () => {
   it('keeps the café centred', () => {
     const agent = { id: 'a', name: 'A', providerId: 'openai' as const, x: 5, y: 9, face: 'y+' as const, pose: 'stand' as const, t: 0, bubble: null, spriteSeed: 1, demo: true };
-    const at = (w: number, h: number) => renderScene(new Raster(w, h), [agent], { theme: 'day', t: 1, transparent: true })[0]!;
+    const at = (w: number, h: number) => renderScene(new Raster(w, h), [agent], { theme: 'day', t: 1, transparent: true }).agents[0]!;
     const base = at(SCENE_W, SCENE_H), wide = at(SCENE_W + 200, SCENE_H + 100);
     expect([wide.headX - base.headX, wide.headY - base.headY]).toEqual([100, 50]);
   });

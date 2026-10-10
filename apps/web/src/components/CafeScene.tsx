@@ -111,8 +111,9 @@ export function CafeScene({ theme, labels = true, reserveBottom = 0, onFrame, ov
     const r = new CafeRenderer({
       read: () => {
         const s = useCafe.getState();
-        return { data: s, selectedAgentId: s.selectedAgentId, theme: live.current.theme, labels: live.current.labels, transparent: true };
+        return { data: s, selectedAgentId: s.selectedAgentId, theme: live.current.theme, labels: live.current.labels, transparent: true, viewAngle: s.viewAngle };
       },
+      turned: (quarter) => useCafe.getState().setViewAngle(quarter),
       pickAgent: (id) => {
         const s = useCafe.getState();
         // In the café view, clicking an agent opens the panel on them.
@@ -157,6 +158,47 @@ export function CafeScene({ theme, labels = true, reserveBottom = 0, onFrame, ov
         </div>
         {overlay}
       </div>
+      <TurnButtons />
+    </div>
+  );
+}
+
+/** Q / E turn the café, unless you're typing or a dialog is open. */
+function useTurnKeys() {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+      const k = e.key.toLowerCase();
+      if (k !== 'q' && k !== 'e') return;
+      const el = e.target as HTMLElement | null;
+      if (el?.closest?.('input, textarea, select, [contenteditable=""], [contenteditable="true"]')) return;
+      if (document.querySelector('dialog[open]')) return;
+      useCafe.getState().turnView(k === 'q' ? 1 : -1);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+}
+
+/** Turn the café a quarter either way. Top right, where the diorama leaves sky. */
+function TurnButtons() {
+  useTurnKeys();
+  const turnView = useCafe((s) => s.turnView);
+  const button = 'flex size-8 items-center justify-center rounded-lg text-chalk-dim hover:bg-slate-2 hover:text-chalk';
+  return (
+    <div className="absolute right-3 top-3 z-20 flex items-center gap-0.5 rounded-xl border border-slate-line bg-night-2/85 p-0.5 shadow-lg backdrop-blur">
+      <button type="button" className={button} onClick={() => turnView(1)} aria-label="Turn the café left" title="Turn left (Q)">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
+          <path d="M3.5 7.5a5 5 0 1 1 1.4 4.6" />
+          <path d="M3.2 3.6v4h4" />
+        </svg>
+      </button>
+      <button type="button" className={button} onClick={() => turnView(-1)} aria-label="Turn the café right" title="Turn right (E)">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
+          <path d="M12.5 7.5a5 5 0 1 0-1.4 4.6" />
+          <path d="M12.8 3.6v4h-4" />
+        </svg>
+      </button>
     </div>
   );
 }

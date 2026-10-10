@@ -5,7 +5,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { api } from '@/lib/api';
 import { connectStream } from '@/lib/stream';
 import { useTheme } from '@/lib/theme';
-import { readFlag, useCafe } from '@/store/cafe';
+import { readFlag, readViewAngle, useCafe } from '@/store/cafe';
 import { CafeLoader } from './CafeLoader';
 import { Composer } from './Composer';
 import { PanelRail, SidePanel } from './SidePanel';
@@ -59,7 +59,7 @@ export function CafeApp() {
   const [loaded, setLoaded] = useState(false);
   const [settled, setSettled] = useState(false);
   useLayoutEffect(() => {
-    useCafe.setState({ panelCollapsed: readFlag('cafe.panelCollapsed') });
+    useCafe.setState({ panelCollapsed: readFlag('cafe.panelCollapsed'), viewAngle: readViewAngle() });
     setLoaded(true);
   }, []);
   useLayoutEffect(() => {

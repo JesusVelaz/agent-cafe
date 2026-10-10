@@ -138,4 +138,23 @@ describe('cats', () => {
     }
     expect(moved.size).toBe(cats.views.length);
   });
+
+  it('sit up and stay a while when petted, unless asleep', () => {
+    const cats = new Cats();
+    // Run until one cat is awake and settled, and another is asleep.
+    const find = (want: (pose: string) => boolean) => cats.views.find((v) => want(v.pose));
+    for (let i = 0; i < 6000 && !(find((p) => p === 'sit' || p === 'loaf') && find((p) => p === 'sleep')); i++) cats.update(0.1);
+    const awake = find((p) => p === 'sit' || p === 'loaf')!, asleep = find((p) => p === 'sleep')!;
+    expect(awake).toBeDefined();
+    expect(asleep).toBeDefined();
+
+    const at = { x: awake.x, y: awake.y };
+    cats.pet(awake.id);
+    cats.pet(asleep.id);
+    expect(awake.pose).toBe('sit');
+    expect(asleep.pose).toBe('sleep');
+    for (let i = 0; i < 55; i++) cats.update(0.1);
+    expect({ x: awake.x, y: awake.y }).toEqual(at);
+    cats.pet('nobody'); // unknown cats are ignored
+  });
 });

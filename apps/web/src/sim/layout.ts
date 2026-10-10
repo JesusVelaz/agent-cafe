@@ -4,8 +4,9 @@
  *
  * Coordinates are continuous tile units. x runs toward the screen's lower-right,
  * y toward the lower-left. Back walls sit along x = 0 (left wall) and y = 0
- * (right wall); the front edges are open (diorama cutaway). Heights (z, v) are
- * in scene pixels.
+ * (right wall); the front edges are open (diorama cutaway). Turned, the scene
+ * shows whichever two sides face away from the camera instead. Heights (z, v)
+ * are in scene pixels.
  *
  * The building is "stacked, set back": the upper floor sits directly on top of
  * the ground floor, one step smaller, so the café shows around it. Anything
@@ -101,6 +102,13 @@ export interface Prop {
   opts?: { lamp?: boolean; h?: number; plantOnTop?: boolean };
 }
 
+/**
+ * A side of the building. L (x = 0) and R (y = 0) are the walls you see from the
+ * street; F is the street front (y = D) and E the patio side (x = W), seen once the
+ * café is turned. Whichever two face away from the camera are drawn.
+ */
+export type DecorSide = 'L' | 'R' | 'F' | 'E';
+
 export type DecorKind =
   | 'window'
   | 'door'
@@ -118,7 +126,7 @@ export type DecorKind =
 /** Something mounted on a wall: `a` runs along the wall in tiles, `v` is height in px. */
 export interface Decor {
   kind: DecorKind;
-  wall: 'L' | 'R';
+  wall: DecorSide;
   a0: number;
   a1: number;
   v0: number;
@@ -222,6 +230,17 @@ export const GROUND: FloorLayout = {
     { kind: 'noticeBoard', wall: 'L', a0: 7.8, a1: 9.3, v0: 24, v1: 46 },
     { kind: 'window', wall: 'L', a0: 9.6, a1: 10.8, v0: 20, v1: 48 },
     { kind: 'sconce', wall: 'L', a0: 5.6, a1: 5.6, v0: 44, v1: 44 },
+    // The street front and the patio side: only seen once the café is turned.
+    { kind: 'window', wall: 'F', a0: 0.6, a1: 3.9, v0: 14, v1: 50 },
+    { kind: 'door', wall: 'F', a0: 4.4, a1: 5.6, v0: 0, v1: 46 },
+    { kind: 'window', wall: 'F', a0: 6.2, a1: 9.6, v0: 14, v1: 50 },
+    { kind: 'window', wall: 'F', a0: 10.2, a1: 13.5, v0: 14, v1: 50 },
+    { kind: 'sconce', wall: 'F', a0: 6.0, a1: 6.0, v0: 52, v1: 52 },
+    { kind: 'framed', wall: 'E', a0: 0.9, a1: 1.7, v0: 30, v1: 44, color: '#f2c14e' },
+    { kind: 'sconce', wall: 'E', a0: 3.3, a1: 3.3, v0: 46, v1: 46 },
+    { kind: 'window', wall: 'E', a0: 4.0, a1: 7.0, v0: 22, v1: 50 },
+    { kind: 'window', wall: 'E', a0: 8.0, a1: 10.4, v0: 22, v1: 50 },
+    { kind: 'clock', wall: 'E', a0: 7.5, a1: 7.5, v0: 52, v1: 52 },
   ],
   stations: {
     register: [S(13.0, 3.65, 'y-'), S(12.4, 3.65, 'y-')],

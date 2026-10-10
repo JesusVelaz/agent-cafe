@@ -3,6 +3,7 @@
  * Light comes from the upper left: tops are lightest, the +y face (screen
  * lower-left) is the base colour, the +x face is darkest.
  */
+import { BUILDING, type Dir } from '@/sim/layout';
 import { shade } from './palette';
 import type { Pt2, Raster } from './raster';
 
@@ -12,8 +13,64 @@ export const HH = 6;
 /** World (tile x, tile y, height px) → screen px. */
 export type Proj = (x: number, y: number, z?: number) => Pt2;
 
+// ── camera ──────────────────────────────────────────────────────────────────
+//
+// The café can be turned. The camera spins the world about the street plot's
+// centre (so the whole plot stays in frame at every angle) before projecting.
+// It is set once per frame by renderScene; everything drawn in that frame reads it.
+// At angle 0 every helper here is exactly the fixed projection the café always had.
+
+export const camera = { a: 0, c: 1, s: 0, px: BUILDING.PW / 2, py: BUILDING.PD / 2 };
+
+/** Turn the camera to `a` radians (0 = today's view, from the street corner). */
+export function setCameraAngle(a: number): void {
+  const snapped = Math.abs(a) < 1e-9 ? 0 : a;
+  camera.a = snapped;
+  camera.c = Math.cos(snapped);
+  camera.s = Math.sin(snapped);
+}
+
+/** World → camera-space tile coordinates. */
+export function turn(x: number, y: number): [number, number] {
+  if (camera.a === 0) return [x, y];
+  const dx = x - camera.px, dy = y - camera.py;
+  return [camera.px + dx * camera.c - dy * camera.s, camera.py + dx * camera.s + dy * camera.c];
+}
+
+/** Camera-space → world, for screen-space passes that map pixels back onto the ground. */
+export function unturn(x: number, y: number): [number, number] {
+  if (camera.a === 0) return [x, y];
+  const dx = x - camera.px, dy = y - camera.py;
+  return [camera.px + dx * camera.c + dy * camera.s, camera.py - dx * camera.s + dy * camera.c];
+}
+
+/** Painter's depth: bigger is nearer the viewer. It is x + y at angle 0. */
+export function depth(x: number, y: number): number {
+  const [u, v] = turn(x, y);
+  return u + v;
+}
+
+/** How squarely a vertical face with this outward normal points at the viewer, −1…1. */
+export function facing(nx: number, ny: number): number {
+  return (nx * (camera.c + camera.s) + ny * (camera.c - camera.s)) / Math.SQRT2;
+}
+
+/** Does a vertical face with this outward normal point at the viewer? */
+export const faceVisible = (nx: number, ny: number) => facing(nx, ny) > 1e-6;
+
+/** The camera's nearest quarter turn, 0–3. */
+export const quarter = () => ((Math.round(camera.a / (Math.PI / 2)) % 4) + 4) % 4;
+
+const DIRS: Dir[] = ['x+', 'y+', 'x-', 'y-'];
+
+/** A world facing as the camera sees it: which way a sprite should look on screen. */
+export const viewFace = (f: Dir): Dir => DIRS[(DIRS.indexOf(f) + quarter()) % 4]!;
+
 export function iso(ox: number, oy: number): Proj {
-  return (x, y, z = 0) => [Math.round(ox + (x - y) * HW), Math.round(oy + (x + y) * HH - z)];
+  return (x, y, z = 0) => {
+    if (camera.a !== 0) [x, y] = turn(x, y);
+    return [Math.round(ox + (x - y) * HW), Math.round(oy + (x + y) * HH - z)];
+  };
 }
 
 export interface BoxOpts {
@@ -30,8 +87,17 @@ export function box(R: Raster, P: Proj, x: number, y: number, z: number, w: numb
   const right = o.right ?? shade(col, -0.2);
   const zt = z + h;
   const a = o.a ?? 1;
-  const A = P(x, y, zt), B = P(x + w, y, zt), C = P(x + w, y + d, zt), D = P(x, y + d, zt);
-  const Cb = P(x + w, y + d, z), Db = P(x, y + d, z), Bb = P(x + w, y, z);
+  // Corners are named by where they land on screen: C is always the one nearest the
+  // viewer, so the two faces drawn are the two that face us, in their usual shades.
+  const q: Array<[number, number]> = [[x, y], [x + w, y], [x + w, y + d], [x, y + d]];
+  let n = 2;
+  if (camera.a !== 0) {
+    let best = -Infinity;
+    q.forEach(([qx, qy], i) => { const dd = depth(qx, qy); if (dd > best + 1e-9) { best = dd; n = i; } });
+  }
+  const qa = q[(n + 2) % 4]!, qb = q[(n + 3) % 4]!, qc = q[n]!, qd = q[(n + 1) % 4]!;
+  const A = P(qa[0], qa[1], zt), B = P(qb[0], qb[1], zt), C = P(qc[0], qc[1], zt), D = P(qd[0], qd[1], zt);
+  const Cb = P(qc[0], qc[1], z), Db = P(qd[0], qd[1], z), Bb = P(qb[0], qb[1], z);
   if (h > 0) {
     R.poly([D, C, Cb, Db], col, a, o.em);
     R.poly([C, B, Bb, Cb], right, a, o.em);
