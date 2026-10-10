@@ -6,7 +6,7 @@ import QRCode from 'qrcode';
 import { startServer } from '@agent-cafe/server/main';
 import { RemoteSetupError } from '@agent-cafe/server/network';
 import { pairingToken } from '@agent-cafe/server/token';
-import { call, openBrowser, probe } from './browser.js';
+import { call, findPort, openBrowser, probe, type PortUse } from './browser.js';
 import { CliError, HELP, parseCliArgs } from './options.js';
 
 // Next to this file in the built package: web/ (the UI) and migrations/.
@@ -33,7 +33,25 @@ if (options.version) {
   process.exit(0);
 }
 
-const url = `http://127.0.0.1:${options.port}`;
+// The command to suggest: from the repo it's `pnpm start`, installed it's `agent-cafe`.
+const command = process.env.npm_lifecycle_event === 'start' ? 'pnpm start' : 'agent-cafe';
+const inTheWay = (use: PortUse) => (use === 'dev' ? 'a café started with pnpm dev' : 'another program');
+
+// Unless a port was asked for, step past ports other programs hold (an open café is reused).
+const found = await findPort(options.port, options.portChosen ? 1 : 10, (port) => probe(`http://127.0.0.1:${port}`));
+if (found.port === undefined) {
+  const last = found.busy.at(-1)!;
+  fail(
+    options.portChosen
+      ? `port ${last.port} is in use by ${inTheWay(last.use)}. Close it, or try another port: ${command} --port ${last.port + 1}`
+      : `ports ${options.port}–${last.port} are all in use. Close what's using port ${options.port} (${inTheWay(found.busy[0]!.use)}), or pick a port: ${command} --port 5318`,
+  );
+}
+const port = found.port;
+const running = found.use;
+if (port !== options.port) console.log(`Port ${options.port} is in use by ${inTheWay(found.busy[0]!.use)}, so the café is using port ${port}.`);
+
+const url = `http://127.0.0.1:${port}`;
 const open = () => (options.openBrowser ? openBrowser(url) : Promise.resolve());
 
 interface PhoneSharing {
@@ -62,7 +80,6 @@ async function printPairing({ via, link, firewall }: PhoneSharing) {
   console.log('');
 }
 
-const running = await probe(url);
 if (running === 'cafe') {
   // The running café keeps the pairing code it started with, so a new one would change nothing yet.
   if (options.newToken) fail(`Agent Café is already open at ${url}. Close it (Ctrl+C in its window), then run this again to make a new pairing code.`);
@@ -83,7 +100,6 @@ if (running === 'cafe') {
   await open();
   process.exit(0);
 }
-if (running === 'taken') fail(`port ${options.port} is in use by another program. Try another one: agent-cafe --port ${options.port + 1}`);
 
 const workspaceDir = join(options.dataDir, 'workspace');
 mkdirSync(workspaceDir, { recursive: true });
@@ -98,7 +114,7 @@ try {
   ({ phone } = await startServer(
     {
       host: '127.0.0.1',
-      port: options.port,
+      port,
       workspaceDir,
       webDir: join(here, 'web'),
       dataDir: options.dataDir,
@@ -108,7 +124,7 @@ try {
   ));
 } catch (err) {
   if (err instanceof RemoteSetupError) fail(err.message);
-  if ((err as { code?: string }).code === 'EADDRINUSE') fail(`port ${options.port} is in use. Try another one: agent-cafe --port ${options.port + 1}`);
+  if ((err as { code?: string }).code === 'EADDRINUSE') fail(`port ${port} is in use. Close what's using it, or try another port: ${command} --port ${port + 1}`);
   throw err;
 }
 

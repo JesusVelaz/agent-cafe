@@ -7,6 +7,7 @@ describe('parseCliArgs', () => {
   it('defaults to the café port, ~/.agent-cafe and opening the browser', () => {
     expect(parseCliArgs([], {})).toEqual({
       port: DEFAULT_PORT,
+      portChosen: false,
       newToken: false,
       dataDir: join(homedir(), '.agent-cafe'),
       openBrowser: true,
@@ -21,7 +22,7 @@ describe('parseCliArgs', () => {
       dataDir: resolve('cafe-data'),
       openBrowser: false,
     });
-    expect(parseCliArgs(['--port=5001'], {}).port).toBe(5001);
+    expect(parseCliArgs(['--port=5001'], {})).toMatchObject({ port: 5001, portChosen: true });
     expect(parseCliArgs(['--host', 'tailscale', '--new-token'], {})).toMatchObject({ host: 'tailscale', newToken: true });
     expect(parseCliArgs(['-h'], {}).help).toBe(true);
     expect(parseCliArgs(['--version'], {}).version).toBe(true);
@@ -29,7 +30,7 @@ describe('parseCliArgs', () => {
 
   it('falls back to environment variables, with flags winning', () => {
     const env = { AGENT_CAFE_PORT: '6000', AGENT_CAFE_HOME: '/tmp/cafe' };
-    expect(parseCliArgs([], env)).toMatchObject({ port: 6000, dataDir: resolve('/tmp/cafe') });
+    expect(parseCliArgs([], env)).toMatchObject({ port: 6000, portChosen: true, dataDir: resolve('/tmp/cafe') });
     expect(parseCliArgs(['-p', '6001'], env).port).toBe(6001);
   });
 

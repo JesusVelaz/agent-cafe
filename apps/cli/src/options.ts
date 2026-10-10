@@ -24,6 +24,8 @@ Without --host, the café only listens on this computer (127.0.0.1).`;
 
 export interface CliOptions {
   port: number;
+  /** The port came from --port or AGENT_CAFE_PORT. Otherwise the café may move to a free one. */
+  portChosen: boolean;
   /** tailscale | lan | an address. Unset: this computer only. */
   host?: string;
   newToken: boolean;
@@ -61,6 +63,7 @@ export function parseCliArgs(argv: string[], env: NodeJS.ProcessEnv = process.en
   if (values.host !== undefined && !host) throw new CliError('--host needs a value: tailscale, lan or an address');
   return {
     port,
+    portChosen: values.port !== undefined || env.AGENT_CAFE_PORT !== undefined,
     ...(host ? { host } : {}),
     newToken: values['new-token'],
     dataDir: resolve(values['data-dir'] ?? env.AGENT_CAFE_HOME ?? join(homedir(), '.agent-cafe')),

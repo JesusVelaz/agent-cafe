@@ -48,14 +48,33 @@ export function call(
   });
 }
 
-/** What already answers on this URL: a café serving its UI, something else, or nothing. */
-export async function probe(url: string): Promise<'cafe' | 'taken' | 'free'> {
+/**
+ * What already answers on this URL: a café serving its UI, a café server without one (`pnpm dev`),
+ * something else, or nothing.
+ */
+export type PortUse = 'cafe' | 'dev' | 'taken' | 'free';
+
+export async function probe(url: string): Promise<PortUse> {
   try {
     const health = await call(`${url}/api/health`);
     if (health.status !== 200) return 'taken';
     const page = await call(url);
-    return page.status === 200 && page.type.startsWith('text/html') ? 'cafe' : 'taken';
+    return page.status === 200 && page.type.startsWith('text/html') ? 'cafe' : 'dev';
   } catch (err) {
     return (err as { code?: string }).code === 'ECONNREFUSED' ? 'free' : 'taken';
   }
+}
+
+/**
+ * The port to use: the first from `start` with a café on it (to reuse) or nothing on it.
+ * Tries `tries` ports; `busy` lists what was in the way.
+ */
+export async function findPort(start: number, tries: number, check: (port: number) => Promise<PortUse>) {
+  const busy: Array<{ port: number; use: PortUse }> = [];
+  for (let port = start; port < start + tries && port <= 65535; port++) {
+    const use = await check(port);
+    if (use === 'cafe' || use === 'free') return { port, use, busy };
+    busy.push({ port, use });
+  }
+  return { port: undefined, use: undefined, busy };
 }
