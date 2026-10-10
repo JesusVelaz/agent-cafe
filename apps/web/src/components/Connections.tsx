@@ -4,7 +4,7 @@ import QRCode from 'qrcode';
 import { useEffect, useState, type ReactNode } from 'react';
 import { api, ApiError, type PhoneStatus } from '@/lib/api';
 import { networkPrefix } from '@/lib/phone';
-import { Caret, Toggle } from './ui';
+import { Caret, Popover, Toggle } from './ui';
 
 /**
  * Settings → Connections: opens the café to phones (over Tailscale or the home network) and shows
@@ -73,27 +73,61 @@ export function Connections({ active }: { active: boolean }) {
           )}
         </Row>
         {available && (
-          <Row title="Connect over" hint={CHOICES[via]}>
-            <div className="relative">
-              <select
-                aria-label="Connect over"
-                value={via}
-                disabled={busy !== null}
-                onChange={(e) => {
-                  const next = e.target.value as Via;
-                  setVia(next);
-                  if (sharing) void run('start', () => api.sharePhone(next));
-                }}
-                className="h-9 w-44 appearance-none rounded-lg border border-slate-line bg-night-2 pl-3 pr-9 text-[13px] text-chalk outline-none hover:border-chalk-faint focus:border-accent disabled:opacity-60"
-              >
-                <option value="lan">Home network</option>
-                <option value="tailscale">Tailscale</option>
-              </select>
-              {/* Our own arrow: the browser's can't be moved in from the edge. */}
-              <span className="pointer-events-none absolute inset-y-0 right-3.5 flex items-center text-chalk">
-                <Caret />
-              </span>
-            </div>
+          <Row title="Connect over" hint={VIA[via].hint}>
+            <Popover
+              label="Connect over"
+              side="auto"
+              align="end"
+              className="w-[min(300px,calc(100vw-1rem))]"
+              trigger={({ open, toggle }) => (
+                <button
+                  type="button"
+                  onClick={toggle}
+                  disabled={busy !== null}
+                  aria-expanded={open}
+                  aria-label={`Connect over: ${VIA[via].title}`}
+                  className={`flex h-9 w-44 items-center gap-2 rounded-full border bg-night-2 pl-3.5 pr-4 text-left text-[13px] text-chalk transition-colors disabled:opacity-60 ${
+                    open ? 'border-accent' : 'border-slate-line hover:border-chalk-faint'
+                  }`}
+                >
+                  <span className="min-w-0 flex-1 truncate">{VIA[via].title}</span>
+                  <Caret />
+                </button>
+              )}
+            >
+              {(close) => (
+                <div role="listbox" aria-label="Connect over" className="flex flex-col p-1.5">
+                  {(Object.keys(VIA) as Via[]).map((v) => {
+                    const on = v === via;
+                    return (
+                      <button
+                        key={v}
+                        type="button"
+                        role="option"
+                        aria-selected={on}
+                        onClick={() => {
+                          close();
+                          if (on) return;
+                          setVia(v);
+                          if (sharing) void run('start', () => api.sharePhone(v));
+                        }}
+                        className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left ${on ? 'bg-slate-2' : 'hover:bg-slate-2'}`}
+                      >
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-[13px] font-medium text-chalk">{VIA[v].title}</span>
+                          <span className="block text-[11px] text-chalk-faint">{VIA[v].tag}</span>
+                        </span>
+                        {on && (
+                          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" aria-label="Selected" className="text-accent">
+                            <path d="M2.5 7.5l3 3 6-7" />
+                          </svg>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </Popover>
           </Row>
         )}
         {sharing && <Sharing sharing={sharing} busy={busy} onFix={() => run('fix', api.fixPhone)} />}
@@ -110,9 +144,17 @@ export function Connections({ active }: { active: boolean }) {
 type Via = 'lan' | 'tailscale';
 type Shared = NonNullable<PhoneStatus['sharing']>;
 
-const CHOICES: Record<Via, string> = {
-  lan: 'Your phone must be on the same Wi-Fi or router as this computer. Not encrypted, so only use it at home.',
-  tailscale: 'Works anywhere, encrypted. Needs Tailscale on this computer and your phone.',
+const VIA: Record<Via, { title: string; tag: string; hint: string }> = {
+  lan: {
+    title: 'Home network',
+    tag: 'Same Wi-Fi only · not encrypted',
+    hint: 'Your phone must be on the same Wi-Fi or router as this computer. Not encrypted, so only use it at home.',
+  },
+  tailscale: {
+    title: 'Tailscale',
+    tag: 'Anywhere · encrypted',
+    hint: 'Works anywhere, encrypted. Needs Tailscale on this computer and your phone.',
+  },
 };
 
 function accessHint(onThisComputer: boolean, status: PhoneStatus | null, sharing: Shared | null | undefined): ReactNode {
