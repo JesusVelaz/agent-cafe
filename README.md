@@ -17,7 +17,32 @@ answers, and a message box to prompt them directly.
 > Status: Claude Code runs the Anthropic floor live and Codex runs the OpenAI floor live; both
 > can work at the same time. See [Roadmap](#roadmap).
 
-## Quick start
+## Install
+
+No Node or pnpm needed: each release ships the café with everything it runs on.
+
+- **Windows:** download `AgentCafeSetup.exe` from the
+  [latest release](https://github.com/JesusVelaz/agent-cafe/releases/latest) and run it. Open
+  **Agent Café** from the Start menu. The installer can also let phones on your home Wi-Fi reach the
+  café (a Windows Firewall rule for private networks only). It isn't code-signed yet, so Windows
+  may say it "protected your PC": click **More info → Run anyway**.
+- **macOS and Linux:** run this in a terminal, then open **Agent Café** from Applications (in your
+  home folder) or your app menu, or run `agent-cafe`:
+
+  ```bash
+  curl -fsSL https://github.com/JesusVelaz/agent-cafe/releases/latest/download/install.sh | sh
+  ```
+
+The café opens in your browser and runs in a terminal window; close the window to close the café.
+Run the installer again to update. Your data stays in `~/.agent-cafe`.
+
+To publish a release, set the version in `apps/cli/package.json` and push a matching tag
+(`git tag v0.2.0 && git push origin v0.2.0`). The [Release workflow](.github/workflows/release.yml)
+builds the app for Windows, macOS (Apple silicon and Intel) and Linux (x64 and arm64) and
+publishes it. `pnpm build && pnpm --filter ./apps/cli standalone` builds it for your own computer
+into `apps/cli/release/`.
+
+## Quick start (from source)
 
 Requirements: Node 22+ (24 recommended) and pnpm 10+.
 

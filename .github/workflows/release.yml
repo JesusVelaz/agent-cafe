@@ -1,0 +1,83 @@
+# Builds Agent Café as an installable app for Windows, macOS and Linux (no Node or pnpm needed),
+# and publishes them as a GitHub release when a version tag (v0.2.0) is pushed. Pull requests that
+# touch the packaging build everything too, so the installers can be downloaded and tried from the
+# run's artifacts before a release.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  pull_request:
+    paths:
+      - 'apps/cli/**'
+      - '.github/workflows/release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: windows-x64, runner: windows-2025 }
+          - { target: macos-arm64, runner: macos-15 }
+          - { target: macos-x64, runner: macos-15-intel }
+          - { target: linux-x64, runner: ubuntu-24.04 }
+          - { target: linux-arm64, runner: ubuntu-24.04-arm }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          # The app ships with this exact Node, so the SQLite driver installed here fits it.
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm --filter ./apps/cli standalone
+
+      - name: Build the Windows installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        working-directory: apps/cli/installer
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup --no-progress -y; if ($LASTEXITCODE) { exit $LASTEXITCODE } }
+          $version = (Get-Content ../package.json | ConvertFrom-Json).version
+          & $iscc "/DAppVersion=$version" /DSourceDir=..\release\agent-cafe /O..\release agent-cafe.iss
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agent-cafe-${{ matrix.target }}
+          path: |
+            apps/cli/release/AgentCafeSetup.exe
+            apps/cli/release/agent-cafe-*.tar.gz
+          if-no-files-found: error
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the tag matches the app's version
+        run: |
+          version=$(node -p "require('./apps/cli/package.json').version")
+          [ "v$version" = "$GITHUB_REF_NAME" ] || { echo "Tag $GITHUB_REF_NAME doesn't match apps/cli/package.json version $version"; exit 1; }
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+      - run: cp apps/cli/installer/install.sh release/
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" release/* --title "Agent Café $GITHUB_REF_NAME" --generate-notes
