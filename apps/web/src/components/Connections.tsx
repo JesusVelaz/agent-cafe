@@ -62,10 +62,10 @@ export function Connections({ active }: { active: boolean }) {
         <p className="mt-1 text-[13px] text-chalk-dim">Use the café from your phone. It keeps running on this computer; your phone becomes another screen for it.</p>
       </div>
       <div className="divide-y divide-slate-line rounded-2xl border border-slate-line bg-slate/40">
-        <Row title="Phone access" hint={accessHint(onThisComputer, status, sharing)}>
+        <Row title="Network access" hint={accessHint(onThisComputer, status, sharing)}>
           {onThisComputer && (
             <Toggle
-              label="Phone access"
+              label="Network access"
               checked={!!sharing}
               disabled={!available || busy !== null}
               onChange={(on) => run(on ? 'start' : 'stop', on ? () => api.sharePhone(via) : api.stopPhone)}
@@ -110,7 +110,7 @@ const CHOICES: Record<Via, string> = {
 };
 
 function accessHint(onThisComputer: boolean, status: PhoneStatus | null, sharing: Shared | null | undefined): ReactNode {
-  if (!onThisComputer) return 'You’re on a paired device. Phone access is set up on the computer running the café.';
+  if (!onThisComputer) return 'You’re on a paired device. Network access is set up on the computer running the café.';
   if (!status) return 'Checking…';
   if (!status.available) return 'Not while developing with pnpm dev. Run pnpm build, then pnpm start, to use it.';
   if (!sharing) return 'Limited to this computer.';

@@ -49,7 +49,7 @@ this computer unless you open it to your phone (below). Once the package is publ
 ### On your phone
 
 The café keeps running on your computer; your phone becomes another screen for it. Open
-**Settings → Connections** in the café, turn on **Phone access** and pick how your phone reaches it
+**Settings → Connections** in the café, turn on **Network access** and pick how your phone reaches it
 (it stays on when the café restarts, until you turn it off), or start it with `--host`
 (from the repo: `pnpm start --host tailscale`; this also works while the café is already open):
 
@@ -61,8 +61,8 @@ The café keeps running on your computer; your phone becomes another screen for 
 The café shows a QR code (the command prints it too). Scan it with your phone's camera and the café opens; the phone
 stays paired (a cookie) from then on. The code holds a long random token, saved in
 `~/.agent-cafe/pairing-token`: anyone with it can control the café, so keep it to yourself.
-`--new-token` (with the café closed) makes a new one and signs out every paired device; **Close to
-phones** in the same place stops phone access until you open it again. The first time, your computer's
+`--new-token` (with the café closed) makes a new one and signs out every paired device; turning
+**Network access** off closes the café to phones until you turn it on again. The first time, your computer's
 firewall may ask whether to accept incoming connections: allow it (on Windows, for private
 networks only).
 

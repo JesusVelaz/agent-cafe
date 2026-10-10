@@ -33,7 +33,7 @@ export const powershell: PowerShell = (script, timeoutMs = 60_000) =>
 /** A PowerShell string literal. */
 export const psString = (s: string) => `'${s.replace(/'/g, "''")}'`;
 
-const RULE_NAME = 'Agent Café (phone access)';
+const RULE_NAME = 'Agent Café (network access)';
 
 /** Finds the network category and the inbound rules that decide whether Node is let in on `port`. */
 export function checkScript(address: string, port: number, node: string): string {

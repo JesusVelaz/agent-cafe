@@ -65,7 +65,7 @@ export interface CreateTaskInput {
   continueTaskId?: string;
 }
 
-/** Phone access (the "Phone" button): whether the café can open to phones, and how it is open now. */
+/** Network access (Settings → Connections): whether the café can open to phones, and how it is open now. */
 export interface PhoneStatus {
   available: boolean;
   sharing: {

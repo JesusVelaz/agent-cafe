@@ -83,7 +83,7 @@ export class PhoneAccess {
 
   /** Turns phone access on: `tailscale`, `lan` or one of this computer's addresses. */
   async start(choice: string): Promise<PhoneSharing> {
-    if (!this.app || !this.dataDir) throw new RemoteSetupError('Phone access needs the café started with `pnpm start` or `agent-cafe`.');
+    if (!this.app || !this.dataDir) throw new RemoteSetupError('Network access needs the café started with `pnpm start` or `agent-cafe`.');
     const { address, kind } = this.resolve(choice);
     if (this.access?.host === address) return this.status()!;
     await this.stop();
@@ -119,7 +119,7 @@ export class PhoneAccess {
    * Throws a RemoteSetupError when it couldn't.
    */
   async repair(): Promise<PhoneSharing> {
-    if (!this.access) throw new RemoteSetupError('Phone access is off.');
+    if (!this.access) throw new RemoteSetupError('Network access is off.');
     if (!this.firewall?.fixable) throw new RemoteSetupError('There’s nothing here the café can fix.');
     const { host } = this.access;
     try {
@@ -129,7 +129,7 @@ export class PhoneAccess {
     }
     if (this.access?.host === host) this.firewall = await this.check(host, this.port);
     const status = this.status();
-    if (!status) throw new RemoteSetupError('Phone access is off.');
+    if (!status) throw new RemoteSetupError('Network access is off.');
     return status;
   }
 
