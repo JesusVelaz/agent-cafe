@@ -9,20 +9,22 @@ import type { ThemeId } from '@/scene/atmosphere';
 import { useCafe } from '@/store/cafe';
 import { AddProjectDialog } from './AddProjectDialog';
 import { Avatar } from './Avatar';
+import { Connections } from './Connections';
 import { THEME_LABELS, ThemeIcon } from './ThemePicker';
 import { ModelList } from './pickers';
 import { Caret, FolderIcon, HarnessIcon, Popover } from './ui';
 
-export type Section = 'general' | 'agents' | 'providers' | 'projects';
+export type Section = 'general' | 'agents' | 'providers' | 'projects' | 'connections';
 
 const SECTIONS: Array<{ id: Section; label: string }> = [
   { id: 'general', label: 'General' },
   { id: 'agents', label: 'Agents' },
   { id: 'providers', label: 'Providers' },
   { id: 'projects', label: 'Projects' },
+  { id: 'connections', label: 'Connections' },
 ];
 
-/** App settings in a modal: general, providers (connect Claude / ChatGPT, floor modes) and projects. */
+/** App settings in a modal: general, providers (connect Claude / ChatGPT, floor modes), projects and connections (your phone). */
 export function SettingsDialog({
   open,
   onClose,
@@ -82,6 +84,7 @@ export function SettingsDialog({
           {section === 'agents' && <Agents />}
           {section === 'providers' && <Providers active={open} />}
           {section === 'projects' && <Projects />}
+          {section === 'connections' && <Connections active={open} />}
         </div>
       </div>
       {/* On the dialog, not in the scrolling pane, so it stays put while a long section scrolls. */}

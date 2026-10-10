@@ -1,7 +1,7 @@
 'use client';
 
 import QRCode from 'qrcode';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api, ApiError, type PhoneStatus } from '@/lib/api';
 import { networkPrefix } from '@/lib/phone';
 
@@ -11,31 +11,29 @@ const CHOICES = [
 ] as const;
 
 /**
- * "Connect your phone": opens the café to phones (over Tailscale or the home Wi-Fi) and shows the
- * pairing link as a QR code. Only on this computer: the server refuses these calls from a phone.
+ * Settings → Connections: opens the café to phones (over Tailscale or the home network) and shows
+ * the pairing link as a QR code. Only on this computer: the server refuses these calls from a phone.
  */
-export function PhoneDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const ref = useRef<HTMLDialogElement>(null);
+export function Connections({ active }: { active: boolean }) {
   const [status, setStatus] = useState<PhoneStatus | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Only the computer running the café can open it to phones.
+  const [onThisComputer, setOnThisComputer] = useState(true);
+  useEffect(() => setOnThisComputer(['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)), []);
 
   useEffect(() => {
-    const d = ref.current;
-    if (!d) return;
-    if (open && !d.open) {
-      setError(null);
-      setStatus(null);
-      api.phone().then(setStatus, (err) =>
-        // The page was rebuilt while an older café server kept running (it serves the new files).
-        setError(err instanceof ApiError && err.status === 404 ? 'This café is still running an older version. Close it (Ctrl+C in its window), then start it again.' : err instanceof ApiError ? err.message : String(err)),
-      );
-      d.showModal();
-    } else if (!open && d.open) d.close();
-  }, [open]);
+    if (!active || !onThisComputer) return;
+    setError(null);
+    setStatus(null);
+    api.phone().then(setStatus, (err) =>
+      // The page was rebuilt while an older café server kept running (it serves the new files).
+      setError(err instanceof ApiError && err.status === 404 ? 'This café is still running an older version. Close it (Ctrl+C in its window), then start it again.' : err instanceof ApiError ? err.message : String(err)),
+    );
+  }, [active, onThisComputer]);
 
-  // Until a phone gets through, keep asking: the dialog turns to "connected" the moment one does.
-  const waiting = open && !!status?.sharing && !status.sharing.reached;
+  // Until a phone gets through, keep asking: the section turns to "connected" the moment one does.
+  const waiting = active && !!status?.sharing && !status.sharing.reached;
   useEffect(() => {
     if (!waiting) return;
     const timer = setInterval(() => api.phone().then(setStatus, () => {}), 2000);
@@ -55,27 +53,27 @@ export function PhoneDialog({ open, onClose }: { open: boolean; onClose: () => v
   };
 
   return (
-    <dialog
-      ref={ref}
-      onClose={onClose}
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-      aria-label="Connect your phone"
-      className="m-auto w-[min(420px,calc(100vw-2rem))] rounded-2xl border border-slate-line bg-night-2 p-0 text-chalk shadow-[0_30px_80px_rgba(0,0,0,.6)] transition-[opacity,scale] duration-150 backdrop:bg-black/55 starting:scale-[.98] starting:opacity-0"
-    >
-      <div className="p-5">
-        <h2 className="pr-10 font-display text-[26px] font-normal leading-none">Connect your phone</h2>
+    <>
+      <div className="mb-5 sm:pr-10">
+        <h3 className="text-[18px] font-semibold">Connections</h3>
+        <p className="mt-1 text-[13px] text-chalk-dim">Use the café from your phone. It keeps running on this computer; your phone becomes another screen for it.</p>
+      </div>
+      <div className="max-w-[420px]">
+        <p className="text-[13px] font-medium">Your phone</p>
 
-        {open && status && !status.available && (
-          <p className="mt-4 text-[13px] text-chalk-dim">
+        {!onThisComputer && <p className="mt-2 text-[13px] text-chalk-dim">You’re already on a paired device. Phone access is set up on the computer running the café.</p>}
+
+        {onThisComputer && status && !status.available && (
+          <p className="mt-2 text-[13px] text-chalk-dim">
             Phone access works when the café runs with <code className="text-chalk">pnpm start</code> or the{' '}
             <code className="text-chalk">agent-cafe</code> command.
           </p>
         )}
 
-        {open && status?.available && !status.sharing && (
+        {onThisComputer && status?.available && !status.sharing && (
           <>
-            <p className="mt-3 text-[13px] text-chalk-dim">Open the café to your phone, then scan the code it shows.</p>
-            <div className="mt-4 flex flex-col gap-2">
+            <p className="mt-1 text-[13px] text-chalk-dim">Open the café to your phone, then scan the code it shows.</p>
+            <div className="mt-3 flex flex-col gap-2">
               {CHOICES.map((c) => (
                 <button
                   key={c.via}
@@ -92,31 +90,18 @@ export function PhoneDialog({ open, onClose }: { open: boolean; onClose: () => v
           </>
         )}
 
-        {open && status?.sharing && (
-          <Sharing
-            sharing={status.sharing}
-            busy={busy}
-            onFix={() => run('fix', api.fixPhone)}
-            onStop={() => run('stop', api.stopPhone)}
-          />
+        {onThisComputer && status?.sharing && (
+          <Sharing sharing={status.sharing} busy={busy} onFix={() => run('fix', api.fixPhone)} onStop={() => run('stop', api.stopPhone)} />
         )}
 
-        {open && !status && !error && <p className="mt-4 text-[13px] text-chalk-faint">Checking…</p>}
+        {onThisComputer && !status && !error && <p className="mt-2 text-[13px] text-chalk-faint">Checking…</p>}
         {error && (
-          <p role="alert" className="mt-4 text-[13px] text-coral">
+          <p role="alert" className="mt-3 text-[13px] text-coral">
             {error}
           </p>
         )}
       </div>
-      <button
-        type="button"
-        aria-label="Close"
-        onClick={onClose}
-        className="absolute right-3 top-3 grid size-9 place-items-center rounded-lg text-chalk-dim hover:bg-slate hover:text-chalk"
-      >
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden><path d="M3 3l8 8M11 3l-8 8" /></svg>
-      </button>
-    </dialog>
+    </>
   );
 }
 
@@ -165,12 +150,12 @@ function Sharing({ sharing, busy, onFix, onStop }: { sharing: Shared; busy: stri
 
   return (
     <>
-      <p className="mt-3 text-[13px] text-chalk-dim">Scan this with your phone’s camera.</p>
-      {/* Our own SVG, made from the link just above. White behind it so any camera can read it. */}
+      <p className="mt-1 text-[13px] text-chalk-dim">Scan this with your phone’s camera.</p>
+      {/* Our own SVG, made from the link just below. White behind it so any camera can read it. */}
       <div
         aria-label="QR code that pairs your phone"
         role="img"
-        className="mx-auto mt-4 size-56 overflow-hidden rounded-xl bg-white [&>svg]:size-full"
+        className="mt-3 size-56 overflow-hidden rounded-xl bg-white [&>svg]:size-full"
         dangerouslySetInnerHTML={{ __html: svg }}
       />
       <div className="mt-4 flex items-center gap-2">

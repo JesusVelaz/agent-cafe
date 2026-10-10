@@ -57,7 +57,7 @@ async function printPairing({ via, link, firewall }: PhoneSharing) {
   }
   if (firewall) {
     console.log('   ⚠ Windows Firewall will stop your phone from loading the café.');
-    console.log(firewall.fixable ? '     To fix it, click “Phone” in the café, then “Fix it”.' : '     This network is managed by your organization: ask your IT team to allow Agent Café.');
+    console.log(firewall.fixable ? '     To fix it, open Settings → Connections in the café, then click “Fix it”.' : '     This network is managed by your organization: ask your IT team to allow Agent Café.');
   }
   console.log('');
 }
@@ -115,6 +115,6 @@ try {
 console.log(`☕ Agent Café is open at ${url}`);
 console.log(`   data: ${options.dataDir}`);
 if (phone) await printPairing(phone);
-else console.log('   To use it on your phone, click “Phone” in the café, or start it with --host lan.');
+else console.log('   To use it on your phone, open Settings → Connections in the café, or start it with --host lan.');
 console.log('   Press Ctrl+C to close it.');
 void open();

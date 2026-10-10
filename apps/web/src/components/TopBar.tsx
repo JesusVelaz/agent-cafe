@@ -11,7 +11,6 @@ import { needsAttention } from '@/store/reduce';
 import { BrewingPill } from './BrewingPill';
 import { ConnectPrompt } from './ConnectPrompt';
 import { CupIcon } from './CupIcon';
-import { PhoneDialog } from './PhoneDialog';
 import { SettingsDialog, type Section } from './SettingsDialog';
 
 interface Props {
@@ -31,10 +30,6 @@ export function TopBar({ themeChoice, theme, onTheme }: Props) {
   const mood: Mood = needYou ? 'alert' : working ? 'working' : 'quiet';
   const conn = state.connection;
   const [settings, setSettings] = useState<Section | null>(null);
-  const [phone, setPhone] = useState(false);
-  // Only the computer running the café can open it to phones; a phone already on it has no use for the button.
-  const [onThisComputer, setOnThisComputer] = useState(false);
-  useEffect(() => setOnThisComputer(['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)), []);
   // A live floor that can't run (signed out, not installed) is worth a dot on the gear.
   const providerAttention = Object.values(state.providers).some((p) => p && p.mode === 'live' && !p.liveAvailable && p.connection.state !== 'checking');
 
@@ -67,21 +62,6 @@ export function TopBar({ themeChoice, theme, onTheme }: Props) {
 
       <div className="ml-auto flex items-center gap-3">
         <BrewingPill working={working} queued={queued} needYou={needYou} onNeeds={showNeeds} />
-        {onThisComputer && (
-          <button
-            type="button"
-            onClick={() => setPhone(true)}
-            aria-label="Connect your phone"
-            title="Connect your phone"
-            className="flex h-9 items-center gap-2 rounded-lg border border-slate-line px-3 text-[13px] text-chalk-dim hover:bg-slate hover:text-chalk"
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
-              <rect x="4" y="1.5" width="8" height="13" rx="1.6" />
-              <path d="M7 12.2h2" />
-            </svg>
-            <span className="hidden sm:inline">Phone</span>
-          </button>
-        )}
         <button
           type="button"
           onClick={() => setSettings('general')}
@@ -105,7 +85,6 @@ export function TopBar({ themeChoice, theme, onTheme }: Props) {
         theme={theme}
         onTheme={onTheme}
       />
-      <PhoneDialog open={phone} onClose={() => setPhone(false)} />
       <ConnectPrompt onConnect={() => setSettings('providers')} />
     </header>
   );
