@@ -2,9 +2,10 @@
  * Themes, backdrop, weather particles and the lighting pass.
  *
  * Lighting: every pixel is multiplied by the theme's ambient colour plus the
- * summed light of nearby lamps. Lamp falloff is quantised into four bands with
- * a 4×4 Bayer dither, which gives the stepped "pixel art" light pools. Emissive
- * pixels (windows, bulbs, screens, the outside backdrop) are left untouched.
+ * summed light of nearby lamps. Lamp falloff is smooth (a dithered falloff read
+ * as fuzzy static once scaled up), and the summed light is soft-capped so pools
+ * that overlap never blow out to white. Emissive pixels (windows, bulbs,
+ * screens, the outside backdrop) are left untouched.
  */
 import { perArea } from './frame';
 import { hash, rgb, type RGB } from './palette';
@@ -114,12 +115,10 @@ export function grade(R: Raster, theme: ThemeId, lights: Light[]): void {
         if (dd >= 1) continue;
         let f = 1 - Math.sqrt(dd);
         f *= f;
-        const lvl = Math.floor(f * 4 + BAYER[(y & 3) * 4 + (x & 3)]! / 16) / 4;
-        if (lvl <= 0) continue;
         const o = (y * w + x) * 3;
-        lm[o] = lm[o]! + L.col[0] * lvl * s;
-        lm[o + 1] = lm[o + 1]! + L.col[1] * lvl * s;
-        lm[o + 2] = lm[o + 2]! + L.col[2] * lvl * s;
+        lm[o] = lm[o]! + L.col[0] * f * s;
+        lm[o + 1] = lm[o + 1]! + L.col[1] * f * s;
+        lm[o + 2] = lm[o + 2]! + L.col[2] * f * s;
       }
     }
   }
@@ -127,8 +126,12 @@ export function grade(R: Raster, theme: ThemeId, lights: Light[]): void {
   for (let i = 0; i < w * h; i++) {
     if (R.em[i]) continue;
     const o4 = i * 4, o3 = i * 3;
-    d[o4] = d[o4]! * (TH.amb[0] + lm[o3]!);
-    d[o4 + 1] = d[o4 + 1]! * (TH.amb[1] + lm[o3 + 1]!);
-    d[o4 + 2] = d[o4 + 2]! * (TH.amb[2] + lm[o3 + 2]!);
+    d[o4] = d[o4]! * (TH.amb[0] + soften(lm[o3]!));
+    d[o4 + 1] = d[o4 + 1]! * (TH.amb[1] + soften(lm[o3 + 1]!));
+    d[o4 + 2] = d[o4 + 2]! * (TH.amb[2] + soften(lm[o3 + 2]!));
   }
 }
+
+/** Most lamp light one pixel can take: dim light passes through almost as is, bright or stacked light levels off instead of going white. */
+const LIGHT_CAP = 1.15;
+const soften = (v: number) => LIGHT_CAP * (1 - Math.exp(-v / LIGHT_CAP));
