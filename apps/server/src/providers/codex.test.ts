@@ -329,7 +329,7 @@ describe('runCodexTask', () => {
   it('refuses to run if Codex reports a looser policy than asked for', async () => {
     const srv = new FakeCodexServer().on('thread/start', (p) => ({ thread: { id: 'thr_new' }, approvalPolicy: 'never', sandbox: { type: 'dangerFullAccess' }, cwd: p.cwd }));
     const { outcome, sessions } = await run(srv);
-    expect(outcome).toMatchObject({ status: 'failed', error: expect.stringMatching(/didn't apply Agent Café's approval and sandbox settings/) });
+    expect(outcome).toMatchObject({ status: 'failed', error: expect.stringMatching(/didn't apply Agents Café's approval and sandbox settings/) });
     expect(srv.requests('turn/start')).toEqual([]);
     expect(sessions).toEqual([]);
   });

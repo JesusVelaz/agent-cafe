@@ -1,4 +1,4 @@
-# Agent Café — Phase 1 Implementation Plan
+# Agents Café — Phase 1 Implementation Plan
 
 > **For agentic workers:** Execute task by task. Steps use checkbox (`- [ ]`) syntax.
 > Executed inline in the authoring session, so each task gives exact interfaces,

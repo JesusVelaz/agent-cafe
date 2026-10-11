@@ -28,7 +28,7 @@ export type CodexSpawner = (exe: string, args: string[]) => CodexChild;
 /** Starts the CLI without a shell, except for Windows .cmd/.bat shims (which need one). */
 export const spawnCodex: CodexSpawner = (exe, args) => {
   const shim = process.platform === 'win32' && /\.(cmd|bat)$/i.test(exe);
-  // The arguments are fixed by Agent Café (never user text), so shell mode can't be injected into.
+  // The arguments are fixed by Agents Café (never user text), so shell mode can't be injected into.
   const child: ChildProcessWithoutNullStreams = shim
     ? spawn(`"${exe}"`, args, { shell: true, windowsHide: true, env: harnessEnv() })
     : spawn(exe, args, { windowsHide: true, env: harnessEnv() });

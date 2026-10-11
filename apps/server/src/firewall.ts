@@ -33,7 +33,9 @@ export const powershell: PowerShell = (script, timeoutMs = 60_000) =>
 /** A PowerShell string literal. */
 export const psString = (s: string) => `'${s.replace(/'/g, "''")}'`;
 
-const RULE_NAME = 'Agent Café (network access)';
+const RULE_NAME = 'Agents Café (network access)';
+/** The same rule from before the rename to Agents Café, replaced by RULE_NAME. */
+const OLD_RULE_NAME = 'Agent Café (network access)';
 
 /** Finds the network category and the inbound rules that decide whether Node is let in on `port`. */
 export function checkScript(address: string, port: number, node: string): string {
@@ -85,7 +87,7 @@ if ($conn.NetworkCategory -eq 'Public') { Set-NetConnectionProfile -InterfaceInd
 Get-NetFirewallApplicationFilter | Where-Object { $_.Program -and [Environment]::ExpandEnvironmentVariables($_.Program) -ieq $node } | Get-NetFirewallRule |
   Where-Object { $_.Direction -eq 'Inbound' -and $_.Action -eq 'Block' -and ($_.Profile.ToString() -eq 'Any' -or $_.Profile.ToString() -match 'Private') } |
   Disable-NetFirewallRule
-Remove-NetFirewallRule -DisplayName ${psString(RULE_NAME)} -ErrorAction SilentlyContinue
+Remove-NetFirewallRule -DisplayName ${psString(RULE_NAME)}, ${psString(OLD_RULE_NAME)} -ErrorAction SilentlyContinue
 New-NetFirewallRule -DisplayName ${psString(RULE_NAME)} -Direction Inbound -Action Allow -Protocol TCP -LocalPort ${port} -Program $node -Profile Private -RemoteAddress LocalSubnet | Out-Null
 `;
   const encoded = Buffer.from(inner, 'utf16le').toString('base64');

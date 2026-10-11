@@ -1,4 +1,4 @@
-# Builds Agent Café as an installable app for Windows, macOS and Linux (no Node or pnpm needed),
+# Builds Agents Café as an installable app for Windows, macOS and Linux (no Node or pnpm needed),
 # and publishes them as a GitHub release when a version tag (v0.2.0) is pushed. Pull requests that
 # touch the packaging build everything too, so the installers can be downloaded and tried from the
 # run's artifacts before a release.
@@ -80,4 +80,4 @@ jobs:
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" release/* --title "Agent Café $GITHUB_REF_NAME" --generate-notes
+        run: gh release create "$GITHUB_REF_NAME" release/* --title "Agents Café $GITHUB_REF_NAME" --generate-notes

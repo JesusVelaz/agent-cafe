@@ -32,7 +32,7 @@ async function cafe({ withData = true, blocked = false, allowFix = true } = {}) 
   const dataDir = withData ? mkdtempSync(join(tmpdir(), 'agent-cafe-data-')) : undefined;
   const port = await freePort();
   const webDir = mkdtempSync(join(tmpdir(), 'agent-cafe-web-'));
-  writeFileSync(join(webDir, 'index.html'), '<!doctype html><title>Agent Café</title>');
+  writeFileSync(join(webDir, 'index.html'), '<!doctype html><title>Agents Café</title>');
   const phone = new PhoneAccess(port, dataDir, {
     resolve: (choice) => {
       if (choice === 'nowhere') throw new RemoteSetupError('No Tailscale address on this computer.');

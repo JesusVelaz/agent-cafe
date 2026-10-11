@@ -11,19 +11,15 @@ import type {
   TaskDTO,
   TaskEventDTO,
 } from '@agent-cafe/shared';
+import { ApiError } from './apiError';
+import { demoApi } from './demo/api';
+import { DEMO_SITE } from './demo/flag';
+
+export { ApiError };
 
 // Under `pnpm dev`, Next serves the UI on :3000 and the API has its own port. A built UI is
 // served by the café server itself, so it calls the API on its own origin.
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'development' ? 'http://127.0.0.1:4318' : '');
-
-export class ApiError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-  ) {
-    super(message);
-  }
-}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
@@ -77,7 +73,7 @@ export interface PhoneStatus {
   } | null;
 }
 
-export const api = {
+const serverApi = {
   phone: () => request<PhoneStatus>('/api/phone'),
   /** `via`: tailscale or lan. */
   sharePhone: (via: string) => post<PhoneStatus>('/api/phone', { via }),
@@ -126,3 +122,8 @@ export const api = {
   folders: (path: string) => request<FolderListing>(`/api/folders?path=${encodeURIComponent(path)}`),
   revealFolder: (path: string) => post<{ ok: true }>('/api/folders/reveal', { path }),
 };
+
+export type Api = typeof serverApi;
+
+/** The demo site has no server: its café runs in the browser. */
+export const api: Api = DEMO_SITE ? demoApi : serverApi;

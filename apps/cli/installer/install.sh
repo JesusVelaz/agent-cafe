@@ -1,10 +1,10 @@
 #!/bin/sh
-# Installs Agent Café on macOS or Linux, with no Node or pnpm needed:
+# Installs Agents Café on macOS or Linux, with no Node or pnpm needed:
 #
 #   curl -fsSL https://github.com/JesusVelaz/agent-cafe/releases/latest/download/install.sh | sh
 #
 # It downloads the app for this computer from the latest release into ~/.local/share/agent-cafe,
-# puts an `agent-cafe` command in ~/.local/bin, and adds Agent Café to Applications (macOS) or the
+# puts an `agent-cafe` command in ~/.local/bin, and adds Agents Café to Applications (macOS) or the
 # app menu (Linux). Run it again to update. Your café's data stays in ~/.agent-cafe either way.
 # AGENT_CAFE_VERSION=v0.2.0 installs that release instead of the latest.
 set -eu
@@ -36,10 +36,10 @@ fi
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
-echo "Downloading Agent Café for $os ($arch)..."
+echo "Downloading Agents Café for $os ($arch)..."
 curl -fL --progress-bar "$url" -o "$tmp/agent-cafe.tar.gz" || fail "couldn't download $url"
 tar -xzf "$tmp/agent-cafe.tar.gz" -C "$tmp"
-[ -x "$tmp/agent-cafe/agent-cafe" ] || fail "the download doesn't look like Agent Café."
+[ -x "$tmp/agent-cafe/agent-cafe" ] || fail "the download doesn't look like Agents Café."
 
 # Swap the new app in whole, so an update never mixes old and new files.
 mkdir -p "$(dirname "$install_dir")" "$bin_dir"
@@ -51,15 +51,15 @@ ln -sf "$install_dir/agent-cafe" "$bin_dir/agent-cafe"
 
 if [ "$os" = macos ]; then
   # A small app that opens the café in a Terminal window; closing the window closes the café.
-  app="$HOME/Applications/Agent Café.app"
-  rm -rf "$app"
+  app="$HOME/Applications/Agents Café.app"
+  rm -rf "$app" "$HOME/Applications/Agent Café.app" # and the app from before the rename
   mkdir -p "$app/Contents/MacOS"
   cat > "$app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleName</key><string>Agent Café</string>
+  <key>CFBundleName</key><string>Agents Café</string>
   <key>CFBundleIdentifier</key><string>com.github.jesusvelaz.agent-cafe</string>
   <key>CFBundleExecutable</key><string>agent-cafe</string>
   <key>CFBundlePackageType</key><string>APPL</string>
@@ -68,25 +68,25 @@ if [ "$os" = macos ]; then
 PLIST
   printf '#!/bin/sh\nexec open -a Terminal "%s/agent-cafe"\n' "$install_dir" > "$app/Contents/MacOS/agent-cafe"
   chmod +x "$app/Contents/MacOS/agent-cafe"
-  where="Open Agent Café from your Applications folder (in your home folder)"
+  where="Open Agents Café from your Applications folder (in your home folder)"
 else
   apps="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
   mkdir -p "$apps"
   cat > "$apps/agent-cafe.desktop" <<DESKTOP
 [Desktop Entry]
 Type=Application
-Name=Agent Café
+Name=Agents Café
 Comment=Watch your Claude Code and Codex agents work
 Exec="$install_dir/agent-cafe"
 Icon=$install_dir/agent-cafe.png
 Terminal=true
 Categories=Development;
 DESKTOP
-  where="Open Agent Café from your app menu"
+  where="Open Agents Café from your app menu"
 fi
 
 echo
-echo "☕ Agent Café $(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$install_dir/package.json") is installed."
+echo "☕ Agents Café $(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$install_dir/package.json") is installed."
 echo "   $where, or run: agent-cafe"
 case ":$PATH:" in
   *":$bin_dir:"*) ;;

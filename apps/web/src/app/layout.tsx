@@ -10,7 +10,7 @@ const plex = IBM_Plex_Mono({ weight: ['400', '500', '600'], subsets: ['latin'], 
 const plexSans = IBM_Plex_Sans({ weight: 'variable', subsets: ['latin'], variable: '--font-plex-sans' });
 
 export const metadata: Metadata = {
-  title: 'Agent Café',
+  title: 'Agents Café',
   description: 'A pixel-art café where you can watch your AI agents work.',
 };
 

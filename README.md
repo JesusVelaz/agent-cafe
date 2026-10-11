@@ -1,6 +1,7 @@
-# Agent Café ☕
+# Agents Café ☕
 
 A local-first control room for AI agents, drawn as a cosy two-story pixel-art café on a street corner.
+Try the online demo at [agentscafe.dev](https://agentscafe.dev).
 
 The point is to see what your agents are doing and hand them work. Each agent is a worker in
 the café, and where they stand is what they're doing: a tool call walks them to that tool's
@@ -11,7 +12,7 @@ answers, and a message box to prompt them directly.
 
 - **Ground floor: OpenAI.** **Upstairs: Anthropic.** The upper floor sits on top, one step smaller.
 - **No API keys.** Live floors run the vendor's own coding agent (Claude Code upstairs, Codex
-  downstairs), signed in with *your* subscription. Agent Café never sees or stores credentials.
+  downstairs), signed in with *your* subscription. Agents Café never sees or stores credentials.
 - Every floor also has a **Demo** mode: scripted runs, no real calls.
 
 > Status: Claude Code runs the Anthropic floor live and Codex runs the OpenAI floor live; both
@@ -23,10 +24,10 @@ No Node or pnpm needed: each release ships the café with everything it runs on.
 
 - **Windows:** download `AgentCafeSetup.exe` from the
   [latest release](https://github.com/JesusVelaz/agent-cafe/releases/latest) and run it. Open
-  **Agent Café** from the Start menu. The installer can also let phones on your home Wi-Fi through
+  **Agents Café** from the Start menu. The installer can also let phones on your home Wi-Fi through
   Windows Firewall (private networks only), so [network access](#on-your-phone) works straight away. It isn't code-signed yet, so Windows
   may say it "protected your PC": click **More info → Run anyway**.
-- **macOS and Linux:** run this in a terminal, then open **Agent Café** from Applications (in your
+- **macOS and Linux:** run this in a terminal, then open **Agents Café** from Applications (in your
   home folder) or your app menu, or run `agent-cafe`:
 
   ```bash
@@ -178,7 +179,7 @@ instructions are kept separately. Existing result history also hides the old int
 ### Going live with your ChatGPT subscription (Codex)
 
 1. Install [Codex](https://developers.openai.com/codex) 0.154 or newer (the Codex desktop app ships
-   one). Agent Café talks to it through `codex app-server`.
+   one). Agents Café talks to it through `codex app-server`.
 2. In **Settings → Providers**, press **Connect** on ChatGPT (it runs `codex login`), then switch the
    ground floor on. On Windows, Codex's sandbox must be set up (the Codex app does this); without
    it, live Codex tasks don't start.
@@ -188,9 +189,9 @@ instructions are kept separately. Existing result history also hides the old int
 How the permission picker maps to Codex: both settings run Codex with approval policy
 `untrusted` and the `workspace-write` sandbox, and approvals always come to you (never Codex's
 auto-reviewer). **Ask first** sends every file edit and every command Codex doesn't already trust
-to an Allow / Deny card. **Auto-accept edits** lets Agent Café accept file edits itself when every
+to an Allow / Deny card. **Auto-accept edits** lets Agents Café accept file edits itself when every
 file the edit writes, including move destinations and resolved symlink/junction targets, is inside the project (the thread notes each
-one); commands, and edits that reach outside the project, still ask. Agent Café pins the sandbox
+one); commands, and edits that reach outside the project, still ask. Agents Café pins the sandbox
 (no network, no extra writable folders) over anything in `~/.codex/config.toml`, and refuses to
 start a task if the policy Codex reports back is looser. Differences from Claude Code: approved
 commands still run inside Codex's sandbox (they can write only in the project and temp folders,
@@ -251,6 +252,20 @@ changes in agent settings are also validated against the offered models.
 
 Useful scripts: `pnpm test`, `pnpm typecheck`, `pnpm db:reset` (wipe and reseed).
 
+### Online demo site
+
+`NEXT_PUBLIC_DEMO_SITE=1` builds the web app as a demo website with no server: the café runs in the
+visitor's browser on scripted demo data (`apps/web/src/lib/demo`). It starts with the six agents,
+two made-up projects and a few finished threads, and idle agents pick up sample tasks now and then.
+Visitors can open threads, send tasks, answer Allow / Deny cards, stop, retry, rename and delete;
+nothing is saved, and a reload starts fresh. Live mode, providers, projects and phone access are
+hidden. Try it locally with `NEXT_PUBLIC_DEMO_SITE=1 pnpm --filter @agent-cafe/web dev`.
+
+To host it on Vercel: import the repository, set **Root Directory** to `apps/web` (the Next.js preset
+and pnpm are picked up), and add the environment variable `NEXT_PUBLIC_DEMO_SITE` = `1`. The build is a
+static export (`apps/web/out`), so any static host works the same way. The live demo is at
+[agentscafe.dev](https://agentscafe.dev): add the domain under the project's **Settings → Domains**.
+
 The server brings the database up to date when it starts, from `apps/server/prisma/migrations`.
 After changing `schema.prisma`, run `pnpm db:migrate` to add a migration (a test fails until you do).
 
@@ -307,6 +322,7 @@ apps/web/src
   sim/                  layout.ts · pathfinding.ts · activity.ts · world.ts · cats.ts
   scene/                renderer.ts · building.ts · props.ts · outdoor.ts · atmosphere.ts · sprites.ts · raster.ts
   lib/                  api.ts · stream.ts · theme.ts (auto themes) · format.ts
+    demo/               cafe.ts · script.ts · seed.ts · api.ts   (the online demo site's in-browser café)
 apps/cli/src            cli.ts · options.ts · browser.ts · network.ts · token.ts   (the `agent-cafe` command; build.mjs bundles it)
 docs/                   specs/ (design decisions) · plans/ (implementation plans)
 ```

@@ -6,7 +6,7 @@ import { toAgentDTO } from '../db/mappers.js';
 import { OrchestratorError } from '../orchestrator/orchestrator.js';
 import type { Services } from '../services.js';
 
-const DEFAULT_PROMPT = 'You are a helpful agent working in Agent Café. Use tools when they help. Be concise.';
+const DEFAULT_PROMPT = 'You are a helpful agent working in Agents Café. Use tools when they help. Be concise.';
 
 const createBody = z.object({
   name: z.string().trim().min(1).max(24),

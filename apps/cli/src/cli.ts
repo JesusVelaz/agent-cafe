@@ -61,8 +61,8 @@ const phoneHint = (phoneOn: boolean) =>
 
 if (running === 'cafe') {
   // The running café keeps the pairing code it started with, so a new one would change nothing yet.
-  if (options.newToken) fail(`Agent Café is already open at ${url}. Close it (Ctrl+C in its window), then run this again to make a new pairing code.`);
-  console.log(`☕ Agent Café is already open at ${url}`);
+  if (options.newToken) fail(`Agents Café is already open at ${url}. Close it (Ctrl+C in its window), then run this again to make a new pairing code.`);
+  console.log(`☕ Agents Café is already open at ${url}`);
   if (options.host) {
     // Ask the running café to open to phones, as Settings → Connections does.
     const res = await call(`${url}/api/phone`, { method: 'POST', json: { via: options.host }, timeoutMs: 10_000 }).catch(() => undefined);
@@ -107,7 +107,7 @@ try {
   throw err;
 }
 
-console.log(`☕ Agent Café is running at ${url}`);
+console.log(`☕ Agents Café is running at ${url}`);
 console.log(phoneHint(Boolean(phone)));
 console.log('   Press Ctrl+C to close it.');
 void open();

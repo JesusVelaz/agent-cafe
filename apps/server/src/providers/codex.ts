@@ -48,7 +48,7 @@ export interface CodexRunContext extends LiveRunContext {
 
 const MAX_TOOL_OUTPUT_CHARS = 16_000;
 const NO_QUESTIONS =
-  'You are running unattended in Agent Café and cannot ask questions. Make a sensible choice, say what you assumed, and continue.';
+  'You are running unattended in Agents Café and cannot ask questions. Make a sensible choice, say what you assumed, and continue.';
 const THREAD_POLICY = { approvalPolicy: 'untrusted', sandbox: 'workspace-write', approvalsReviewer: 'user' } as const;
 /**
  * Overrides for the user's config.toml, which could otherwise widen the sandbox
@@ -91,7 +91,7 @@ export function versionAtLeast(v: string, min: string): boolean {
 }
 
 export const tooOldMessage = (v: string) =>
-  `Agent Café needs Codex ${CODEX_MIN_VERSION} or newer to run tasks (you have ${v}). Run \`codex update\`, then try again.`;
+  `Agents Café needs Codex ${CODEX_MIN_VERSION} or newer to run tasks (you have ${v}). Run \`codex update\`, then try again.`;
 
 // ── Sessions ─────────────────────────────────────────────────────────────────
 
@@ -100,7 +100,7 @@ export async function openCodex(exe: string, handlers: CodexRpcHandlers = {}, sp
   const rpc = new CodexRpc(spawn(exe, ['app-server']), handlers);
   try {
     const init = obj(
-      await rpc.request('initialize', { clientInfo: { name: 'agent_cafe', title: 'Agent Café', version: '0.1.0' }, capabilities: experimentalApi ? { experimentalApi: true } : null }, 20_000),
+      await rpc.request('initialize', { clientInfo: { name: 'agent_cafe', title: 'Agents Café', version: '0.1.0' }, capabilities: experimentalApi ? { experimentalApi: true } : null }, 20_000),
     );
     const version = parseCodexVersion(str(init?.userAgent) ?? '');
     if (version && !versionAtLeast(version, CODEX_MIN_VERSION)) throw new CodexProtocolError(tooOldMessage(version));
@@ -524,7 +524,7 @@ export async function runCodexTask(ctx: CodexRunContext): Promise<RunOutcome> {
       case 'mcpServer/elicitation/request':
         return { action: 'decline', content: null, _meta: null };
       default:
-        throw new RpcReplyError(-32601, `Agent Café doesn't handle ${method}.`);
+        throw new RpcReplyError(-32601, `Agents Café doesn't handle ${method}.`);
     }
   };
 
@@ -535,7 +535,7 @@ export async function runCodexTask(ctx: CodexRunContext): Promise<RunOutcome> {
     const account = obj(obj(await rpc.request('account/read', {}))?.account);
     if (!account) return done({ status: 'failed', failureKind: 'signed_out', error: 'Codex isn’t signed in. Connect ChatGPT in Settings.' });
     if (account.type !== 'chatgpt') {
-      return done({ status: 'failed', failureKind: 'signed_out', error: 'Codex is signed in with an API key. Agent Café runs on your ChatGPT plan: connect ChatGPT in Settings.' });
+      return done({ status: 'failed', failureKind: 'signed_out', error: 'Codex is signed in with an API key. Agents Café runs on your ChatGPT plan: connect ChatGPT in Settings.' });
     }
     if (task.model && task.model !== 'default') {
       const models = await listModels(rpc);
@@ -553,7 +553,7 @@ export async function runCodexTask(ctx: CodexRunContext): Promise<RunOutcome> {
         return done({
           status: 'failed',
           failureKind: 'provider_error',
-          error: `Codex's Windows sandbox isn't set up (${status ?? 'unknown'}), and Agent Café won't run Codex without it. Open the Codex app and finish its sandbox setup, then retry.`,
+          error: `Codex's Windows sandbox isn't set up (${status ?? 'unknown'}), and Agents Café won't run Codex without it. Open the Codex app and finish its sandbox setup, then retry.`,
         });
       }
     }
@@ -601,7 +601,7 @@ export async function runCodexTask(ctx: CodexRunContext): Promise<RunOutcome> {
       return done({
         status: 'failed',
         failureKind: 'provider_error',
-        error: `Codex didn't apply Agent Café's approval and sandbox settings (${problem}), so the task didn't run. Check ~/.codex/config.toml.`,
+        error: `Codex didn't apply Agents Café's approval and sandbox settings (${problem}), so the task didn't run. Check ~/.codex/config.toml.`,
       });
     }
     ctx.onSession?.(threadId);
@@ -649,7 +649,7 @@ export async function runCodexTask(ctx: CodexRunContext): Promise<RunOutcome> {
     endStep();
     if (signal.aborted) return done({ status: 'cancelled' });
     if (err instanceof CodexRpcError && err.kind === 'unsupported') {
-      return done({ status: 'failed', failureKind: 'provider_error', error: `This Codex doesn't support ${err.method}. Run \`codex update\` (Agent Café needs ${CODEX_MIN_VERSION}+).` });
+      return done({ status: 'failed', failureKind: 'provider_error', error: `This Codex doesn't support ${err.method}. Run \`codex update\` (Agents Café needs ${CODEX_MIN_VERSION}+).` });
     }
     return done({ status: 'failed', failureKind: 'provider_error', error: err instanceof Error ? err.message : String(err) });
   } finally {

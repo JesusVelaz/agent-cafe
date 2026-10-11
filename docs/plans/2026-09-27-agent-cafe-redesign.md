@@ -1,4 +1,4 @@
-# Agent Café — Redesign Implementation Plan (post-Phase-1 checkpoint)
+# Agents Café — Redesign Implementation Plan (post-Phase-1 checkpoint)
 
 > Executed inline. Steps use checkbox (`- [ ]`) syntax.
 

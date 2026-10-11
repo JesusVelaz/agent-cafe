@@ -50,7 +50,7 @@ function cookie(req: FastifyRequest, name: string): string | undefined {
 
 const NOT_PAIRED = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Agent Café</title>
+<title>Agents Café</title>
 <style>body{margin:0;min-height:100vh;display:grid;place-content:center;padding:24px;background:#16161d;color:#ece6da;font:16px/1.5 system-ui,sans-serif;text-align:center}h1{font-size:22px;margin:0 0 8px}p{margin:0;max-width:26em;color:#b5ad9f}</style>
 </head><body><main><h1>This device isn't paired</h1>
 <p>On your computer, find the window running <code>agent-cafe</code> and scan its QR code with this device's camera.</p>

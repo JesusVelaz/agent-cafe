@@ -3,6 +3,7 @@
 import { DEFAULTS } from '@agent-cafe/shared';
 import { useEffect, useState } from 'react';
 import { cupDataUrl, type Mood } from '@/lib/cup';
+import { DEMO_SITE } from '@/lib/demo/flag';
 import type { ThemeChoice } from '@/lib/theme';
 import { useNow } from '@/lib/useNow';
 import type { ThemeId } from '@/scene/atmosphere';
@@ -11,6 +12,7 @@ import { needsAttention } from '@/store/reduce';
 import { BrewingPill } from './BrewingPill';
 import { ConnectPrompt } from './ConnectPrompt';
 import { CupIcon } from './CupIcon';
+import { DownloadButton } from './DownloadButton';
 import { SettingsDialog, type Section } from './SettingsDialog';
 
 interface Props {
@@ -35,7 +37,7 @@ export function TopBar({ themeChoice, theme, onTheme }: Props) {
 
   // The tab tells you what's happening from another tab: title and favicon.
   useEffect(() => {
-    document.title = needYou ? `(${needYou}) Agent Café` : working ? `${working} working · Agent Café` : 'Agent Café';
+    document.title = needYou ? `(${needYou}) Agents Café` : working ? `${working} working · Agents Café` : 'Agents Café';
     const href = cupDataUrl(mood);
     for (const link of document.querySelectorAll<HTMLLinkElement>('link[rel~="icon"]')) link.href = href;
   }, [working, needYou, mood]);
@@ -47,21 +49,34 @@ export function TopBar({ themeChoice, theme, onTheme }: Props) {
   };
 
   return (
-    <header className="flex h-14 items-center gap-6 border-b border-slate-line bg-night-2 px-4">
+    <header className="flex h-14 items-center gap-3 sm:gap-6 border-b border-slate-line bg-night-2 px-4">
       <div className="flex items-center gap-2.5">
         <span data-cafe-logo className="flex">
           <CupIcon size={28} mood={mood} />
         </span>
-        <h1 className="font-display text-[30px] leading-none">
+        <h1 className="whitespace-nowrap font-display text-[26px] leading-none sm:text-[30px]">
           Agent <span className="text-crema">Café</span>
         </h1>
+        {DEMO_SITE && (
+          <span
+            title="An online demo: the agents run scripted tasks on sample data, and nothing is saved."
+            className="flex h-[26px] items-center gap-2 rounded-full border border-coral/45 bg-coral/10 px-2 sm:px-2.5 text-[12px] font-semibold text-coral"
+          >
+            <span aria-hidden className="relative flex size-[7px]">
+              <span className="absolute inline-flex size-full animate-ping rounded-full bg-coral opacity-60 [animation-duration:1.8s] motion-reduce:hidden" />
+              <span className="relative inline-flex size-[7px] rounded-full bg-coral" />
+            </span>
+            Demo
+          </span>
+        )}
         {conn !== 'open' && (
           <span className={`text-[11px] ${conn === 'connecting' ? 'text-amber' : 'text-coral'}`}>{conn === 'connecting' ? 'Connecting…' : 'Server offline'}</span>
         )}
       </div>
 
-      <div className="ml-auto flex items-center gap-3">
+      <div className="ml-auto flex items-center gap-2 sm:gap-3">
         <BrewingPill working={working} queued={queued} needYou={needYou} onNeeds={showNeeds} />
+        {DEMO_SITE && <DownloadButton />}
         <button
           type="button"
           onClick={() => setSettings('general')}
@@ -73,7 +88,8 @@ export function TopBar({ themeChoice, theme, onTheme }: Props) {
             <circle cx="8" cy="8" r="2.2" />
             <path d="M8 1.5v1.7M8 12.8v1.7M1.5 8h1.7M12.8 8h1.7M3.4 3.4l1.2 1.2M11.4 11.4l1.2 1.2M3.4 12.6l1.2-1.2M11.4 4.6l1.2-1.2" />
           </svg>
-          Settings
+          {/* The demo's install button needs the room on phones. */}
+          <span className={DEMO_SITE ? 'hidden sm:inline' : undefined}>Settings</span>
           {providerAttention && <span aria-hidden className="absolute -right-1 -top-1 size-2.5 rounded-full bg-coral shadow-[0_0_0_2px_var(--color-night-2)]" />}
         </button>
       </div>
@@ -85,7 +101,7 @@ export function TopBar({ themeChoice, theme, onTheme }: Props) {
         theme={theme}
         onTheme={onTheme}
       />
-      <ConnectPrompt onConnect={() => setSettings('providers')} />
+      {!DEMO_SITE && <ConnectPrompt onConnect={() => setSettings('providers')} />}
     </header>
   );
 }
