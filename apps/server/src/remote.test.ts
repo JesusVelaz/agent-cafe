@@ -23,7 +23,7 @@ async function remoteCafe(): Promise<{ app: FastifyInstance; port: number }> {
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const port = (server.address() as AddressInfo).port;
   const webDir = mkdtempSync(join(tmpdir(), 'agent-cafe-web-'));
-  writeFileSync(join(webDir, 'index.html'), '<!doctype html><title>Agent Café</title>');
+  writeFileSync(join(webDir, 'index.html'), '<!doctype html><title>Agents Café</title>');
   const app = await buildApp(undefined, { port, webDir, remote: () => ({ host: '127.0.0.1', token: TOKEN }) });
   await app.ready();
   handle = remoteHandler(app);
@@ -68,7 +68,7 @@ describe('remote access', () => {
     const cookie = setCookie.split(';')[0]!;
     const page = await get(port, '/', { cookie });
     expect(page.status).toBe(200);
-    expect(page.body).toContain('Agent Café');
+    expect(page.body).toContain('Agents Café');
     expect(JSON.parse((await get(port, '/api/health', { cookie })).body)).toEqual({ ok: true, app: 'agent-cafe' });
   });
 

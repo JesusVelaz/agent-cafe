@@ -16,7 +16,7 @@ describe('health', () => {
 describe('serving the built UI', () => {
   const webDir = () => {
     const dir = mkdtempSync(join(tmpdir(), 'agent-cafe-web-'));
-    writeFileSync(join(dir, 'index.html'), '<!doctype html><title>Agent Café</title>');
+    writeFileSync(join(dir, 'index.html'), '<!doctype html><title>Agents Café</title>');
     mkdirSync(join(dir, '_next'));
     writeFileSync(join(dir, '_next', 'app.js'), 'console.log(1)');
     return dir;
@@ -36,7 +36,7 @@ describe('serving the built UI', () => {
     for (const path of ['/some/where', '/_next/missing.js', '/api/nope']) {
       const res = await app.inject(path);
       expect(res.statusCode).toBe(404);
-      expect(res.body).not.toContain('Agent Café');
+      expect(res.body).not.toContain('Agents Café');
     }
   });
 

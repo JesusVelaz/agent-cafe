@@ -37,7 +37,7 @@ export function TopBar({ themeChoice, theme, onTheme }: Props) {
 
   // The tab tells you what's happening from another tab: title and favicon.
   useEffect(() => {
-    document.title = needYou ? `(${needYou}) Agent Café` : working ? `${working} working · Agent Café` : 'Agent Café';
+    document.title = needYou ? `(${needYou}) Agents Café` : working ? `${working} working · Agents Café` : 'Agents Café';
     const href = cupDataUrl(mood);
     for (const link of document.querySelectorAll<HTMLLinkElement>('link[rel~="icon"]')) link.href = href;
   }, [working, needYou, mood]);

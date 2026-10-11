@@ -275,7 +275,7 @@ function Status({ sharing, slow, fixing, onFix }: { sharing: Shared; slow: boole
         hint={
           <div role="alert">
             <p className="text-coral">{problem}</p>
-            <p className="mt-1">{sharing.firewall.fixable ? fix : 'This computer’s network is managed by your organization, so ask your IT team to allow Agent Café.'}</p>
+            <p className="mt-1">{sharing.firewall.fixable ? fix : 'This computer’s network is managed by your organization, so ask your IT team to allow Agents Café.'}</p>
           </div>
         }
       >

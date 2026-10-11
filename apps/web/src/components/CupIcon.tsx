@@ -8,7 +8,7 @@ const PIXELS: Record<Mood, Px[]> = {
 const FILLS: Px[][] = Array.from({ length: CUP_FILL_ROWS + 1 }, (_, i) => cupFillPixels(i / CUP_FILL_ROWS));
 
 /**
- * The Agent Café mark, drawn crisp at any whole-pixel size, wearing the café's mood.
+ * The Agents Café mark, drawn crisp at any whole-pixel size, wearing the café's mood.
  * While working, the steam drifts between two frames (holds still under reduced motion).
  * With `fill` (0–1) it's the empty cup filling up instead: the first-load meter.
  */

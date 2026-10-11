@@ -1,6 +1,6 @@
 /**
  * Harness connections: is each floor's vendor agent installed and signed in, and
- * which models does it offer? Agent Café never handles credentials: it asks the
+ * which models does it offer? Agents Café never handles credentials: it asks the
  * installed CLI for its status, and "Connect" opens the vendor's own sign-in in a
  * terminal window, which completes entirely between the CLI and the vendor.
  */
@@ -248,7 +248,7 @@ export class HarnessService {
     for (const id of [...this.watchers.keys()]) this.stopWatching(id);
   }
 
-  /** Signs the CLI out (for every use of it on this computer, not just Agent Café). */
+  /** Signs the CLI out (for every use of it on this computer, not just Agents Café). */
   async disconnect(id: ProviderId): Promise<HarnessConnectionDTO> {
     await this.ensure(id);
     const exe = this.executable(id);

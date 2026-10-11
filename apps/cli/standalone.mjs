@@ -1,4 +1,4 @@
-// Builds Agent Café as a self-contained app for the computer it runs on, so people can install
+// Builds Agents Café as a self-contained app for the computer it runs on, so people can install
 // it without Node or pnpm: the café bundled into one file, the web UI, the database migrations,
 // the native SQLite driver, and the same Node runtime this script runs on (so the driver fits it).
 // Run `pnpm build` first. The release workflow runs this once per OS and architecture.
@@ -86,12 +86,12 @@ rmSync(unpack, { recursive: true, force: true });
 
 // A launcher that runs the café on the Node next to it.
 if (platform === 'win32') {
-  writeFileSync(join(out, 'agent-cafe.cmd'), '@echo off\r\ntitle Agent Cafe\r\n"%~dp0node.exe" "%~dp0app\\cli.mjs" %*\r\n');
+  writeFileSync(join(out, 'agent-cafe.cmd'), '@echo off\r\ntitle Agents Cafe\r\n"%~dp0node.exe" "%~dp0app\\cli.mjs" %*\r\n');
 } else {
   writeFileSync(
     join(out, 'agent-cafe'),
     `#!/bin/sh
-# Starts Agent Café on the Node runtime installed next to this script (following symlinks to it).
+# Starts Agents Café on the Node runtime installed next to this script (following symlinks to it).
 self=$0
 while [ -L "$self" ]; do
   link=$(readlink "$self")

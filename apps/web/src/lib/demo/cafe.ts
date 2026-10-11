@@ -161,7 +161,7 @@ export class DemoCafe {
         version: null,
         account: null,
         plan: null,
-        message: 'Live runs need Agent Café on your own computer.',
+        message: 'Live runs need Agents Café on your own computer.',
         checkedAt: null,
       },
       usage: null,

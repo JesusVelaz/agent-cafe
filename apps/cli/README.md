@@ -1,4 +1,4 @@
-# Agent Café
+# Agents Café
 
 A pixel-art café where you watch your AI agents work. Each agent is a worker in the café, and
 where they stand is what they're doing. Hand them work, approve their actions and read their
@@ -13,7 +13,7 @@ That starts the café on this computer and opens http://127.0.0.1:4318. It needs
 - **Demo mode** works straight away: scripted agents, no real calls.
 - **Live mode** runs the vendors' own coding agents, signed in with your subscription:
   [Claude Code](https://code.claude.com) upstairs and [Codex](https://developers.openai.com/codex)
-  downstairs. Install them, then press **Connect** in **Settings → Providers**. Agent Café never
+  downstairs. Install them, then press **Connect** in **Settings → Providers**. Agents Café never
   sees or stores your credentials.
 
 ## On your phone

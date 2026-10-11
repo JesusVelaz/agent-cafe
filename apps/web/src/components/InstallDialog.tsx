@@ -53,7 +53,7 @@ export function InstallDialog({ open, os: initial, onClose }: { open: boolean; o
       className="m-auto w-[min(460px,calc(100vw-2rem))] rounded-2xl border border-slate-line bg-night-2 p-6 text-chalk shadow-[0_30px_80px_rgba(0,0,0,.55)] transition-[opacity,scale] duration-200 backdrop:bg-black/50 backdrop:backdrop-blur-[2px] starting:scale-95 starting:opacity-0"
     >
       <CupIcon size={36} mood="quiet" />
-      <h2 id="install-title" className="mt-3 font-display text-[30px] font-normal leading-none">Get Agent Café</h2>
+      <h2 id="install-title" className="mt-3 font-display text-[30px] font-normal leading-none">Get Agents Café</h2>
       <p className="mt-2 text-[13px] leading-relaxed text-chalk-dim">
         This is a demo: the agents run scripted tasks. Install the café on your computer to run real Claude Code and Codex
         agents with your own subscription. No API keys needed.
@@ -75,7 +75,7 @@ export function InstallDialog({ open, os: initial, onClose }: { open: boolean; o
           <li>
             Windows may say it “protected your PC” (the app isn’t code-signed yet): click <b className="text-chalk">More info → Run anyway</b>.
           </li>
-          <li>Open <b className="text-chalk">Agent Café</b> from the Start menu.</li>
+          <li>Open <b className="text-chalk">Agents Café</b> from the Start menu.</li>
         </ol>
       ) : (
         <div className="mt-4 flex flex-col gap-2 text-[13px] leading-relaxed text-chalk-dim">
@@ -87,7 +87,7 @@ export function InstallDialog({ open, os: initial, onClose }: { open: boolean; o
             </button>
           </div>
           <p>
-            Then open <b className="text-chalk">Agent Café</b> from Applications or your app menu, or run <code className="font-mono text-[12px] text-chalk">agent-cafe</code>.
+            Then open <b className="text-chalk">Agents Café</b> from Applications or your app menu, or run <code className="font-mono text-[12px] text-chalk">agent-cafe</code>.
           </p>
         </div>
       )}

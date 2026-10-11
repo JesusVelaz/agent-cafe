@@ -4,7 +4,7 @@ import { parseArgs } from 'node:util';
 
 export const DEFAULT_PORT = 4318;
 
-export const HELP = `Agent Café: watch your Claude Code and Codex agents work, in your browser.
+export const HELP = `Agents Café: watch your Claude Code and Codex agents work, in your browser.
 
 Usage: agent-cafe [options]
 

@@ -24,7 +24,7 @@ export function demoCafe(): DemoCafe {
 const TIER_NOTE = { flagship: 'Most capable', balanced: 'Balanced', fast: 'Fastest' } as const;
 
 const unavailable = (): Promise<never> =>
-  Promise.reject(new ApiError('Not in the online demo. Run Agent Café on your own computer for this.', 400));
+  Promise.reject(new ApiError('Not in the online demo. Run Agents Café on your own computer for this.', 400));
 
 /** Answers on a later tick, like a request would. */
 const reply = <T,>(fn: () => T): Promise<T> =>

@@ -74,7 +74,7 @@ export function ConnectPrompt({ onConnect }: { onConnect: () => void }) {
           </li>
         ))}
       </ul>
-      <p className="mt-3 text-[12px] text-chalk-faint">Signing in happens in the provider’s own app; Agent Café never sees your password or tokens.</p>
+      <p className="mt-3 text-[12px] text-chalk-faint">Signing in happens in the provider’s own app; Agents Café never sees your password or tokens.</p>
       <div className="mt-5 flex justify-end gap-2">
         <button type="button" onClick={dismiss} className="h-9 rounded-lg border border-slate-line px-3.5 text-[13px] text-chalk-dim hover:bg-slate hover:text-chalk">
           Not now
