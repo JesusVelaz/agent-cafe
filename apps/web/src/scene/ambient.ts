@@ -9,7 +9,7 @@
 import { BUILDING } from '@/sim/layout';
 import { isDim, THEMES } from './atmosphere';
 import { MAX_FRAME, perArea, plotOffset, SCENE_W } from './frame';
-import { box, plane } from './iso';
+import { box, faceVisible, plane, unturn, viewFace } from './iso';
 import { hash, K, mix, shade } from './palette';
 import type { DrawCtx } from './props';
 import type { Raster } from './raster';
@@ -153,7 +153,7 @@ export function drawSky(c: DrawCtx) {
 export function cloudShadows(c: DrawCtx) {
   if (!sunny(c)) return;
   const { R, P, t } = c;
-  const [ox, oy] = P(0, 0);
+  const [ox, oy] = P(...unturn(0, 0));
   for (const [s, sy] of [[0.15, 3.5], [0.6, 10.5]] as const) {
     const sx = ((t * 0.22 + s * 40) % 40) - 10, rx = 2.8, ry = 1.9;
     const pts = [P(sx - rx, sy - ry), P(sx + rx, sy - ry), P(sx + rx, sy + ry), P(sx - rx, sy + ry)];
@@ -163,7 +163,7 @@ export function cloudShadows(c: DrawCtx) {
       for (let x = x0; x <= x1; x++) {
         const i = y * R.w + x, o = i * 4;
         if (R.em[i] || R.d[o + 3] !== 255) continue;
-        const a = (x - ox) / 12, b = (y - oy) / 6, wx = (a + b) / 2, wy = (b - a) / 2;
+        const a = (x - ox) / 12, b = (y - oy) / 6, [wx, wy] = unturn((a + b) / 2, (b - a) / 2);
         if (wx < 0 || wy < 0 || wx > BUILDING.PW || wy > BUILDING.PD) continue;
         const dd = ((wx - sx) / rx) ** 2 + ((wy - sy) / ry) ** 2;
         if (dd >= 1 - 0.18 * (((x * 5 + y * 3) % 4) / 4)) continue;
@@ -177,7 +177,7 @@ export function cloudShadows(c: DrawCtx) {
 
 // ── street life ─────────────────────────────────────────────────────────────
 
-type Push = (d: number, f: () => void) => void;
+type Push = (x: number, y: number, bias: number, f: () => void) => void;
 
 /** Fade in and out over the last tile at each end of the plot. */
 const edgeFade = (x: number, len = 0) => clamp(Math.min(x + 0.4, BUILDING.PW - x - len + 0.4), 0, 1);
@@ -225,15 +225,16 @@ function walker(c: DrawCtx, push: Push) {
   const a = edgeFade(w.x);
   const wy = laneY(w.x);
   const look = agentLook(1000 + w.k * 17, w.k % 2 ? 'casual' : 'office');
-  const back = w.dir < 0;
+  const wf = viewFace(w.dir < 0 ? 'x-' : 'x+');
+  const back = wf === 'x-' || wf === 'y-', wflip = wf === 'x-' || wf === 'y+';
   if (a > 0) {
     // A small depth bias only: the A-board stands just in front of the lane.
-    push(w.x + wy + 0.2, () => {
+    push(w.x, wy, 0.2, () => {
       const { R, P, t, theme } = c;
       const feet = P(w.x, wy, 0);
       const { grid: g, palette } = agentSprite(walkFrame(t, back), look);
       R.rect(feet[0] - 3, feet[1] - 1, 7, 3, '#000000', 0.12 * a);
-      R.grid(g, palette, feet[0] - 7, feet[1] - g.length + 1, back, '', a);
+      R.grid(g, palette, feet[0] - 7, feet[1] - g.length + 1, wflip, '', a);
       if (theme === 'rain') {
         // Umbrella over the head.
         const top = feet[1] - 26;
@@ -255,8 +256,9 @@ function walker(c: DrawCtx, push: Push) {
   const sniffing = speed < 0.2;
   const frame: DogFrame = sniffing ? 'sniff' : (['stand', 'strideA', 'stand', 'strideB'] as const)[Math.floor(Math.abs(dx) * 5) % 4]!;
   const wag = Math.floor(c.t * (sniffing ? 8 : 4)) % 2 === 0;
-  const flip = w.dir < 0;
-  push(dx + dy + 0.1, () => {
+  const df = viewFace(w.dir < 0 ? 'x-' : 'x+');
+  const flip = df === 'x-' || df === 'y+';
+  push(dx, dy, 0.1, () => {
     const { R, P } = c;
     const feet = P(dx, dy, 0);
     const g = dogGrid(frame, wag);
@@ -264,7 +266,7 @@ function walker(c: DrawCtx, push: Push) {
     R.grid(g, DOG_PAL, feet[0] - Math.floor(DOG_W / 2), feet[1] - g.length + 1, flip, '', da);
   });
   // The lead, drawn after both of them, sagging when there's slack.
-  push(Math.max(w.x + wy + 0.2, dx + dy + 0.1) + 0.01, () => {
+  push(w.x, wy, 0.21, () => {
     const { R, P } = c;
     const feet = P(w.x, wy, 0), dfeet = P(dx, dy, 0);
     const hand: [number, number] = [feet[0] + (dfeet[0] > feet[0] ? 5 : -6), feet[1] - 5];
@@ -295,7 +297,7 @@ function pigeons(c: DrawCtx, push: Push) {
       x = hx - tau * 1.6; y = hy + tau * 0.2 - i * 0.2 * tau; z = tau * 22;
       a = clamp(1.6 - tau * 0.5, 0, 1);
     }
-    push(x + y + 0.2, () => {
+    push(x, y, 0.2, () => {
       const { R, P, t } = c;
       const q = P(x, y, z);
       if (flying) { R.grid(BIRD[Math.floor(t * 8 + i) % 2]!, { k: '#6f7480' }, q[0] - 2, q[1] - 3, false, '', a); return; }
@@ -323,22 +325,29 @@ function car(c: DrawCtx, x: number, y: number, dir: number, col: string, a: numb
   const cab = dir > 0 ? x + 0.4 : x + 0.55;
   box(R, P, cab, y + 0.06, 8, 1.05, 0.68, 5, col, o);
   if (theme === 'snow') box(R, P, cab, y + 0.06, 13, 1.05, 0.68, 1, '#ffffff', { a });
-  plane(R, P, { y: y + 0.74 }, cab + 0.08, cab + 0.48, 8.5, 12, '#bfe3ea', a, dim);
-  plane(R, P, { y: y + 0.74 }, cab + 0.56, cab + 0.97, 8.5, 12, '#bfe3ea', a, dim);
-  plane(R, P, { x: cab + 1.05 }, y + 0.14, y + 0.68, 8.5, 12, '#a9d3e0', a, dim);
-  for (const wx of [0.3, CAR_LEN - 0.6]) box(R, P, x + wx, y + 0.72, 0, 0.32, 0.1, 4, '#1e1e22', { a });
-  // Lights: a pair at each end. Only the +x end faces us, so it shows both of its
-  // lamps (heads going right, tails going left); the hidden end's lamps wrap round
-  // the near side as a sliver at that corner.
-  const near = dir > 0 ? HEADLIGHT : TAILLIGHT, far = dir > 0 ? TAILLIGHT : HEADLIGHT;
+  // Windows and wheels go on whichever side faces the camera, the end window on whichever end does.
+  const sideY = faceVisible(0, 1) ? y + 0.74 : y + 0.06;
+  const endX = faceVisible(1, 0) ? cab + 1.05 : cab;
+  plane(R, P, { y: sideY }, cab + 0.08, cab + 0.48, 8.5, 12, '#bfe3ea', a, dim);
+  plane(R, P, { y: sideY }, cab + 0.56, cab + 0.97, 8.5, 12, '#bfe3ea', a, dim);
+  plane(R, P, { x: endX }, y + 0.14, y + 0.68, 8.5, 12, '#a9d3e0', a, dim);
+  const wheelY = faceVisible(0, 1) ? y + 0.72 : y - 0.02;
+  for (const wx of [0.3, CAR_LEN - 0.6]) box(R, P, x + wx, wheelY, 0, 0.32, 0.1, 4, '#1e1e22', { a });
+  // Lights: a pair at each end. The end facing us shows both lamps (heads at the
+  // front, tails at the back); the hidden end's lamps wrap round the near side as a
+  // sliver at that corner.
+  const plusX = faceVisible(1, 0);
+  const frontAtPlusX = dir > 0;
+  const near = plusX === frontAtPlusX ? HEADLIGHT : TAILLIGHT, far = near === HEADLIGHT ? TAILLIGHT : HEADLIGHT;
+  const nearX = plusX ? x + CAR_LEN : x, farX = plusX ? x + 0.04 : x + CAR_LEN - 0.04;
   for (const ly of [0.15, 0.62]) {
-    const q = P(x + CAR_LEN, y + ly, 5);
+    const q = P(nearX, y + ly, 5);
     // A dark housing so the lamp reads on any paint, the lamp, and a hot spot.
     R.rect(q[0] - 1, q[1] - 1, 3, 3, LAMP_HOUSING, a);
     R.rect(q[0] - 1, q[1] - 1, 2, 2, near.lamp, a, dim);
     R.px(q[0] - 1, q[1] - 1, near.hot, a, dim);
   }
-  const wrap = P(x + 0.04, y + 0.8, 5);
+  const wrap = P(farX, faceVisible(0, 1) ? y + 0.8 : y, 5);
   R.rect(wrap[0], wrap[1] - 1, 2, 1, far.lamp, a, dim);
   if (dim && a >= 1) {
     const front = dir > 0 ? P(x + CAR_LEN + 1.2, y + 0.4, 0) : P(x - 1.2, y + 0.4, 0);
@@ -361,7 +370,7 @@ function traffic(c: DrawCtx, push: Push) {
     const a = edgeFade(x, CAR_LEN);
     if (a <= 0) return;
     const col = CAR_COLS[Math.floor(hash(k * 13 + li * 5) * CAR_COLS.length)]!;
-    push(x + CAR_LEN / 2 + L.y + 0.4, () => car(c, x, L.y, L.dir, col, a));
+    push(x + CAR_LEN / 2, L.y + 0.4, 0, () => car(c, x, L.y, L.dir, col, a));
   });
 }
 
@@ -375,7 +384,7 @@ function critters(c: DrawCtx, push: Push) {
   if (sunny(c)) {
     BLOOMS.forEach(([bx, by], i) => {
       const x = bx + Math.cos(t * 0.8 + i * 2) * 0.6, y = by + Math.sin(t * 1.25 + i) * 0.35, z = 11 + Math.sin(t * 2.3 + i) * 4;
-      push(x + y + 0.3, () => {
+      push(x, y, 0.3, () => {
         const q = c.P(x, y, z);
         c.R.grid(BUTTERFLY[Math.floor(t * 9 + i) % 2]!, { w: i % 2 ? K.amber : '#f6efe2', k: K.ink }, q[0] - 1, q[1] - 1);
       });
@@ -388,7 +397,7 @@ function critters(c: DrawCtx, push: Push) {
         const x = gx + Math.sin(t * 0.5 + i * 1.7) * 0.8, y = gy + Math.cos(t * 0.37 + i) * 0.6, z = 8 + Math.sin(t * 0.9 + i * 2.1) * 6;
         const glow = clamp(Math.sin(t * 1.7 + i * 2.4) * 1.4, 0, 1);
         if (glow <= 0.05) continue;
-        push(x + y + 0.3, () => {
+        push(x, y, 0.3, () => {
           const q = c.P(x, y, z);
           c.R.px(q[0], q[1], '#e9ff8a', glow, true);
           if (c.theme === 'night') c.lights.push({ x: q[0], y: q[1] + 2, r: 8, col: [0.8, 1, 0.5], s: 0.6 * glow });

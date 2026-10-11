@@ -3,6 +3,7 @@
 import type { CafeEvent, ModelInfo, TaskEventDTO } from '@agent-cafe/shared';
 import { MODEL_CATALOG } from '@agent-cafe/shared';
 import { create } from 'zustand';
+import { wrapQuarter } from '@/scene/iso';
 import type { ConnectionState } from '@/lib/stream';
 import { emptyData, MAX_EVENTS_PER_TASK, reduce, threadOf, type CafeData, type ThreadSummary } from './reduce';
 
@@ -21,6 +22,11 @@ interface CafeStore extends CafeData {
   /** The side panel is folded into a rail (remembered in this browser). */
   panelCollapsed: boolean;
   setPanelCollapsed(on: boolean): void;
+  /** Which side the café is seen from: quarter turns (0–3) from the street corner (remembered in this browser). */
+  viewAngle: number;
+  /** Turn the café a quarter: 1 = the café turns left, −1 = right. */
+  turnView(dir: 1 | -1): void;
+  setViewAngle(quarter: number): void;
   dismiss(taskId: string): void;
   apply(e: CafeEvent): void;
   setConnection(c: ConnectionState): void;
@@ -47,6 +53,24 @@ function writeFlag(key: string, on: boolean) {
   }
 }
 
+const VIEW_KEY = 'cafe.viewAngle';
+
+/** The side the café was last seen from in this browser (0 when unknown). */
+export function readViewAngle(): number {
+  try {
+    return typeof localStorage === 'undefined' ? 0 : wrapQuarter(Number(localStorage.getItem(VIEW_KEY)) || 0);
+  } catch {
+    return 0;
+  }
+}
+function writeViewAngle(q: number) {
+  try {
+    localStorage.setItem(VIEW_KEY, String(q));
+  } catch {
+    /* private mode: just not remembered */
+  }
+}
+
 export const useCafe = create<CafeStore>((set) => ({
   ...emptyData(),
   connection: 'connecting',
@@ -60,6 +84,19 @@ export const useCafe = create<CafeStore>((set) => ({
   setPanelCollapsed: (panelCollapsed) => {
     writeFlag('cafe.panelCollapsed', panelCollapsed);
     set({ panelCollapsed });
+  },
+  // Like panelCollapsed, read after mount.
+  viewAngle: 0,
+  turnView: (dir) =>
+    set((s) => {
+      const viewAngle = wrapQuarter(s.viewAngle + dir);
+      writeViewAngle(viewAngle);
+      return { viewAngle };
+    }),
+  setViewAngle: (q) => {
+    const viewAngle = wrapQuarter(q);
+    writeViewAngle(viewAngle);
+    set({ viewAngle });
   },
   dismiss: (taskId) => set((s) => ({ dismissed: new Set([...s.dismissed, taskId]) })),
   apply: (e) => set((s) => reduce(s, e)),

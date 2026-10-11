@@ -3,10 +3,10 @@
  * Ported from the approved design mockup; each takes a DrawCtx so theme-aware
  * touches (candles at night, umbrellas in the rain) live next to the prop.
  */
-import type { Decor, Prop } from '@/sim/layout';
+import { BUILDING, type Decor, type DecorSide, type Dir, type Prop } from '@/sim/layout';
 import { isDim, THEMES, type Light, type ThemeId } from './atmosphere';
 import { text } from './font';
-import { box, disc, plane, planePt, quad, type Plane, type Proj } from './iso';
+import { box, camera, depth, disc, faceVisible, plane, planePt, quad, type Plane, type Proj } from './iso';
 import { hash, K, mix, shade } from './palette';
 import type { Raster } from './raster';
 import { drawOutdoor } from './outdoor';
@@ -27,6 +27,37 @@ const warm = (x: number, y: number, r: number, s: number): Light => ({ x, y, r, 
 /** Dark frame wood for chairs; cast iron for table feet and stools. */
 const FRAME = '#4a2f22';
 const IRON = '#2f3a3f';
+
+// ── seen from any side ──────────────────────────────────────────────────────
+
+const NORMAL: Record<Dir, [number, number]> = { 'x+': [1, 0], 'x-': [-1, 0], 'y+': [0, 1], 'y-': [0, -1] };
+
+/** Does the sitter face us, putting their chair's back on the far side? */
+const backIsFar = (face: Dir) => faceVisible(...NORMAL[face]);
+
+/**
+ * A composite's parts as [x, y, z, draw]. They're written in the order that's right
+ * from today's angle; once the camera turns, they're drawn nearest-last instead.
+ */
+function sorted(parts: Array<[number, number, number, () => void]>) {
+  const key = (p: [number, number, number, () => void]) => depth(p[0], p[1]) + p[2] * 0.05;
+  if (camera.a !== 0) parts = [...parts].sort((p, q) => key(p) - key(q));
+  for (const p of parts) p[3]();
+}
+
+/** The building's four sides: where each starts, which way it runs, its outward normal and its plane. */
+export const SIDES: Record<DecorSide, { o: [number, number]; u: [number, number]; n: [number, number]; pl: Plane }> = {
+  L: { o: [0, 0], u: [0, 1], n: [-1, 0], pl: { x: 0 } },
+  R: { o: [0, 0], u: [1, 0], n: [0, -1], pl: { y: 0 } },
+  F: { o: [0, BUILDING.D], u: [1, 0], n: [0, 1], pl: { y: BUILDING.D } },
+  E: { o: [BUILDING.W, 0], u: [0, 1], n: [1, 0], pl: { x: BUILDING.W } },
+};
+
+/** Does this wall face the way today's left wall does (and so take its darker paint)? */
+function leftRole(side: DecorSide): boolean {
+  const [ix, iy] = [-SIDES[side].n[0], -SIDES[side].n[1]]; // the inner face's normal
+  return ix * camera.c - iy * camera.s > ix * camera.s + iy * camera.c;
+}
 
 function plantPot(c: DrawCtx, x: number, y: number, z: number, big: boolean) {
   const { R, P } = c;
@@ -76,16 +107,16 @@ function cupStack(c: DrawCtx, x: number, y: number, z: number, n: number) {
 }
 
 /** Bentwood café chair: four legs, a cushioned seat, and a curved back behind the sitter. */
-function chairSeat(c: DrawCtx, x: number, y: number, z: number, face: string) {
+function chairSeat(c: DrawCtx, x: number, y: number, z: number, face: Dir) {
   const { R, P } = c;
   for (const [lx, ly] of [[-0.15, -0.15], [0.11, -0.15], [-0.15, 0.11], [0.11, 0.11]] as const) box(R, P, x + lx, y + ly, z, 0.04, 0.04, 7, FRAME);
   disc(R, P, x, y, 0.2, z + 7, FRAME);
   disc(R, P, x, y, 0.19, z + 8, K.rug);
   disc(R, P, x - 0.03, y - 0.03, 0.1, z + 8.5, shade(K.rug, 0.15));
-  if (face === 'x+' || face === 'y+') chairBack(c, x, y, z, face);
+  if (backIsFar(face)) chairBack(c, x, y, z, face);
 }
 
-function chairBack(c: DrawCtx, x: number, y: number, z: number, face: string) {
+function chairBack(c: DrawCtx, x: number, y: number, z: number, face: Dir) {
   const { R, P } = c;
   const rail = '#7a4a32';
   const alongY = face === 'x+' || face === 'x-';
@@ -104,8 +135,8 @@ function chairBack(c: DrawCtx, x: number, y: number, z: number, face: string) {
 }
 
 /** Backrest on the viewer's side: drawn after whoever sits in the chair. */
-export function chairBackFront(c: DrawCtx, x: number, y: number, z: number, face: string) {
-  if (face === 'x-' || face === 'y-') chairBack(c, x, y, z, face);
+export function chairBackFront(c: DrawCtx, x: number, y: number, z: number, face: Dir) {
+  if (!backIsFar(face)) chairBack(c, x, y, z, face);
 }
 
 /** Desk chair: five-star base, gas lift, seat and a back behind the sitter. */
@@ -152,6 +183,12 @@ function espresso(c: DrawCtx, x: number, y: number, z: number) {
   const { R, P } = c;
   box(R, P, x, y, z, 1.25, 0.5, 2, K.chromeD);
   box(R, P, x + 0.02, y, z + 2, 1.21, 0.48, 11, K.chrome, { line: K.chromeD, top: '#eef1f3' });
+  if (faceVisible(0, 1)) espressoFront(c, x, y, z);
+  for (let i = 0; i < 4; i++) mug(c, x + 0.22 + i * 0.25, y + 0.22, z + 13, i % 2 ? '#efe6d6' : K.white); // cup warmer
+}
+
+function espressoFront(c: DrawCtx, x: number, y: number, z: number) {
+  const { R, P } = c;
   plane(R, P, { y: y + 0.48 }, x + 0.05, x + 1.18, z + 9, z + 11, '#c24a3a');
   // Two group heads with portafilters, cups waiting under them.
   for (const gx of [0.25, 0.8]) {
@@ -166,7 +203,6 @@ function espresso(c: DrawCtx, x: number, y: number, z: number) {
   const w0 = P(x + 1.15, y + 0.5, z + 8), w1 = P(x + 1.25, y + 0.7, z + 3);
   R.line(w0[0], w0[1], w1[0], w1[1], K.chromeD); // steam wand
   steamPuff(c, w1[0], w1[1] - 1, x);
-  for (let i = 0; i < 4; i++) mug(c, x + 0.22 + i * 0.25, y + 0.22, z + 13, i % 2 ? '#efe6d6' : K.white); // cup warmer
   const l = P(x + 0.1, y + 0.48, z + 10);
   R.px(l[0], l[1], '#ff5a4a', 1, true);
 }
@@ -282,38 +318,41 @@ function shelfUnit(c: DrawCtx, p: Prop, z: number, archive: boolean) {
   const face: Plane = againstLeft ? { x: p.x + p.w } : { y: p.y + p.d };
   const a0 = againstLeft ? p.y : p.x;
   const a1 = againstLeft ? p.y + p.d : p.x + p.w;
-  plane(R, P, face, a0 + 0.06, a1 - 0.06, z + 4, z + h - 2, '#4a2c1a'); // back panel
-  const shelves = Math.floor((h - 6) / 10);
-  for (let s = 0; s < shelves; s++) {
-    const v0 = z + 4 + s * 10;
-    plane(R, P, face, a0 + 0.04, a1 - 0.04, v0 - 1, v0, K.woodL);
-    if (archive) {
-      const n = Math.max(1, Math.floor((a1 - a0) / 0.34));
-      for (let i = 0; i < n; i++) {
-        const u = a0 + 0.06 + i * 0.34;
-        plane(R, P, face, u, u + 0.28, v0, v0 + 7, hash(i + s * 13) > 0.5 ? '#c9a06a' : '#b98d58');
-        plane(R, P, face, u + 0.09, u + 0.19, v0 + 3, v0 + 4, K.cream);
-      }
-      continue;
-    }
-    let u = a0 + 0.1;
-    let i = 0;
-    while (u < a1 - 0.15) {
-      const r = hash(Math.round(a0 * 97) + s * 31 + i * 7 + (againstLeft ? 5 : 11));
-      if (r > 0.9 && u < a1 - 0.5) {
-        // A stack lying flat.
-        for (let k = 0; k < 3; k++) plane(R, P, face, u, u + 0.32, v0 + k * 2, v0 + k * 2 + 2, BOOKS[(i + k) % BOOKS.length]!);
-        u += 0.4;
-        i++;
+  // The open front: back panel, shelves and books. From behind it is plain wood.
+  if (faceVisible(againstLeft ? 1 : 0, againstLeft ? 0 : 1)) {
+    plane(R, P, face, a0 + 0.06, a1 - 0.06, z + 4, z + h - 2, '#4a2c1a'); // back panel
+    const shelves = Math.floor((h - 6) / 10);
+    for (let s = 0; s < shelves; s++) {
+      const v0 = z + 4 + s * 10;
+      plane(R, P, face, a0 + 0.04, a1 - 0.04, v0 - 1, v0, K.woodL);
+      if (archive) {
+        const n = Math.max(1, Math.floor((a1 - a0) / 0.34));
+        for (let i = 0; i < n; i++) {
+          const u = a0 + 0.06 + i * 0.34;
+          plane(R, P, face, u, u + 0.28, v0, v0 + 7, hash(i + s * 13) > 0.5 ? '#c9a06a' : '#b98d58');
+          plane(R, P, face, u + 0.09, u + 0.19, v0 + 3, v0 + 4, K.cream);
+        }
         continue;
       }
-      const w = 0.07 + r * 0.05;
-      const bh = 6 + Math.round(r * 2);
-      plane(R, P, face, u, Math.min(u + w, a1 - 0.1), v0, v0 + bh, BOOKS[Math.floor(r * BOOKS.length)]!);
-      const sp = planePt(P, face, u + w / 2, v0 + bh - 2);
-      R.px(sp[0], sp[1], K.cream, 0.5); // spine label
-      u += w + 0.015;
-      i++;
+      let u = a0 + 0.1;
+      let i = 0;
+      while (u < a1 - 0.15) {
+        const r = hash(Math.round(a0 * 97) + s * 31 + i * 7 + (againstLeft ? 5 : 11));
+        if (r > 0.9 && u < a1 - 0.5) {
+          // A stack lying flat.
+          for (let k = 0; k < 3; k++) plane(R, P, face, u, u + 0.32, v0 + k * 2, v0 + k * 2 + 2, BOOKS[(i + k) % BOOKS.length]!);
+          u += 0.4;
+          i++;
+          continue;
+        }
+        const w = 0.07 + r * 0.05;
+        const bh = 6 + Math.round(r * 2);
+        plane(R, P, face, u, Math.min(u + w, a1 - 0.1), v0, v0 + bh, BOOKS[Math.floor(r * BOOKS.length)]!);
+        const sp = planePt(P, face, u + w / 2, v0 + bh - 2);
+        R.px(sp[0], sp[1], K.cream, 0.5); // spine label
+        u += w + 0.015;
+        i++;
+      }
     }
   }
   box(R, P, p.x - 0.04, p.y - 0.04, z + h, p.w + 0.08, p.d + 0.08, 2, shade(body, -0.1), { line: true }); // crown
@@ -328,7 +367,7 @@ function desk(c: DrawCtx, p: Prop, z: number) {
   const { x, y, w } = p;
   // Drawer pedestal on the left, a steel leg on the right.
   box(R, P, x, y, z, 0.5, 0.7, 13, K.woodD, { line: true });
-  for (const v of [4, 8]) {
+  if (faceVisible(0, 1)) for (const v of [4, 8]) {
     const a = P(x + 0.05, y + 0.7, z + v), b = P(x + 0.45, y + 0.7, z + v);
     R.line(a[0], a[1], b[0], b[1], shade(K.woodD, -0.3));
     const hq = P(x + 0.25, y + 0.7, z + v + 2);
@@ -479,11 +518,13 @@ function cafeCounter(c: DrawCtx, p: Prop) {
   const { R, P } = c;
   const { x, y, w, d } = p;
   box(R, P, x, y, 0, w, d, 13, K.slat, { line: K.slatD });
-  for (let u = x + 0.12; u < x + w - 0.05; u += 0.16) {
-    const p0 = P(u, y + d, 3), p1 = P(u, y + d, 12);
-    R.line(p0[0], p0[1], p1[0], p1[1], K.slatD, 0.75);
-  }
-  plane(R, P, { y: y + d }, x, x + w, 0, 3, '#4b3a2c');
+  if (faceVisible(0, 1)) {
+    for (let u = x + 0.12; u < x + w - 0.05; u += 0.16) {
+      const p0 = P(u, y + d, 3), p1 = P(u, y + d, 12);
+      R.line(p0[0], p0[1], p1[0], p1[1], K.slatD, 0.75);
+    }
+    plane(R, P, { y: y + d }, x, x + w, 0, 3, '#4b3a2c');
+  } else plane(R, P, { y }, x, x + w, 0, 3, '#4b3a2c');
   box(R, P, x - 0.08, y - 0.06, 13, w + 0.16, d + 0.12, 2, K.marble, { line: '#9b8f7f', top: K.marble });
   for (let i = 0; i < Math.floor((w + d) * 3); i++) {
     const q = P(x + hash(i * 7 + 3) * w, y + hash(i * 13 + 3) * d, 15);
@@ -503,7 +544,7 @@ function backbar(c: DrawCtx, p: Prop) {
   const { R, P } = c;
   const { x, y, w, d } = p;
   box(R, P, x, y, 0, w, d, 16, K.woodD, { line: true });
-  for (let u = x + 0.05; u < x + w - 0.5; u += 0.92) {
+  if (faceVisible(0, 1)) for (let u = x + 0.05; u < x + w - 0.5; u += 0.92) {
     plane(R, P, { y: y + d }, u + 0.05, u + 0.85, 3, 13, K.wood);
     plane(R, P, { y: y + d }, u + 0.1, u + 0.8, 4, 12, shade(K.wood, -0.08));
     const hq = P(u + 0.75, y + d, 9);
@@ -525,22 +566,28 @@ function sofa(c: DrawCtx, p: Prop) {
   const { x, y, w, d } = p;
   const col = K.velvet, dk = shade(col, -0.3);
   for (const ly of [0.05, d - 0.15]) for (const lx of [0.05, w - 0.15]) box(R, P, x + lx, y + ly, 0, 0.1, 0.1, 2, K.woodD);
-  box(R, P, x, y, 2, w, 0.22, 11, col, { line: dk }); // far arm
-  box(R, P, x, y + 0.22, 2, w, d - 0.44, 6, shade(col, -0.08), { line: dk });
-  box(R, P, x, y + 0.22, 8, 0.2, d - 0.44, 10, shade(col, -0.05), { line: dk }); // back
-  for (const v of [11, 15]) {
-    for (let u = y + 0.4; u < y + d - 0.3; u += 0.32) {
-      const q = planePt(P, { x: x + 0.2 }, u + (v === 15 ? 0.16 : 0), v);
-      R.px(q[0], q[1], dk); // buttons
-    }
-  }
   const seg = (d - 0.44) / 2;
-  for (let i = 0; i < 2; i++) box(R, P, x + 0.2, y + 0.24 + i * seg, 8, w - 0.22, seg - 0.04, 2, shade(col, 0.1), { line: dk });
-  box(R, P, x + 0.22, y + 0.35, 10, 0.12, 0.42, 5, K.mustard, { line: true });
-  box(R, P, x + 0.22, y + d - 0.85, 10, 0.12, 0.42, 5, '#e8d9bd', { line: true });
-  box(R, P, x, y + d - 0.22, 2, w, 0.22, 11, col, { line: dk }); // near arm
-  const a0 = P(x, y + d - 0.22, 13), a1 = P(x + w, y + d - 0.22, 13);
-  R.line(a0[0], a0[1], a1[0], a1[1], shade(col, 0.3));
+  sorted([
+    [x + w / 2, y + 0.11, 2, () => box(R, P, x, y, 2, w, 0.22, 11, col, { line: dk })], // far arm
+    [x + w / 2, y + d / 2, 2, () => box(R, P, x, y + 0.22, 2, w, d - 0.44, 6, shade(col, -0.08), { line: dk })],
+    [x + 0.1, y + d / 2, 8, () => {
+      box(R, P, x, y + 0.22, 8, 0.2, d - 0.44, 10, shade(col, -0.05), { line: dk }); // back
+      if (faceVisible(1, 0)) for (const v of [11, 15]) {
+        for (let u = y + 0.4; u < y + d - 0.3; u += 0.32) {
+          const q = planePt(P, { x: x + 0.2 }, u + (v === 15 ? 0.16 : 0), v);
+          R.px(q[0], q[1], dk); // buttons
+        }
+      }
+    }],
+    ...[0, 1].map((i): [number, number, number, () => void] => [x + 0.2 + (w - 0.22) / 2, y + 0.24 + i * seg + seg / 2, 8, () => box(R, P, x + 0.2, y + 0.24 + i * seg, 8, w - 0.22, seg - 0.04, 2, shade(col, 0.1), { line: dk })]),
+    [x + 0.28, y + 0.56, 10, () => box(R, P, x + 0.22, y + 0.35, 10, 0.12, 0.42, 5, K.mustard, { line: true })],
+    [x + 0.28, y + d - 0.64, 10, () => box(R, P, x + 0.22, y + d - 0.85, 10, 0.12, 0.42, 5, '#e8d9bd', { line: true })],
+    [x + w / 2, y + d - 0.11, 2, () => {
+      box(R, P, x, y + d - 0.22, 2, w, 0.22, 11, col, { line: dk }); // near arm
+      const a0 = P(x, y + d - 0.22, 13), a1 = P(x + w, y + d - 0.22, 13);
+      R.line(a0[0], a0[1], a1[0], a1[1], shade(col, 0.3));
+    }],
+  ]);
 }
 
 /** Mustard wingback. Facing x− puts the back on the far (+x) side. */
@@ -553,12 +600,14 @@ function armchair(c: DrawCtx, p: Prop, z: number) {
   const back = p.face === 'x-' ? x + 0.6 : x;
   const seat = p.face === 'x-' ? x : x + 0.2;
   const wing = p.face === 'x-' ? x + 0.42 : x + 0.2;
-  box(R, P, seat, y, z + 8, 0.6, 0.15, 5, shade(col, -0.05), { line: dk }); // far arm
-  box(R, P, back, y, z + 8, 0.2, 0.8, 15, shade(col, -0.12), { line: dk });
-  box(R, P, wing, y, z + 12, 0.18, 0.15, 9, shade(col, -0.08), { line: dk });
-  box(R, P, seat + 0.05, y + 0.15, z + 8, 0.5, 0.5, 2, shade(col, 0.12), { line: dk }); // cushion
-  box(R, P, wing, y + 0.65, z + 12, 0.18, 0.15, 9, shade(col, -0.08), { line: dk });
-  box(R, P, seat, y + 0.65, z + 8, 0.6, 0.15, 5, shade(col, -0.05), { line: dk }); // near arm
+  sorted([
+    [seat + 0.3, y + 0.07, 8, () => box(R, P, seat, y, z + 8, 0.6, 0.15, 5, shade(col, -0.05), { line: dk })], // far arm
+    [back + 0.1, y + 0.4, 9, () => box(R, P, back, y, z + 8, 0.2, 0.8, 15, shade(col, -0.12), { line: dk })],
+    [wing + 0.09, y + 0.07, 12, () => box(R, P, wing, y, z + 12, 0.18, 0.15, 9, shade(col, -0.08), { line: dk })],
+    [seat + 0.3, y + 0.4, 8, () => box(R, P, seat + 0.05, y + 0.15, z + 8, 0.5, 0.5, 2, shade(col, 0.12), { line: dk })], // cushion
+    [wing + 0.09, y + 0.72, 12, () => box(R, P, wing, y + 0.65, z + 12, 0.18, 0.15, 9, shade(col, -0.08), { line: dk })],
+    [seat + 0.3, y + 0.72, 8, () => box(R, P, seat, y + 0.65, z + 8, 0.6, 0.15, 5, shade(col, -0.05), { line: dk })], // near arm
+  ]);
 }
 
 /** Low table with a shelf of books underneath. */
@@ -609,7 +658,7 @@ function barStool(c: DrawCtx, x: number, y: number) {
 function cabinet(c: DrawCtx, p: Prop) {
   const { R, P } = c;
   box(R, P, p.x, p.y, 0, p.w, p.d, 24, K.metal, { line: K.metalD, top: '#dde2e6' });
-  for (let i = 0; i < 3; i++) {
+  if (faceVisible(0, 1)) for (let i = 0; i < 3; i++) {
     const a = P(p.x, p.y + p.d, 4 + i * 7), b = P(p.x + p.w, p.y + p.d, 4 + i * 7);
     R.line(a[0], a[1], b[0], b[1], K.metalD);
   }
@@ -828,7 +877,7 @@ function noticeBoard(c: DrawCtx, pl: Plane, a0: number, a1: number, v0: number, 
 
 export function drawDecor(c: DrawCtx, d: Decor): void {
   const { R, P } = c;
-  const pl: Plane = d.wall === 'L' ? { x: 0 } : { y: 0 };
+  const pl: Plane = SIDES[d.wall].pl;
   switch (d.kind) {
     case 'window': return windowPane(c, pl, d.a0, d.a1, d.v0, d.v1);
     case 'door':
@@ -864,13 +913,14 @@ export function floorTiles(c: DrawCtx, w: number, d: number, z: number, style: '
   }
 }
 
-export function wallRun(c: DrawCtx, side: 'L' | 'R', a0: number, a1: number, z0: number, z1: number, upper: boolean) {
+export function wallRun(c: DrawCtx, side: DecorSide, a0: number, a1: number, z0: number, z1: number, upper: boolean) {
   const { R, P } = c;
-  const pl: Plane = side === 'L' ? { x: 0 } : { y: 0 };
-  const base = upper ? (side === 'L' ? K.sageShade : K.sage) : side === 'L' ? K.plasterShade : K.plaster;
+  const pl: Plane = SIDES[side].pl;
+  const left = leftRole(side);
+  const base = upper ? (left ? K.sageShade : K.sage) : left ? K.plasterShade : K.plaster;
   plane(R, P, pl, a0, a1, z0, z1, base);
   if (!upper) {
-    plane(R, P, pl, a0, a1, z0, z0 + 16, side === 'L' ? K.wainsDark : K.wains);
+    plane(R, P, pl, a0, a1, z0, z0 + 16, left ? K.wainsDark : K.wains);
     for (let u = a0 + 0.25; u < a1; u += 0.25) {
       const p0 = planePt(P, pl, u, z0 + 1), p1 = planePt(P, pl, u, z0 + 15);
       R.line(p0[0], p0[1], p1[0], p1[1], K.wainsDark, 0.5);
@@ -881,16 +931,27 @@ export function wallRun(c: DrawCtx, side: 'L' | 'R', a0: number, a1: number, z0:
   }
 }
 
-export function wallCap(c: DrawCtx, side: 'L' | 'R', a0: number, a1: number, z: number, cutTo: number) {
+/**
+ * The top of a wall (a strip as thick as the wall, toward the outside) and, where the
+ * wall steps down at a1, the cut end from z down to `cutTo` (pass z for no step).
+ */
+export function wallCap(c: DrawCtx, side: DecorSide, a0: number, a1: number, z: number, cutTo: number) {
   const { R, P, theme } = c;
   const T = 0.28;
   const top = theme === 'snow' ? '#ffffff' : K.cap;
-  if (side === 'R') {
-    R.poly([P(a0 - T, -T, z), P(a1, -T, z), P(a1, 0, z), P(a0, 0, z)], top);
-    R.poly([P(a1, -T, z), P(a1, 0, z), P(a1, 0, cutTo), P(a1, -T, cutTo)], K.capSide);
-  } else {
-    R.poly([P(-T, a0 - T, z), P(0, a0, z), P(0, a1, z), P(-T, a1, z)], top);
-    R.poly([P(-T, a1, z), P(0, a1, z), P(0, a1, cutTo), P(-T, a1, cutTo)], shade(K.capSide, 0.08));
+  const s = SIDES[side];
+  const pt = (u: number, off: number, zz: number) => P(s.o[0] + s.u[0] * u + s.n[0] * off, s.o[1] + s.u[1] * u + s.n[1] * off, zz);
+  // The street and patio walls run to the building's outer corners, so their caps close the corner.
+  const outerEnd = side === 'F' || side === 'E' ? T : 0;
+  // Wound the way the original caps were (it decides which pixel an exact-half edge takes).
+  const capPts = [pt(a0 - T, T, z), pt(a1 + outerEnd, T, z), pt(a1, 0, z), pt(a0, 0, z)];
+  const clockwise = s.u[0] * s.n[1] - s.u[1] * s.n[0] > 0;
+  R.poly(clockwise ? [capPts[0]!, capPts[3]!, capPts[2]!, capPts[1]!] : capPts, top);
+  if (cutTo !== z && faceVisible(s.u[0], s.u[1])) {
+    // The end takes the shade of whichever face it looks like from here.
+    const [ux, uy] = s.u;
+    const darker = ux * camera.c - uy * camera.s > ux * camera.s + uy * camera.c;
+    R.poly([pt(a1, T, z), pt(a1, 0, z), pt(a1, 0, cutTo), pt(a1, T, cutTo)], darker ? K.capSide : shade(K.capSide, 0.08));
   }
 }
 

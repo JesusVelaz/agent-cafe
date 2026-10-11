@@ -34,6 +34,7 @@ interface Props {
  * centred; a new scale is eased into once the stage is still.
  */
 export function CafeScene({ theme, labels = true, reserveBottom = 0, onFrame, overlay, onReady }: Props) {
+  useTurnKeys();
   const wrapRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const tipRef = useRef<HTMLDivElement>(null);
@@ -111,8 +112,9 @@ export function CafeScene({ theme, labels = true, reserveBottom = 0, onFrame, ov
     const r = new CafeRenderer({
       read: () => {
         const s = useCafe.getState();
-        return { data: s, selectedAgentId: s.selectedAgentId, theme: live.current.theme, labels: live.current.labels, transparent: true };
+        return { data: s, selectedAgentId: s.selectedAgentId, theme: live.current.theme, labels: live.current.labels, transparent: true, viewAngle: s.viewAngle };
       },
+      turned: (quarter) => useCafe.getState().setViewAngle(quarter),
       pickAgent: (id) => {
         const s = useCafe.getState();
         // In the café view, clicking an agent opens the panel on them.
@@ -159,6 +161,23 @@ export function CafeScene({ theme, labels = true, reserveBottom = 0, onFrame, ov
       </div>
     </div>
   );
+}
+
+/** Q / E turn the café, unless you're typing or a dialog is open. */
+function useTurnKeys() {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+      const k = e.key.toLowerCase();
+      if (k !== 'q' && k !== 'e') return;
+      const el = e.target as HTMLElement | null;
+      if (el?.closest?.('input, textarea, select, [contenteditable=""], [contenteditable="true"]')) return;
+      if (document.querySelector('dialog[open]')) return;
+      useCafe.getState().turnView(k === 'q' ? 1 : -1);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 }
 
 function AgentTooltip({ id }: { id: string }) {

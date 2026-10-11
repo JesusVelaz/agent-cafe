@@ -9,7 +9,8 @@
  *
  * Like the street life, a pure function of time: no state, no hit-testing.
  */
-import { box } from './iso';
+import { GROUND } from '@/sim/layout';
+import { box, viewFace } from './iso';
 import { K } from './palette';
 import type { DrawCtx } from './props';
 import { agentLook, agentSprite, type AgentFrame, type AgentLook } from './sprites';
@@ -22,6 +23,10 @@ const LANE_Y = 0.95;
 const WALK_SPEED = 0.9; // tiles per second
 /** They stand on a raised duckboard behind the bar, so their shoulders and hands clear the counter. */
 const DUCKBOARD = 5;
+/** The middle of the counter: the barista sorts level with it, and what's on it just after it. */
+const COUNTER = GROUND.props.find((p) => p.kind === 'cafeCounter')!;
+const COUNTER_MID_X = COUNTER.x + COUNTER.w / 2;
+const COUNTER_MID_Y = COUNTER.y + COUNTER.d / 2;
 
 /** Where they stop, which way they face there, and for how long (seconds). */
 const STOPS: ReadonlyArray<{ x: number; act: Act; face: Face; dur: number }> = [
@@ -86,7 +91,7 @@ export function baristaAt(t: number): BaristaState {
 }
 
 const LOOK: AgentLook = { ...agentLook(7, 'apron'), accessory: 'visor' };
-const back = (f: Face) => f === 'x-' || f === 'y-';
+const back = (f: Face) => { const v = viewFace(f); return v === 'x-' || v === 'y-'; };
 
 function frameOf(s: BaristaState): { frame: AgentFrame; bob: number } {
   if (s.walking) {
@@ -99,20 +104,21 @@ function frameOf(s: BaristaState): { frame: AgentFrame; bob: number } {
   return { frame: back(s.face) ? 'backStand' : 'stand', bob: busy && Math.floor(s.t * 3) % 2 ? -1 : 0 };
 }
 
-type Push = (d: number, f: () => void) => void;
+type Push = (x: number, y: number, bias: number, f: () => void) => void;
 
 /** The barista, their cup and their cloth, sorted in with the café's front layer. */
 export function barista(c: DrawCtx, push: Push) {
   const s = baristaAt(c.t);
-  // Between the back bar (drawn first) and the counter (drawn after, hiding their legs).
-  const d = Math.min(14.2, Math.max(12.1, s.x + s.y));
-  push(d, () => {
+  // Sorted as if level with the counter's middle, so from every side they land between
+  // the back bar and the counter (which hides their legs from the front).
+  push(COUNTER_MID_X, LANE_Y, 0, () => {
     const { R, P } = c;
     const feet = P(s.x, s.y, DUCKBOARD);
     const { frame, bob } = frameOf(s);
     const { grid: g, palette } = agentSprite(frame, LOOK);
     const top = feet[1] - g.length + 1 + bob;
-    R.grid(g, palette, feet[0] - 7, top, s.face === 'y+' || s.face === 'x-');
+    const vf = viewFace(s.face);
+    R.grid(g, palette, feet[0] - 7, top, vf === 'y+' || vf === 'x-');
     if (s.carrying) {
       // A takeaway cup at chest height, on the side they're heading.
       const hx = feet[0] + (s.face === 'x-' ? -7 : 5), hy = top + 11;
@@ -122,9 +128,9 @@ export function barista(c: DrawCtx, push: Push) {
     }
   });
   // The finished cup, at the counter's front corner past the cake dome.
-  if (s.cupOut) push(14.35, () => takeaway(c, 13.6, 2.86));
+  if (s.cupOut) push(COUNTER_MID_X, COUNTER_MID_Y, 0.05, () => takeaway(c, 13.6, 2.86));
   if (s.act === 'wipe') {
-    push(14.36, () => {
+    push(COUNTER_MID_X, COUNTER_MID_Y, 0.06, () => {
       const { R, P } = c;
       // The clear strip at the back of the counter, between the display case and the cake.
       const q = P(13.35 + Math.sin(s.t * 5) * 0.2, 2.22, 15);
