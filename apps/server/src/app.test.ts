@@ -9,7 +9,7 @@ describe('health', () => {
     const app = await buildApp();
     const res = await app.inject('/api/health');
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ ok: true });
+    expect(res.json()).toEqual({ ok: true, app: 'agent-cafe' });
   });
 });
 
@@ -28,17 +28,16 @@ describe('serving the built UI', () => {
     expect(page.statusCode).toBe(200);
     expect(page.headers['content-type']).toMatch(/^text\/html/);
     expect((await app.inject('/_next/app.js')).body).toBe('console.log(1)');
-    expect((await app.inject('/api/health')).json()).toEqual({ ok: true });
+    expect((await app.inject('/api/health')).json()).toEqual({ ok: true, app: 'agent-cafe' });
   });
 
-  it('answers other page paths with the page, but unknown API paths with a JSON 404', async () => {
+  it('answers paths the build did not write with a 404, not the page', async () => {
     const app = await buildApp(undefined, { webDir: webDir() });
-    const deep = await app.inject('/some/where');
-    expect(deep.statusCode).toBe(200);
-    expect(deep.body).toContain('Agent Café');
-    const api = await app.inject('/api/nope');
-    expect(api.statusCode).toBe(404);
-    expect(api.json()).toEqual({ error: 'Not found' });
+    for (const path of ['/some/where', '/_next/missing.js', '/api/nope']) {
+      const res = await app.inject(path);
+      expect(res.statusCode).toBe(404);
+      expect(res.body).not.toContain('Agent Café');
+    }
   });
 
   it('refuses to start without a built UI', async () => {
