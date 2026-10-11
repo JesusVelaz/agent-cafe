@@ -12,7 +12,7 @@ import { needsAttention } from '@/store/reduce';
 import { BrewingPill } from './BrewingPill';
 import { ConnectPrompt } from './ConnectPrompt';
 import { CupIcon } from './CupIcon';
-import { InstallDialog } from './InstallDialog';
+import { DownloadButton } from './DownloadButton';
 import { SettingsDialog, type Section } from './SettingsDialog';
 
 interface Props {
@@ -32,7 +32,6 @@ export function TopBar({ themeChoice, theme, onTheme }: Props) {
   const mood: Mood = needYou ? 'alert' : working ? 'working' : 'quiet';
   const conn = state.connection;
   const [settings, setSettings] = useState<Section | null>(null);
-  const [installing, setInstalling] = useState(false);
   // A live floor that can't run (signed out, not installed) is worth a dot on the gear.
   const providerAttention = Object.values(state.providers).some((p) => p && p.mode === 'live' && !p.liveAvailable && p.connection.state !== 'checking');
 
@@ -50,19 +49,23 @@ export function TopBar({ themeChoice, theme, onTheme }: Props) {
   };
 
   return (
-    <header className="flex h-14 items-center gap-6 border-b border-slate-line bg-night-2 px-4">
+    <header className="flex h-14 items-center gap-3 sm:gap-6 border-b border-slate-line bg-night-2 px-4">
       <div className="flex items-center gap-2.5">
         <span data-cafe-logo className="flex">
           <CupIcon size={28} mood={mood} />
         </span>
-        <h1 className="whitespace-nowrap font-display text-[30px] leading-none">
+        <h1 className="whitespace-nowrap font-display text-[26px] leading-none sm:text-[30px]">
           Agent <span className="text-crema">Café</span>
         </h1>
         {DEMO_SITE && (
           <span
-            title="An online demo: the agents run scripted tasks, and nothing is saved."
-            className="rounded-full border border-crema/50 px-2 py-0.5 font-display text-[13px] uppercase leading-none tracking-wider text-crema"
+            title="An online demo: the agents run scripted tasks on sample data, and nothing is saved."
+            className="flex h-[26px] items-center gap-2 rounded-full border border-coral/45 bg-coral/10 px-2 sm:px-2.5 text-[12px] font-semibold text-coral"
           >
+            <span aria-hidden className="relative flex size-[7px]">
+              <span className="absolute inline-flex size-full animate-ping rounded-full bg-coral opacity-60 [animation-duration:1.8s] motion-reduce:hidden" />
+              <span className="relative inline-flex size-[7px] rounded-full bg-coral" />
+            </span>
             Demo
           </span>
         )}
@@ -71,17 +74,9 @@ export function TopBar({ themeChoice, theme, onTheme }: Props) {
         )}
       </div>
 
-      <div className="ml-auto flex items-center gap-3">
+      <div className="ml-auto flex items-center gap-2 sm:gap-3">
         <BrewingPill working={working} queued={queued} needYou={needYou} onNeeds={showNeeds} />
-        {DEMO_SITE && (
-          <button
-            type="button"
-            onClick={() => setInstalling(true)}
-            className="flex h-9 items-center rounded-lg bg-accent px-3 text-[13px] font-medium text-white hover:bg-[#7f9bff]"
-          >
-            Get<span className="hidden sm:inline">&nbsp;Agent Café</span>
-          </button>
-        )}
+        {DEMO_SITE && <DownloadButton />}
         <button
           type="button"
           onClick={() => setSettings('general')}
@@ -106,7 +101,6 @@ export function TopBar({ themeChoice, theme, onTheme }: Props) {
         theme={theme}
         onTheme={onTheme}
       />
-      {DEMO_SITE && <InstallDialog open={installing} onClose={() => setInstalling(false)} />}
       {!DEMO_SITE && <ConnectPrompt onConnect={() => setSettings('providers')} />}
     </header>
   );

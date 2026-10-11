@@ -4,24 +4,25 @@ import { useEffect, useRef, useState } from 'react';
 import { CupIcon } from './CupIcon';
 
 const RELEASE = 'https://github.com/JesusVelaz/agent-cafe/releases/latest/download';
+/** The Windows installer: a direct download. */
+export const WINDOWS_INSTALLER = `${RELEASE}/AgentCafeSetup.exe`;
 const UNIX_INSTALL = `curl -fsSL ${RELEASE}/install.sh | sh`;
 
 type Os = 'windows' | 'unix';
 
-const guessOs = (): Os => (typeof navigator !== 'undefined' && /windows/i.test(navigator.userAgent) ? 'windows' : 'unix');
-
-/** The demo site's "how do I get this?": install steps for the visitor's computer. */
-export function InstallDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+/** The demo site's "how do I get this?": install steps, opened on the tab for `os`. */
+export function InstallDialog({ open, os: initial, onClose }: { open: boolean; os: Os; onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
-  const [os, setOs] = useState<Os>('unix');
+  const [os, setOs] = useState<Os>(initial);
   const [copied, setCopied] = useState(false);
-  useEffect(() => setOs(guessOs()), []);
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
-    if (open && !d.open) d.showModal();
-    else if (!open && d.open) d.close();
-  }, [open]);
+    if (open && !d.open) {
+      setOs(initial);
+      d.showModal();
+    } else if (!open && d.open) d.close();
+  }, [open, initial]);
 
   const copy = () => {
     void navigator.clipboard?.writeText(UNIX_INSTALL).then(() => {
@@ -66,7 +67,7 @@ export function InstallDialog({ open, onClose }: { open: boolean; onClose: () =>
       {os === 'windows' ? (
         <ol className="mt-4 flex list-decimal flex-col gap-2 pl-5 text-[13px] leading-relaxed text-chalk-dim">
           <li>
-            <a href={`${RELEASE}/AgentCafeSetup.exe`} className="font-medium text-accent underline decoration-dotted hover:text-chalk">
+            <a href={WINDOWS_INSTALLER} className="font-medium text-accent underline decoration-dotted hover:text-chalk">
               Download AgentCafeSetup.exe
             </a>{' '}
             and run it.
