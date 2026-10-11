@@ -115,6 +115,32 @@ describe('turning the café', () => {
     expect(turned).toEqual([]);
   });
 
+  it('forgets a press released outside the café, so hovering back never turns it', () => {
+    vi.advanceTimersByTime(100);
+    on.pointerdown!({ button: 0, buttons: 1, clientX: 300, clientY: 200, pointerId: 1 });
+    on.pointermove!({ clientX: 302, clientY: 200, buttons: 1, pointerId: 1 }); // under the drag threshold
+    on.pointerleave!({});
+    // Released somewhere else: the canvas never hears the pointerup. Later the mouse comes back, no button held.
+    on.pointermove!({ clientX: 100, clientY: 200, buttons: 0, pointerId: 1 });
+    on.pointermove!({ clientX: 60, clientY: 200, buttons: 0, pointerId: 1 });
+    expect(r.turning).toBe(false);
+    vi.advanceTimersByTime(2000);
+    expect(r.cameraAngle).toBe(0);
+    expect(turned).toEqual([]);
+  });
+
+  it('ignores a second finger while one is turning the café', () => {
+    vi.advanceTimersByTime(100);
+    on.pointerdown!({ button: 0, buttons: 1, clientX: 300, clientY: 200, pointerId: 1, isPrimary: true });
+    on.pointermove!({ clientX: 200, clientY: 200, buttons: 1, pointerId: 1, isPrimary: true });
+    const mid = r.cameraAngle;
+    on.pointerdown!({ button: 0, buttons: 1, clientX: 320, clientY: 210, pointerId: 2, isPrimary: false });
+    on.pointermove!({ clientX: 100, clientY: 210, buttons: 1, pointerId: 2, isPrimary: false });
+    expect(r.cameraAngle).toBe(mid);
+    on.pointerup!({ pointerId: 1, isPrimary: true });
+    expect(turned).toHaveLength(1);
+  });
+
   it('treats a press that barely moves as a click, not a turn', () => {
     on.pointerdown!({ button: 0, clientX: 300, clientY: 200 });
     on.pointermove!({ clientX: 303, clientY: 201, pointerId: 1 });

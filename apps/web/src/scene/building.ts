@@ -154,23 +154,62 @@ const HEARTS_FOR = 1.6;
 /** Scratch frames for things drawn see-through (walls mid-turn, the faded loft), reused frame to frame. */
 const layers = new Map<string, Raster>();
 
-/** Run `draw` into a scratch frame and lay it over c.R at `alpha` (straight onto c.R when solid). */
-function inLayer(c: DrawCtx, key: string, alpha: number, draw: () => void) {
+/** A screen rectangle in scene px (inclusive). */
+interface Region { x0: number; y0: number; x1: number; y1: number }
+
+/** A scratch frame the size of R, cleared within `r` (the only part that will be read). */
+function scratch(R: Raster, key: string, r: Region): Raster {
+  let L = layers.get(key);
+  if (!L || L.w !== R.w || L.h !== R.h) {
+    L = new Raster(R.w, R.h);
+    layers.set(key, L);
+    return L;
+  }
+  for (let y = r.y0; y <= r.y1; y++) {
+    const i = y * L.w;
+    L.d.fill(0, (i + r.x0) * 4, (i + r.x1 + 1) * 4);
+    L.em.fill(0, i + r.x0, i + r.x1 + 1);
+  }
+  return L;
+}
+
+/**
+ * Draw see-through: run `draw` into a scratch frame and lay it over c.R at `alpha`
+ * (straight onto c.R when solid). Only `region` is cleared and blended, so keep
+ * everything `draw` paints inside it.
+ *
+ * `solid` (optional) redraws just the things that must stay opaque (the agents and
+ * cats upstairs). Wherever they survived `draw`'s own depth sort, so furniture in
+ * front still hides them, they're laid on solid rather than see-through.
+ */
+function inLayer(c: DrawCtx, key: string, alpha: number, draw: () => void, opts: { region?: Region; solid?: () => void } = {}) {
   if (alpha <= 0.002) return;
   if (alpha >= 0.998) { draw(); return; }
   const R = c.R;
-  let L = layers.get(key);
-  if (!L || L.w !== R.w || L.h !== R.h) { L = new Raster(R.w, R.h); layers.set(key, L); } else L.clear();
-  c.R = L;
-  try { draw(); } finally { c.R = R; }
-  const s = L.d, d = R.d;
-  for (let i = 0, o = 0; i < L.em.length; i++, o += 4) {
-    const la = s[o + 3]!;
-    if (!la) continue;
-    const k = (la / 255) * alpha;
-    if (d[o + 3] === 0) { d[o] = s[o]!; d[o + 1] = s[o + 1]!; d[o + 2] = s[o + 2]!; d[o + 3] = Math.round(k * 255); }
-    else { d[o] = d[o]! + (s[o]! - d[o]!) * k; d[o + 1] = d[o + 1]! + (s[o + 1]! - d[o + 1]!) * k; d[o + 2] = d[o + 2]! + (s[o + 2]! - d[o + 2]!) * k; }
-    if (L.em[i] && k > 0.5) R.em[i] = 1;
+  const full = { x0: 0, y0: 0, x1: R.w - 1, y1: R.h - 1 };
+  const r = opts.region
+    ? { x0: Math.max(0, opts.region.x0), y0: Math.max(0, opts.region.y0), x1: Math.min(R.w - 1, opts.region.x1), y1: Math.min(R.h - 1, opts.region.y1) }
+    : full;
+  if (r.x0 > r.x1 || r.y0 > r.y1) return;
+  const L = scratch(R, key, r);
+  const A = opts.solid ? scratch(R, key + ':solid', r) : null;
+  try {
+    c.R = L;
+    draw();
+    if (A) { c.R = A; opts.solid!(); }
+  } finally { c.R = R; }
+  const s = L.d, d = R.d, sa = A?.d;
+  for (let y = r.y0; y <= r.y1; y++) {
+    for (let x = r.x0, i = y * R.w + r.x0, o = i * 4; x <= r.x1; x++, i++, o += 4) {
+      const la = s[o + 3]!;
+      if (!la) continue;
+      // An actor's pixel that's still on top after the sort: keep it solid.
+      const keep = sa !== undefined && sa[o + 3] === 255 && la === 255 && sa[o] === s[o] && sa[o + 1] === s[o + 1] && sa[o + 2] === s[o + 2];
+      const k = keep ? 1 : (la / 255) * alpha;
+      if (d[o + 3] === 0) { d[o] = s[o]!; d[o + 1] = s[o + 1]!; d[o + 2] = s[o + 2]!; d[o + 3] = Math.round(k * 255); }
+      else { d[o] = d[o]! + (s[o]! - d[o]!) * k; d[o + 1] = d[o + 1]! + (s[o + 1]! - d[o + 1]!) * k; d[o + 2] = d[o + 2]! + (s[o + 2]! - d[o + 2]!) * k; }
+      if (L.em[i] && k > 0.5) R.em[i] = 1;
+    }
   }
 }
 
@@ -254,6 +293,8 @@ export function renderScene(R: Raster, agents: SceneAgent[], o: SceneOptions): S
   // Agents join the layer they stand in.
   const hits: AgentHit[] = [];
   const heads: Array<{ a: SceneAgent; hit: AgentHit }> = [];
+  // Actors upstairs are drawn twice when the loft is see-through; only the first counts.
+  let recording = true;
   for (const a of agents) {
     const z = FLOORS[a.providerId].z;
     const list = z > 0 ? up : underUpperFloor(a) ? under : front;
@@ -261,6 +302,7 @@ export function renderScene(R: Raster, agents: SceneAgent[], o: SceneOptions): S
       d: depth(a.x, a.y) + 0.5, x: a.x, y: a.y, actor: true,
       f: () => {
         const hit = drawAgent(c, a, z, a.id === o.selectedId);
+        if (!recording) return;
         hits.push(hit);
         heads.push({ a, hit });
       },
@@ -271,7 +313,13 @@ export function renderScene(R: Raster, agents: SceneAgent[], o: SceneOptions): S
   for (const cat of o.cats ?? []) {
     const z = FLOORS[cat.floor].z;
     const list = z > 0 ? up : underUpperFloor(cat) ? under : front;
-    list.push({ d: depth(cat.x, cat.y) + 0.3, x: cat.x, y: cat.y, actor: true, f: () => catHits.push(drawCat(c, cat, z)) });
+    list.push({
+      d: depth(cat.x, cat.y) + 0.3, x: cat.x, y: cat.y, actor: true,
+      f: () => {
+        const hit = drawCat(c, cat, z);
+        if (recording) catHits.push(hit);
+      },
+    });
   }
 
   const push = (list: Item[]) => (x: number, y: number, bias: number, f: () => void) => list.push({ d: depth(x, y) + bias, x, y, f });
@@ -298,19 +346,28 @@ export function renderScene(R: Raster, agents: SceneAgent[], o: SceneOptions): S
     });
   }
 
-  // The passes: the nook, ground-floor things behind the loft, the loft, then the rest.
+  // Once a turn has settled, the walls are either shown or not: free their scratch frames.
+  if (Object.values(alpha).every((a) => a <= 0.002 || a >= 0.998)) for (const s of ['L', 'R', 'F', 'E']) layers.delete('wall' + s);
+
+  // The passes: the ground floor under and behind the loft (one depth sort, so the
+  // nearer of the two is always drawn last), the loft, then the rest.
   const corners = [[0, 0], [UW, 0], [UW, UD], [0, UD]] as const;
   const loftFar = Math.min(...corners.map(([x, y]) => depth(x, y)));
   const rest = [...front, ...outside.filter((it) => !beyond(it.x!, it.y!))];
-  sortDraw(under);
-  sortDraw(rest.filter((it) => it.d < loftFar));
-  const la = loftAlpha();
-  if (la >= 0.998) sortDraw(up);
-  else {
-    inLayer(c, 'loft', la, () => sortDraw(up.filter((it) => !it.actor)));
-    sortDraw(up.filter((it) => it.actor));
-  }
-  sortDraw(rest.filter((it) => it.d >= loftFar));
+  const behindLoft = (it: Item) => depth(it.x!, it.y!) < loftFar; // by position, not by the sort key (which carries biases)
+  sortDraw([...under, ...rest.filter(behindLoft)]);
+  // Everything the loft draws lies within its box, from the slab's underside to the roof.
+  const loftPts = corners.flatMap(([x, y]) => [P(x, y, H1 - 6), P(x, y, TOP)]);
+  const loftRegion = {
+    x0: Math.min(...loftPts.map((p) => p[0])) - 12, x1: Math.max(...loftPts.map((p) => p[0])) + 12,
+    y0: Math.min(...loftPts.map((p) => p[1])) - 12, y1: Math.max(...loftPts.map((p) => p[1])) + 12,
+  };
+  const actors = up.filter((it) => it.actor);
+  inLayer(c, 'loft', loftAlpha(), () => sortDraw(up), {
+    region: loftRegion,
+    solid: () => { recording = false; sortDraw(actors); recording = true; },
+  });
+  sortDraw(rest.filter((it) => !behindLoft(it)));
 
   if (alpha.R > 0.5) {
     roofPlanter(c, UW + 0.5, 3.6, H1);

@@ -18,6 +18,7 @@ import type { CafeData } from '@/store/reduce';
 import type { ThemeId } from './atmosphere';
 import { inside, renderScene, SCENE_H, SCENE_W, type AgentHit, type SceneAgent } from './building';
 import type { Pt2 } from './raster';
+import { wrapQuarter } from './iso';
 import { Raster } from './raster';
 
 export { SCENE_H, SCENE_W, type AgentHit };
@@ -51,8 +52,10 @@ const DRAG_TURN = 0.008;
 /** How far a press has to move before it's a drag rather than a click (CSS px). */
 const DRAG_SLOP = 5;
 
-const quarterOf = (a: number) => ((Math.round(a / QUARTER) % 4) + 4) % 4;
-const reducedMotion = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+const quarterOf = (a: number) => wrapQuarter(a / QUARTER);
+/** Looked up once; .matches stays live if the setting changes. */
+const motionQuery = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
+const reducedMotion = () => Boolean(motionQuery?.matches);
 
 type Target = { kind: 'agent' | 'cat'; hit: AgentHit };
 
@@ -91,7 +94,7 @@ export class CafeRenderer {
     canvas.height = this.raster.h;
     canvas.className = 'pixelated block h-full w-full';
     canvas.setAttribute('role', 'img');
-    canvas.setAttribute('aria-label', 'The café: Anthropic agents upstairs, OpenAI agents in the café below. Drag sideways to turn it.');
+    canvas.setAttribute('aria-label', 'The café: Anthropic agents upstairs, OpenAI agents in the café below. Drag it sideways, or press Q or E, to turn it.');
     // Sideways drags turn the café; vertical swipes still scroll the page on touch screens.
     canvas.style.touchAction = 'pan-y';
     canvas.addEventListener('pointerdown', this.onDown);
@@ -246,30 +249,43 @@ export class CafeRenderer {
   }
 
   private onDown = (e: PointerEvent) => {
+    if (e.isPrimary === false) return; // one finger turns the café; others are ignored
     this.swallowClick = false;
     if (e.button !== 0 || this.angle === null) return;
     // Only the café itself can be grabbed; the sky around it can't.
     const p = this.toScene(e);
     if (!inside(this.outline, p.x, p.y)) return;
     this.drag = { x: e.clientX, angle: this.angle, turning: false };
+    // Hold on to the pointer from the press, so the release always comes back here.
+    try {
+      this.canvas?.setPointerCapture?.(e.pointerId);
+    } catch {
+      /* not a live pointer (synthetic event): the checks in onMove and onLeave cover it */
+    }
   };
 
   private onMove = (e: PointerEvent) => {
+    if (e.isPrimary === false) return;
     this.pointer = this.toScene(e);
+    // No button held means the press ended somewhere we didn't hear about: let it go.
+    if (this.drag && e.buttons === 0) this.endDrag();
     const d = this.drag;
     if (d) {
       const dx = e.clientX - d.x;
-      if (!d.turning && Math.abs(dx) > DRAG_SLOP) {
-        d.turning = true;
-        this.canvas?.setPointerCapture?.(e.pointerId);
-      }
+      if (!d.turning && Math.abs(dx) > DRAG_SLOP) d.turning = true;
       // Dragging right brings the side on the left round to the front.
       if (d.turning) this.angle = d.angle - dx * DRAG_TURN;
     }
     this.updateHover();
   };
 
-  private onUp = () => {
+  private onUp = (e?: PointerEvent) => {
+    if (e?.isPrimary === false) return;
+    this.endDrag();
+  };
+
+  /** Finish a press: a turn settles on the nearest quarter; a press that never turned is just dropped. */
+  private endDrag() {
     const d = this.drag;
     this.drag = null;
     if (!d?.turning || this.angle === null) return;
@@ -280,10 +296,12 @@ export class CafeRenderer {
     this.quarter = quarterOf(this.target);
     this.hooks.turned?.(this.quarter);
     this.updateHover();
-  };
+  }
 
   private onLeave = () => {
     this.pointer = null;
+    // A press that left before it became a turn may be released out of earshot: forget it.
+    if (this.drag && !this.drag.turning) this.drag = null;
     this.updateHover();
   };
 

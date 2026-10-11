@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { BUILDING, FLOORS, GROUND } from '@/sim/layout';
+import { outfitFor } from './avatar';
 import { cats, crew } from './fixtures';
 import { inside, renderScene, SCENE_H, SCENE_W, loftAlpha, wallAlpha } from './building';
 import { depth, faceVisible, iso, quarter, setCameraAngle, turn, unturn, viewFace } from './iso';
 import { Raster } from './raster';
+import { agentLook, agentSprite } from './sprites';
 
 const Q = Math.PI / 2;
 afterEach(() => setCameraAngle(0));
@@ -116,6 +119,46 @@ describe('renderScene', () => {
       expect(inside(outline, 2, 2)).toBe(false);
       expect(inside(outline, SCENE_W - 2, 2)).toBe(false);
     }
+  });
+
+  it('keeps the nook in front of ground-floor things behind it, seen from behind', () => {
+    // From behind (180°) the nook under the loft is the nearest corner. A pendant hangs
+    // there; an agent far behind it lines up with the bulb on screen.
+    const pendant = GROUND.props.find((p) => p.kind === 'pendant')!;
+    const far = { id: 'far', name: 'Far', providerId: 'openai' as const, x: pendant.x + 2.5, y: pendant.y + 2.5, face: 'y+' as const, pose: 'stand' as const, t: 0, bubble: null, spriteSeed: 3, demo: false };
+    const draw = (who: typeof far[]) => {
+      const R = new Raster(SCENE_W, SCENE_H);
+      renderScene(R, who, { theme: 'day', t: 3, angle: Math.PI, labels: false });
+      return R;
+    };
+    const without = draw([]), withFar = draw([far]);
+    setCameraAngle(Math.PI);
+    const bulb = iso(222, 145)(pendant.x, pendant.y, BUILDING.H1 - 20);
+    const at = (R: Raster) => Array.from(R.d.subarray(((bulb[1] + 2) * R.w + bulb[0]) * 4, ((bulb[1] + 2) * R.w + bulb[0]) * 4 + 4));
+    expect(depth(far.x, far.y)).toBeLessThan(depth(pendant.x, pendant.y)); // really behind it
+    expect(at(withFar)).toEqual(at(without));
+  });
+
+  it('lets loft furniture hide the agents behind it, even while the loft is see-through', () => {
+    // From 270° the desks are nearer than the chairs behind them.
+    const seat = FLOORS.anthropic.seats[0]!;
+    const agent = { id: 'a', name: 'A', providerId: 'anthropic' as const, x: seat.x, y: seat.y, face: 'y+' as const, pose: 'stand' as const, t: 0, bubble: null, spriteSeed: 3, demo: false };
+    const draw = (who: typeof agent[]) => {
+      const R = new Raster(SCENE_W, SCENE_H);
+      renderScene(R, who, { theme: 'day', t: 3, angle: -Q, labels: false });
+      return R;
+    };
+    // Pixels the agent changes = the part of them you can see.
+    const a = draw([agent]), b = draw([]);
+    let seen = 0;
+    for (let i = 0; i < a.d.length; i += 4) if (a.d[i] !== b.d[i] || a.d[i + 1] !== b.d[i + 1] || a.d[i + 2] !== b.d[i + 2]) seen++;
+    // The whole sprite, for comparison: drawn over everything, every one of these would show.
+    const { grid, palette } = agentSprite('stand', agentLook(agent.spriteSeed, outfitFor('anthropic')));
+    const whole = grid.reduce((s, row) => s + [...row].filter((ch) => palette[ch]).length, 0);
+    setCameraAngle(-Q);
+    expect(loftAlpha()).toBeLessThan(1); // the loft really is see-through from here
+    expect(seen).toBeGreaterThan(0);
+    expect(seen).toBeLessThan(whole * 0.85); // the desk hides a good part of them
   });
 
   it('floats hearts over a cat just after it is petted', () => {

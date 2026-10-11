@@ -59,7 +59,10 @@ export function facing(nx: number, ny: number): number {
 export const faceVisible = (nx: number, ny: number) => facing(nx, ny) > 1e-6;
 
 /** The camera's nearest quarter turn, 0–3. */
-export const quarter = () => ((Math.round(camera.a / (Math.PI / 2)) % 4) + 4) % 4;
+/** A number of quarter turns, rounded and wrapped into 0–3. */
+export const wrapQuarter = (n: number) => ((Math.round(n) % 4) + 4) % 4;
+
+export const quarter = () => wrapQuarter(camera.a / (Math.PI / 2));
 
 const DIRS: Dir[] = ['x+', 'y+', 'x-', 'y-'];
 

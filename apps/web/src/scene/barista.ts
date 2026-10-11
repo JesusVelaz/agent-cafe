@@ -9,6 +9,7 @@
  *
  * Like the street life, a pure function of time: no state, no hit-testing.
  */
+import { GROUND } from '@/sim/layout';
 import { box, viewFace } from './iso';
 import { K } from './palette';
 import type { DrawCtx } from './props';
@@ -22,9 +23,10 @@ const LANE_Y = 0.95;
 const WALK_SPEED = 0.9; // tiles per second
 /** They stand on a raised duckboard behind the bar, so their shoulders and hands clear the counter. */
 const DUCKBOARD = 5;
-/** The middle of the counter (see GROUND in layout.ts): things on it sort just after it. */
-const COUNTER_MID_X = 11.7;
-const COUNTER_MID_Y = 2.6;
+/** The middle of the counter: the barista sorts level with it, and what's on it just after it. */
+const COUNTER = GROUND.props.find((p) => p.kind === 'cafeCounter')!;
+const COUNTER_MID_X = COUNTER.x + COUNTER.w / 2;
+const COUNTER_MID_Y = COUNTER.y + COUNTER.d / 2;
 
 /** Where they stop, which way they face there, and for how long (seconds). */
 const STOPS: ReadonlyArray<{ x: number; act: Act; face: Face; dur: number }> = [

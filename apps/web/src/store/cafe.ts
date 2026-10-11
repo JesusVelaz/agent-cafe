@@ -3,6 +3,7 @@
 import type { CafeEvent, ModelInfo, TaskEventDTO } from '@agent-cafe/shared';
 import { MODEL_CATALOG } from '@agent-cafe/shared';
 import { create } from 'zustand';
+import { wrapQuarter } from '@/scene/iso';
 import type { ConnectionState } from '@/lib/stream';
 import { emptyData, MAX_EVENTS_PER_TASK, reduce, threadOf, type CafeData, type ThreadSummary } from './reduce';
 
@@ -53,12 +54,11 @@ function writeFlag(key: string, on: boolean) {
 }
 
 const VIEW_KEY = 'cafe.viewAngle';
-const quarterOf = (n: number) => ((Math.round(n) % 4) + 4) % 4;
 
 /** The side the café was last seen from in this browser (0 when unknown). */
 export function readViewAngle(): number {
   try {
-    return typeof localStorage === 'undefined' ? 0 : quarterOf(Number(localStorage.getItem(VIEW_KEY)) || 0);
+    return typeof localStorage === 'undefined' ? 0 : wrapQuarter(Number(localStorage.getItem(VIEW_KEY)) || 0);
   } catch {
     return 0;
   }
@@ -89,12 +89,12 @@ export const useCafe = create<CafeStore>((set) => ({
   viewAngle: 0,
   turnView: (dir) =>
     set((s) => {
-      const viewAngle = quarterOf(s.viewAngle + dir);
+      const viewAngle = wrapQuarter(s.viewAngle + dir);
       writeViewAngle(viewAngle);
       return { viewAngle };
     }),
   setViewAngle: (q) => {
-    const viewAngle = quarterOf(q);
+    const viewAngle = wrapQuarter(q);
     writeViewAngle(viewAngle);
     set({ viewAngle });
   },
