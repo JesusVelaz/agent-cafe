@@ -222,11 +222,6 @@ export interface HarnessCommandDTO {
   kind: 'catalog' | 'command' | 'skill';
 }
 
-export interface SettingsDTO {
-  /** Idle mock agents pick up canned tasks by themselves. Never touches live providers. */
-  ambient: boolean;
-}
-
 export const DEFAULTS = {
   /** Demo runs only: simulated budget per task. */
   maxCostUsd: 0.5,

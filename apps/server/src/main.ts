@@ -24,7 +24,7 @@ export async function startServer(config: ServerConfig, options: StartOptions = 
   await seed(db); // idempotent: first run gets the starting crew
   const services = createServices(config, db);
   await services.orchestrator.recover();
-  services.ambient.start();
+  if (config.demoTraffic) services.ambient.start();
   // Check each floor's harness (installed? signed in?) in the background; the UI updates when it lands.
   for (const id of PROVIDER_IDS) {
     void services.providers.harnesses

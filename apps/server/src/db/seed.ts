@@ -38,9 +38,4 @@ export async function seed(db: Db): Promise<void> {
     const exists = await db.agent.findFirst({ where: { name: a.name } });
     if (!exists) await db.agent.create({ data: a });
   }
-  await db.setting.upsert({
-    where: { key: 'ambient' },
-    create: { key: 'ambient', value: 'true' },
-    update: {},
-  });
 }

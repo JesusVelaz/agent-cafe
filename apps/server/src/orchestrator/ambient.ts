@@ -1,12 +1,12 @@
 /**
- * Ambient mode: every so often, an idle agent on a *mock* floor picks up a canned
- * task by itself, so the café looks alive in demos. Never touches live providers,
+ * Demo traffic: every so often, an idle agent on a *mock* floor picks up a canned
+ * task by itself, so the café looks alive in a hosted demo. Only runs when the
+ * server is started with `CAFE_DEMO_TRAFFIC=1`. Never touches live providers,
  * so it can never spend money.
  */
 import type { ProviderId } from '@agent-cafe/shared';
 import type { Db } from '../db/client.js';
 import type { ProviderConfigService } from '../providers/config.js';
-import type { SettingsService } from '../settings.js';
 import type { Orchestrator } from './orchestrator.js';
 
 export const AMBIENT_PROMPTS = [
@@ -30,7 +30,6 @@ export class AmbientDriver {
       db: Db;
       orchestrator: Orchestrator;
       providers: ProviderConfigService;
-      settings: SettingsService;
       rng?: () => number;
       /** Base delay between ticks; actual delay is base ± 50%. */
       intervalMs?: number;
@@ -60,10 +59,8 @@ export class AmbientDriver {
 
   /** Queue one canned task for a random idle mock agent. Returns the task id, if any. */
   async tick(): Promise<string | null> {
-    const { db, orchestrator, providers, settings } = this.deps;
+    const { db, orchestrator, providers } = this.deps;
     const rng = this.deps.rng ?? Math.random;
-    if (!(await settings.get()).ambient) return null;
-
     const mockFloors: ProviderId[] = [];
     for (const p of await providers.all()) if (p.mode === 'mock') mockFloors.push(p.id);
     if (mockFloors.length === 0) return null;

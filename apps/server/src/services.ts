@@ -6,14 +6,12 @@ import { Orchestrator, type OrchestratorDeps } from './orchestrator/orchestrator
 import { ProviderConfigService } from './providers/config.js';
 import { HarnessService } from './providers/harness.js';
 import { createAdapterResolver, type AdapterResolver } from './providers/registry.js';
-import { SettingsService } from './settings.js';
 import { createToolRegistry } from './tools/registry.js';
 
 export interface Services {
   db: Db;
   bus: EventBus;
   providers: ProviderConfigService;
-  settings: SettingsService;
   orchestrator: Orchestrator;
   ambient: AmbientDriver;
   resolveAdapter: AdapterResolver;
@@ -31,13 +29,12 @@ export function createServices(
   providers.harnesses.onChange((id) => {
     void providers.status(id).then((provider) => bus.publish({ type: 'provider.updated', provider }));
   });
-  const settings = new SettingsService(db);
   const tools = createToolRegistry({ db, workspaceDir: config.workspaceDir });
   const resolveAdapter = overrides.resolveAdapter ?? createAdapterResolver();
   const orchestrator = new Orchestrator({
-    db, bus, providers, settings, tools, resolveAdapter,
+    db, bus, providers, tools, resolveAdapter,
     ...(overrides.runLive ? { runLive: overrides.runLive } : {}),
   });
-  const ambient = new AmbientDriver({ db, orchestrator, providers, settings });
-  return { db, bus, providers, settings, orchestrator, ambient, resolveAdapter };
+  const ambient = new AmbientDriver({ db, orchestrator, providers });
+  return { db, bus, providers, orchestrator, ambient, resolveAdapter };
 }

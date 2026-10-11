@@ -4,7 +4,6 @@ import type { Db } from '../db/client.js';
 import { EventBus } from '../events/bus.js';
 import { ProviderConfigService } from '../providers/config.js';
 import { sleep, type ProviderAdapter } from '../providers/types.js';
-import { SettingsService } from '../settings.js';
 import { testDb } from '../test/testDb.js';
 import type { ToolRegistry } from '../tools/registry.js';
 import type { LiveRunContext, LiveRunners } from '../providers/live.js';
@@ -54,7 +53,6 @@ async function setup(
     db,
     bus,
     providers,
-    settings: new SettingsService(db),
     tools,
     resolveAdapter: async () => adapter,
     ...(opts.runLive ? { runLive: opts.runLive } : {}),
@@ -336,7 +334,7 @@ describe('Orchestrator', () => {
     expect(done.costUsd).toBeGreaterThan(0);
   });
 
-  it('builds a snapshot with agents, tasks, providers and settings', async () => {
+  it('builds a snapshot with agents, tasks and providers', async () => {
     const { orch, gated, agent } = await setup();
     const t = await orch.enqueue({ prompt: 'snap', target: { agentId: (await agent('Chai')).id } });
     await sleep(30);
@@ -344,7 +342,6 @@ describe('Orchestrator', () => {
     expect(snap.agents).toHaveLength(6);
     expect(snap.tasks.map((x) => x.id)).toContain(t.id);
     expect(snap.providers).toHaveLength(2);
-    expect(snap.settings).toEqual({ ambient: true });
     expect(snap.lastEvents[t.id]).toBeDefined();
     gated.release();
     await orch.idle();

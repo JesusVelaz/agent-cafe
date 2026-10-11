@@ -31,7 +31,6 @@ import { runCodexTask } from '../providers/codex.js';
 import type { ProviderConfigService } from '../providers/config.js';
 import type { ApprovalAsk, LiveRunners } from '../providers/live.js';
 import type { AdapterResolver } from '../providers/registry.js';
-import type { SettingsService } from '../settings.js';
 import type { ToolRegistry } from '../tools/registry.js';
 import { runTask, type RunOutcome } from './runner.js';
 import { Collaboration, COLLABORATION_INSTRUCTIONS } from './collaboration.js';
@@ -75,7 +74,6 @@ export interface OrchestratorDeps {
   db: Db;
   bus: EventBus;
   providers: ProviderConfigService;
-  settings: SettingsService;
   tools: ToolRegistry;
   resolveAdapter: AdapterResolver;
   maxSteps?: number;
@@ -357,7 +355,7 @@ export class Orchestrator {
 
   /** Full state for a newly connected client. */
   async snapshot(): Promise<Extract<CafeEvent, { type: 'snapshot' }>> {
-    const { db, providers, settings } = this.deps;
+    const { db, providers } = this.deps;
     const [agents, active, recent, pinned] = await Promise.all([
       db.agent.findMany({ where: { archivedAt: null }, orderBy: { createdAt: 'asc' } }),
       db.task.findMany({ where: { status: { in: ['queued', 'running', 'tool_wait'] } } }),
@@ -387,7 +385,6 @@ export class Orchestrator {
       lastEvents,
       providers: await providers.all(),
       projects: (await db.project.findMany({ orderBy: { createdAt: 'asc' } })).map(toProjectDTO),
-      settings: await settings.get(),
     };
   }
 

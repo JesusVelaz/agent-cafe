@@ -10,11 +10,9 @@ const TIER_NOTE = { flagship: 'Most capable', balanced: 'Balanced', fast: 'Faste
 
 const providerPatch = z.object({ mode: z.enum(['live', 'mock', 'off']).optional() }).strict();
 
-const settingsPatch = z.object({ ambient: z.boolean().optional() }).strict();
-
-/** Floors (mode + harness status), settings and models. There are no credentials here. */
+/** Floors (mode + harness status) and models. There are no credentials here. */
 export const providerRoutes =
-  ({ db, providers, settings, bus }: Services): FastifyPluginAsync =>
+  ({ db, providers, bus }: Services): FastifyPluginAsync =>
   async (app) => {
     app.get('/api/catalog', async () => ({ asOf: CATALOG_AS_OF, models: MODEL_CATALOG }));
 
@@ -94,13 +92,5 @@ export const providerRoutes =
       } catch {
         return { source: 'unavailable', commands: [], message: 'Could not load slash commands. Try again.' };
       }
-    });
-
-    app.get('/api/settings', () => settings.get());
-
-    app.patch('/api/settings', async (req) => {
-      const next = await settings.update(settingsPatch.parse(req.body));
-      bus.publish({ type: 'settings.updated', settings: next });
-      return next;
     });
   };

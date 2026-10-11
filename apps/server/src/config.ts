@@ -19,6 +19,11 @@ export interface ServerConfig {
   dataDir?: string;
   /** Open the café to phones from the start: tailscale, lan or an address (`agent-cafe --host`). */
   phone?: string;
+  /**
+   * Idle agents on Demo floors pick up sample tasks by themselves, so a showcase café looks busy.
+   * Off unless `CAFE_DEMO_TRAFFIC=1`; meant for a hosted demo, not for someone's own café.
+   */
+  demoTraffic?: boolean;
 }
 
 const fromRepo = (p: string) => (isAbsolute(p) ? p : resolve(REPO_ROOT, p));
@@ -31,6 +36,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     port: Number(env.CAFE_API_PORT || 4318),
     workspaceDir: fromRepo(env.WORKSPACE_DIR?.trim() || 'workspace'),
     ...(env.CAFE_WEB_DIR?.trim() ? { webDir: fromRepo(env.CAFE_WEB_DIR.trim()) } : {}),
+    ...(env.CAFE_DEMO_TRAFFIC === '1' ? { demoTraffic: true } : {}),
   };
 }
 
