@@ -8,7 +8,6 @@ import type {
   ProviderId,
   ProviderMode,
   ProviderStatusDTO,
-  SettingsDTO,
   TaskDTO,
   TaskEventDTO,
 } from '@agent-cafe/shared';
@@ -120,7 +119,6 @@ export const api = {
     if (refresh) params.set('refresh', 'true');
     return request<{ source: 'harness' | 'unavailable'; commands: HarnessCommandDTO[]; message?: string }>(`/api/providers/${id}/commands?${params}`);
   },
-  updateSettings: (s: Partial<SettingsDTO>) => patch<SettingsDTO>('/api/settings', s),
   addProject: (p: { path: string; name?: string }) => post<ProjectDTO>('/api/projects', p),
   renameProject: (id: string, name: string) => patch<ProjectDTO>(`/api/projects/${id}`, { name }),
   removeProject: (id: string) => request<void>(`/api/projects/${id}`, { method: 'DELETE' }),

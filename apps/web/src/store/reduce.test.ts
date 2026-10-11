@@ -20,7 +20,6 @@ describe('reduce', () => {
       tasks: [task()],
       lastEvents: {},
       providers: [], projects: [],
-      settings: { ambient: true },
     });
     expect(s.hydrated).toBe(true);
     expect(Object.keys(s.agents)).toEqual(['a1']);

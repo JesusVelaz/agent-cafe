@@ -3,7 +3,6 @@ import type { TaskDTO } from '@agent-cafe/shared';
 import { EventBus } from '../events/bus.js';
 import { ProviderConfigService } from '../providers/config.js';
 import type { LiveRunContext, LiveRunners } from '../providers/live.js';
-import { SettingsService } from '../settings.js';
 import { fakeHarnesses } from '../test/fakeHarness.js';
 import { fakeProbe } from '../test/fakeHarness.js';
 import { HarnessService } from '../providers/harness.js';
@@ -27,7 +26,7 @@ async function setup(runLive?: Partial<LiveRunners>, harnesses = fakeHarnesses('
   const earl = agents.find((a) => a.name === 'Earl')!;
   const mocha = agents.find((a) => a.name === 'Mocha')!;
   const chai = agents.find((a) => a.name === 'Chai')!;
-  const orch = new Orchestrator({ db, providers, bus: new EventBus(), settings: new SettingsService(db), tools: { specs: [], execute: async () => ({ ok: true, output: '' }) },
+  const orch = new Orchestrator({ db, providers, bus: new EventBus(), tools: { specs: [], execute: async () => ({ ok: true, output: '' }) },
     resolveAdapter: async () => { throw new Error('Live tasks should use their harness'); }, runLive,
   });
   cleanups.push(async () => { await orch.shutdown(); await db.$disconnect(); });

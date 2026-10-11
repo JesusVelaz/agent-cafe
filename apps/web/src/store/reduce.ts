@@ -8,7 +8,6 @@ import type {
   ProjectDTO,
   ProviderId,
   ProviderStatusDTO,
-  SettingsDTO,
   TaskDTO,
   TaskEventDTO,
 } from '@agent-cafe/shared';
@@ -22,7 +21,6 @@ export interface CafeData {
   tasks: Record<string, TaskDTO>;
   providers: Partial<Record<ProviderId, ProviderStatusDTO>>;
   projects: Record<string, ProjectDTO>;
-  settings: SettingsDTO;
   /** Persisted events seen for each task, in seq order. */
   events: Record<string, TaskEventDTO[]>;
   /** Latest persisted (non-delta) event per task: drives the café scene. */
@@ -39,7 +37,6 @@ export const emptyData = (): CafeData => ({
   tasks: {},
   providers: {},
   projects: {},
-  settings: { ambient: false },
   events: {},
   lastEvent: {},
   lastActivityAt: {},
@@ -58,7 +55,6 @@ export function reduce(s: CafeData, e: CafeEvent, now: number = Date.now()): Caf
         tasks,
         providers: Object.fromEntries(e.providers.map((p) => [p.id, p])),
         projects: Object.fromEntries(e.projects.map((p) => [p.id, p])),
-        settings: e.settings,
         events: Object.fromEntries(Object.entries(e.lastEvents).map(([id, ev]) => [id, [ev]])),
         lastEvent: { ...e.lastEvents },
         lastActivityAt,
@@ -91,8 +87,6 @@ export function reduce(s: CafeData, e: CafeEvent, now: number = Date.now()): Caf
     }
     case 'provider.updated':
       return { ...s, providers: { ...s.providers, [e.provider.id]: e.provider } };
-    case 'settings.updated':
-      return { ...s, settings: e.settings };
     case 'project.upserted':
       return { ...s, projects: { ...s.projects, [e.project.id]: e.project } };
     case 'project.removed': {

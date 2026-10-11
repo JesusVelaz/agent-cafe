@@ -110,27 +110,14 @@ function Heading({ title, children }: { title: string; children?: ReactNode }) {
   );
 }
 
-function Row({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
-  return (
-    <div className="flex items-center justify-between gap-4 border-b border-slate-line py-4 last:border-b-0">
-      <div className="min-w-0">
-        <p className="text-[13px] font-medium">{label}</p>
-        {hint && <p className="mt-0.5 text-[12px] text-chalk-faint">{hint}</p>}
-      </div>
-      <div className="shrink-0">{children}</div>
-    </div>
-  );
-}
-
 // ── General ──────────────────────────────────────────────────────────────────
 
 function General({ themeChoice, theme, onTheme }: { themeChoice: ThemeChoice; theme: ThemeId; onTheme: (c: ThemeChoice) => void }) {
-  const settings = useCafe((s) => s.settings);
   const choices: ThemeChoice[] = ['auto', 'day', 'summer', 'rain', 'snow', 'night'];
   return (
     <>
       <Heading title="General" />
-      <div className="border-b border-slate-line pb-4">
+      <div>
         <p className="text-[13px] font-medium">Café theme</p>
         <p className="mt-0.5 text-[12px] text-chalk-faint">Auto follows your local time and season.</p>
         <div role="radiogroup" aria-label="Café theme" className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -151,9 +138,6 @@ function General({ themeChoice, theme, onTheme }: { themeChoice: ThemeChoice; th
           ))}
         </div>
       </div>
-      <Row label="Demo traffic" hint="Idle agents on demo floors pick up sample tasks by themselves. Never runs live.">
-        <Toggle checked={settings.ambient} onChange={(on) => void api.updateSettings({ ambient: on })} label="Demo traffic" />
-      </Row>
     </>
   );
 }

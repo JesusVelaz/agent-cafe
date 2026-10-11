@@ -52,8 +52,8 @@ pnpm dev
 ```
 
 Open http://localhost:3000. The first run creates `apps/server/data/cafe.db`, seeds six
-agents (Mocha, Chai and Biscotti downstairs; Earl, Matcha and Scone upstairs), and turns on
-**Demo traffic**, so idle demo agents pick up sample orders by themselves.
+agents (Mocha, Chai and Biscotti downstairs; Earl, Matcha and Scone upstairs). Agents only
+work when you give them something to do.
 
 ### Running it as one app
 
@@ -235,6 +235,7 @@ Everything is optional. Copy `.env.example` to `.env` at the repo root to change
 |---|---|---|
 | `WORKSPACE_DIR` | `./workspace` | The folder demo runs' file tools can read (read-only) |
 | `CAFE_API_PORT` | `4318` | API server port (always bound to 127.0.0.1) |
+| `CAFE_DEMO_TRAFFIC` | off | Set to `1` for a showcase café: idle Demo agents pick up sample tasks by themselves |
 
 `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` and `OPENAI_API_KEY` / `CODEX_API_KEY` are deliberately
 removed from the harnesses' environment, and Codex must be signed in with ChatGPT, so live runs

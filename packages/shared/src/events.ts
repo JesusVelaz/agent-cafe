@@ -3,7 +3,6 @@ import type {
   ApprovalDTO,
   ProjectDTO,
   ProviderStatusDTO,
-  SettingsDTO,
   TaskDTO,
   TaskStatus,
 } from './domain';
@@ -51,7 +50,6 @@ export type CafeEvent =
       lastEvents: Record<string, TaskEventDTO>;
       providers: ProviderStatusDTO[];
       projects: ProjectDTO[];
-      settings: SettingsDTO;
     }
   | { type: 'project.upserted'; project: ProjectDTO }
   | { type: 'project.removed'; projectId: string }
@@ -60,5 +58,4 @@ export type CafeEvent =
   /** A deleted thread's tasks (their events went with them). */
   | { type: 'task.removed'; taskIds: string[] }
   | { type: 'task.event'; taskId: string; agentId: string; event: TaskEventDTO }
-  | { type: 'provider.updated'; provider: ProviderStatusDTO }
-  | { type: 'settings.updated'; settings: SettingsDTO };
+  | { type: 'provider.updated'; provider: ProviderStatusDTO };
