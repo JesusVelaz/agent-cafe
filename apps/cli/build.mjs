@@ -12,10 +12,15 @@ const readJson = (p) => JSON.parse(readFileSync(p, 'utf8'));
 const pkg = readJson(join(here, 'package.json'));
 const server = readJson(join(here, '../server/package.json'));
 
-// The server's npm packages stay real dependencies of agent-cafe (a native SQLite driver,
-// Prisma's runtime, the Claude Agent SDK's own files), so they must match the server's.
-const external = Object.keys(server.dependencies).filter((name) => !name.startsWith('@agent-cafe/'));
+// Bundled rather than installed: the Claude Agent SDK's package pulls in a copy of Claude Code
+// (hundreds of MB per platform) that the café never runs, since it always uses the installed `claude`.
+const bundled = ['@anthropic-ai/claude-agent-sdk'];
+// The server's other npm packages stay real dependencies of agent-cafe (a native SQLite driver,
+// Prisma's runtime), so they must match the server's.
+const external = Object.keys(server.dependencies).filter((name) => !name.startsWith('@agent-cafe/') && !bundled.includes(name));
 const mismatched = external.filter((name) => pkg.dependencies?.[name] !== server.dependencies[name]);
+const stray = bundled.filter((name) => pkg.dependencies?.[name]);
+if (stray.length) throw new Error(`apps/cli/package.json must not depend on ${stray.join(', ')}: the build bundles it.`);
 if (mismatched.length) {
   throw new Error(`apps/cli/package.json dependencies must match apps/server's. Out of step: ${mismatched.join(', ')}`);
 }

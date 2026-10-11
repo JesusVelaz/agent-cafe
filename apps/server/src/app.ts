@@ -74,7 +74,8 @@ export async function buildApp(services?: Services, options: AppOptions = {}): P
     if (origin && !allowedOrigin(origin)) return reply.code(403).send({ error: 'Not allowed from this origin.' });
   });
 
-  app.get('/api/health', async () => ({ ok: true }));
+  // `app` tells the agent-cafe command that a café, not some other program, has this port.
+  app.get('/api/health', async () => ({ ok: true, app: 'agent-cafe' }));
 
   if (services) {
     await app.register(agentRoutes(services));
@@ -89,12 +90,8 @@ export async function buildApp(services?: Services, options: AppOptions = {}): P
 
   if (options.webDir) {
     if (!existsSync(join(options.webDir, 'index.html'))) throw new Error(`No built web UI in ${options.webDir}. Run \`pnpm build\` first.`);
+    // Only the files the build wrote: anything else is a 404, so a missing asset shows up as one.
     await app.register(fastifyStatic, { root: options.webDir });
-    // The UI is a single page: any other path that isn't the API gets it too.
-    app.setNotFoundHandler((req, reply) => {
-      if (req.method === 'GET' && !req.url.startsWith('/api/')) return reply.sendFile('index.html');
-      return reply.code(404).send({ error: 'Not found' });
-    });
   }
   return app;
 }

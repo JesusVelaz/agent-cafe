@@ -69,7 +69,7 @@ describe('remote access', () => {
     const page = await get(port, '/', { cookie });
     expect(page.status).toBe(200);
     expect(page.body).toContain('Agent Café');
-    expect(JSON.parse((await get(port, '/api/health', { cookie })).body)).toEqual({ ok: true });
+    expect(JSON.parse((await get(port, '/api/health', { cookie })).body)).toEqual({ ok: true, app: 'agent-cafe' });
   });
 
   it('keeps the rest of the address when it takes the token out', async () => {

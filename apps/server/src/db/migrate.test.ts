@@ -53,6 +53,36 @@ describe('migrate', () => {
     expect(history(file)).toEqual([expect.objectContaining({ migration_name: init, applied_steps_count: 0 })]);
   });
 
+  it('upgrades a `prisma db push` database from an older schema, keeping its rows', () => {
+    const file = tempDb();
+    const [init] = migrate(tempDb());
+    const sqlite = new Database(file);
+    sqlite.exec(readFileSync(join(MIGRATIONS_DIR, init!, 'migration.sql'), 'utf8'));
+    // As the schema was before thread titles and projects.
+    sqlite.exec('DROP TABLE "Project"; ALTER TABLE "Task" DROP COLUMN "threadTitle"; DROP INDEX "Task_status_idx";');
+    sqlite.exec(`INSERT INTO "Agent" ("id", "name", "providerId", "model", "systemPrompt", "spriteSeed") VALUES ('a', 'Ada', 'p', 'm', '', 1)`);
+    sqlite.exec(`INSERT INTO "Task" ("id", "agentId", "providerId", "model", "prompt", "maxCostUsd") VALUES ('t', 'a', 'p', 'm', 'hi', 1)`);
+    sqlite.close();
+
+    expect(migrate(file)).toEqual([]);
+    expect(history(file)).toEqual([expect.objectContaining({ migration_name: init, applied_steps_count: 0 })]);
+    const upgraded = new Database(file);
+    expect(upgraded.prepare('SELECT "id", "prompt", "threadTitle" FROM "Task"').all()).toEqual([{ id: 't', prompt: 'hi', threadTitle: null }]);
+    expect(upgraded.prepare(`SELECT 1 FROM sqlite_master WHERE name IN ('Project', 'Task_status_idx')`).all()).toHaveLength(2);
+    upgraded.close();
+  });
+
+  it("refuses to adopt a database whose rows can't fit the schema, leaving it as it was", () => {
+    const file = tempDb();
+    const sqlite = new Database(file);
+    sqlite.exec('CREATE TABLE "Agent" ("id" TEXT NOT NULL PRIMARY KEY); INSERT INTO "Agent" VALUES (\'a\');');
+    sqlite.close();
+
+    expect(() => migrate(file)).toThrow(/Can't upgrade this database's Agent table/);
+    expect(tables(file).sort()).toEqual(['Agent', '_prisma_migrations']);
+    expect(history(file)).toEqual([]);
+  });
+
   it('applies new migrations in order', () => {
     const file = tempDb();
     migrate(file);

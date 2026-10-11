@@ -54,10 +54,18 @@ export function call(
  */
 export type PortUse = 'cafe' | 'dev' | 'taken' | 'free';
 
+function isCafe(body: string): boolean {
+  try {
+    return (JSON.parse(body) as { app?: unknown }).app === 'agent-cafe';
+  } catch {
+    return false;
+  }
+}
+
 export async function probe(url: string): Promise<PortUse> {
   try {
     const health = await call(`${url}/api/health`);
-    if (health.status !== 200) return 'taken';
+    if (health.status !== 200 || !isCafe(health.body)) return 'taken';
     const page = await call(url);
     return page.status === 200 && page.type.startsWith('text/html') ? 'cafe' : 'dev';
   } catch (err) {
