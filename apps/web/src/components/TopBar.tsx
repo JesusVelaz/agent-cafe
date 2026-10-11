@@ -50,12 +50,12 @@ export function TopBar({ themeChoice, theme, onTheme }: Props) {
 
   return (
     <header className="flex h-14 items-center gap-3 sm:gap-6 border-b border-slate-line bg-night-2 px-4">
-      <div className="flex items-center gap-2.5">
+      <div className="flex items-center gap-2 sm:gap-2.5">
         <span data-cafe-logo className="flex">
           <CupIcon size={28} mood={mood} />
         </span>
-        <h1 className="whitespace-nowrap font-display text-[26px] leading-none sm:text-[30px]">
-          Agent <span className="text-crema">Café</span>
+        <h1 className="whitespace-nowrap font-display text-[23px] leading-none sm:text-[30px]">
+          Agents <span className="text-crema">Café</span>
         </h1>
         {DEMO_SITE && (
           <span
