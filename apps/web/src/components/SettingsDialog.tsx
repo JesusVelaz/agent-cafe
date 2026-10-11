@@ -3,6 +3,7 @@
 import { HARNESS, offeredModel, type AgentDTO, type ProviderId } from '@agent-cafe/shared';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { api } from '@/lib/api';
+import { DEMO_SITE } from '@/lib/demo/flag';
 import { useModels } from '@/lib/models';
 import type { ThemeChoice } from '@/lib/theme';
 import type { ThemeId } from '@/scene/atmosphere';
@@ -10,6 +11,7 @@ import { useCafe } from '@/store/cafe';
 import { AddProjectDialog } from './AddProjectDialog';
 import { Avatar } from './Avatar';
 import { Connections } from './Connections';
+import { DownloadButton } from './DownloadButton';
 import { THEME_LABELS, ThemeIcon } from './ThemePicker';
 import { ModelList } from './pickers';
 import { Caret, FolderIcon, HarnessIcon, Popover, Toggle } from './ui';
@@ -23,6 +25,15 @@ const SECTIONS: Array<{ id: Section; label: string }> = [
   { id: 'projects', label: 'Projects' },
   { id: 'connections', label: 'Connections' },
 ];
+/** On the demo site everything but General is locked: it needs the café on your own computer. */
+const LOCKED: Partial<Record<Section, string>> = DEMO_SITE
+  ? {
+      agents: 'Rename your agents, change how they look, and pick the model each one uses by default.',
+      providers: 'Connect Claude Code and Codex with your own subscription, and switch each floor between Live and Demo.',
+      projects: 'Add the folders your agents work in, or clone a repository to work on.',
+      connections: 'Open the café on your phone, over your home Wi-Fi or Tailscale.',
+    }
+  : {};
 
 /** App settings in a modal: general, providers (connect Claude / ChatGPT, floor modes), projects and connections (your phone). */
 export function SettingsDialog({
@@ -75,17 +86,26 @@ export function SettingsDialog({
                 // The outline goes inside: the tab row scrolls sideways on phones, which clips anything outside.
                 className={`shrink-0 rounded-lg px-3 py-2 text-left text-[13px] outline-offset-[-2px] sm:px-2.5 ${section === s.id ? 'bg-slate text-chalk' : 'text-chalk-dim hover:bg-slate hover:text-chalk'}`}
               >
-                {s.label}
+                <span className="flex items-center gap-1.5">
+                  {s.label}
+                  {LOCKED[s.id] && <LockIcon />}
+                </span>
               </button>
             ))}
           </div>
         </nav>
         <div className="scroll-chalk min-h-0 flex-1 overflow-y-auto p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-6">
           {section === 'general' && <General themeChoice={themeChoice} theme={theme} onTheme={onTheme} />}
-          {section === 'agents' && <Agents />}
-          {section === 'providers' && <Providers active={open} />}
-          {section === 'projects' && <Projects />}
-          {section === 'connections' && <Connections active={open} />}
+          {LOCKED[section] ? (
+            <Locked title={SECTIONS.find((s) => s.id === section)!.label}>{LOCKED[section]}</Locked>
+          ) : (
+            <>
+              {section === 'agents' && <Agents />}
+              {section === 'providers' && <Providers active={open} />}
+              {section === 'projects' && <Projects />}
+              {section === 'connections' && <Connections active={open} />}
+            </>
+          )}
         </div>
       </div>
       {/* On the dialog, not in the scrolling pane, so it stays put while a long section scrolls. */}
@@ -107,6 +127,34 @@ function Heading({ title, children }: { title: string; children?: ReactNode }) {
       <h3 className="text-[18px] font-semibold">{title}</h3>
       {children && <p className="mt-1 text-[13px] text-chalk-dim">{children}</p>}
     </div>
+  );
+}
+
+function LockIcon() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.4" aria-label="Locked in the demo">
+      <rect x="2" y="5.5" width="8" height="5.5" rx="1" />
+      <path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" />
+    </svg>
+  );
+}
+
+/** A section the demo site can't offer: what it does in the app, and how to get the app. */
+function Locked({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <>
+      <Heading title={title} />
+      <div className="flex flex-col items-start gap-4 rounded-xl border border-slate-line bg-slate p-5">
+        <span className="flex items-center gap-2 text-[12px] font-semibold text-coral">
+          <LockIcon /> Not available in the demo
+        </span>
+        <div className="flex max-w-[52ch] flex-col gap-1.5 text-[13px] leading-relaxed">
+          <p className="text-chalk-dim">{children}</p>
+          <p className="text-chalk">Install Agent Café on your computer to use it.</p>
+        </div>
+        <DownloadButton />
+      </div>
+    </>
   );
 }
 

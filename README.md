@@ -251,6 +251,19 @@ changes in agent settings are also validated against the offered models.
 
 Useful scripts: `pnpm test`, `pnpm typecheck`, `pnpm db:reset` (wipe and reseed).
 
+### Online demo site
+
+`NEXT_PUBLIC_DEMO_SITE=1` builds the web app as a demo website with no server: the café runs in the
+visitor's browser on scripted demo data (`apps/web/src/lib/demo`). It starts with the six agents,
+two made-up projects and a few finished threads, and idle agents pick up sample tasks now and then.
+Visitors can open threads, send tasks, answer Allow / Deny cards, stop, retry, rename and delete;
+nothing is saved, and a reload starts fresh. Live mode, providers, projects and phone access are
+hidden. Try it locally with `NEXT_PUBLIC_DEMO_SITE=1 pnpm --filter @agent-cafe/web dev`.
+
+To host it on Vercel: import the repository, set **Root Directory** to `apps/web` (the Next.js preset
+and pnpm are picked up), and add the environment variable `NEXT_PUBLIC_DEMO_SITE` = `1`. The build is a
+static export (`apps/web/out`), so any static host works the same way.
+
 The server brings the database up to date when it starts, from `apps/server/prisma/migrations`.
 After changing `schema.prisma`, run `pnpm db:migrate` to add a migration (a test fails until you do).
 
@@ -307,6 +320,7 @@ apps/web/src
   sim/                  layout.ts · pathfinding.ts · activity.ts · world.ts · cats.ts
   scene/                renderer.ts · building.ts · props.ts · outdoor.ts · atmosphere.ts · sprites.ts · raster.ts
   lib/                  api.ts · stream.ts · theme.ts (auto themes) · format.ts
+    demo/               cafe.ts · script.ts · seed.ts · api.ts   (the online demo site's in-browser café)
 apps/cli/src            cli.ts · options.ts · browser.ts · network.ts · token.ts   (the `agent-cafe` command; build.mjs bundles it)
 docs/                   specs/ (design decisions) · plans/ (implementation plans)
 ```
