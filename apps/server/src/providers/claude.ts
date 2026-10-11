@@ -149,7 +149,7 @@ export async function claudeCommands(
 
 const MAX_TOOL_OUTPUT_CHARS = 16_000;
 const NO_QUESTIONS =
-  'You are running unattended in Agent Café and cannot ask questions. Make a sensible choice, say what you assumed, and continue.';
+  'You are running unattended in Agents Café and cannot ask questions. Make a sensible choice, say what you assumed, and continue.';
 
 /** One line describing what a tool call will do. */
 export function summarizeToolInput(tool: string, input: Record<string, unknown>): string {

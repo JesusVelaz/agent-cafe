@@ -10,6 +10,6 @@ if (existsSync(envFile)) process.loadEnvFile(envFile);
 
 const config = loadConfig();
 const { url } = await startServer(config);
-console.log(`☕ Agent Café server on ${url}`);
+console.log(`☕ Agents Café server on ${url}`);
 if (config.webDir) console.log(`   serving the café from ${config.webDir}`);
 console.log(`   demo file tools read: ${config.workspaceDir}`);

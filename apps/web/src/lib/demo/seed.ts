@@ -7,7 +7,7 @@ import type { ProviderId } from '@agent-cafe/shared';
 import { DemoCafe } from './cafe';
 import { DEMO_NOTE, type DemoStep } from './script';
 
-const BASE = 'You are a helpful agent working in Agent Café. Use tools when they help. Be concise.';
+const BASE = 'You are a helpful agent working in Agents Café. Use tools when they help. Be concise.';
 
 const AGENTS: Array<{ name: string; providerId: ProviderId; model: string; spriteSeed: number; systemPrompt: string }> = [
   // Ground floor: OpenAI

@@ -75,15 +75,15 @@ async function printPairing({ via, link, firewall }: PhoneSharing) {
   }
   if (firewall) {
     console.log('   ⚠ Windows Firewall will stop your phone from loading the café.');
-    console.log(firewall.fixable ? '     To fix it, open Settings → Connections in the café, then click “Fix it”.' : '     This network is managed by your organization: ask your IT team to allow Agent Café.');
+    console.log(firewall.fixable ? '     To fix it, open Settings → Connections in the café, then click “Fix it”.' : '     This network is managed by your organization: ask your IT team to allow Agents Café.');
   }
   console.log('');
 }
 
 if (running === 'cafe') {
   // The running café keeps the pairing code it started with, so a new one would change nothing yet.
-  if (options.newToken) fail(`Agent Café is already open at ${url}. Close it (Ctrl+C in its window), then run this again to make a new pairing code.`);
-  console.log(`☕ Agent Café is already open at ${url}`);
+  if (options.newToken) fail(`Agents Café is already open at ${url}. Close it (Ctrl+C in its window), then run this again to make a new pairing code.`);
+  console.log(`☕ Agents Café is already open at ${url}`);
   if (options.host) {
     // Ask the running café to open to phones, as Settings → Connections does.
     const res = await call(`${url}/api/phone`, { method: 'POST', json: { via: options.host }, timeoutMs: 10_000 }).catch(() => undefined);
@@ -128,7 +128,7 @@ try {
   throw err;
 }
 
-console.log(`☕ Agent Café is open at ${url}`);
+console.log(`☕ Agents Café is open at ${url}`);
 console.log(`   data: ${options.dataDir}`);
 if (phone) await printPairing(phone);
 else console.log('   To use it on your phone, open Settings → Connections in the café, or start it with --host lan.');

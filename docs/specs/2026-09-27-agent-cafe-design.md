@@ -1,11 +1,11 @@
-# Agent Café — Design Spec
+# Agents Café — Design Spec
 
 **Date:** 2026-09-27
 **Status:** Agreed via design interview. Revised 2026-09-27 after the Phase 1 checkpoint (see §8).
 
 ## 1. Summary
 
-Agent Café is a local-first web app that shows AI agents as pixel-art workers in a
+Agents Café is a local-first web app that shows AI agents as pixel-art workers in a
 two-story isometric café. It is a real control panel: you define agents, send them
 tasks through the OpenAI and Anthropic APIs, and watch what they do. The café
 stays useful because position and props carry live information: where an agent
@@ -39,7 +39,7 @@ The UI must answer at a glance:
 | 13 | Layout | **Café + work board, with Focus mode** (revised). Default: café on the left; on the right a work board with the task composer, **Needs you** (stuck/failed, with actions), **Working now** (task, live step, step bar, time, cost), **Finished recently** and the queue. Selecting an agent swaps the board for that agent's detail. **Focus mode** collapses the board: the café fills the screen, only agents that need you get a callout (others on hover), a command bar sits at the bottom and the selected agent opens in a drawer. Type: Jersey 10 (display), Silkscreen (labels), IBM Plex Mono (body). |
 | 14 | Delivery | Spec → plan → **Phase 1 checkpoint** (user reviews the visuals) → Phase 2 → Phase 3. Vitest covers the orchestrator, queue, pricing and encryption. The UI is checked by eye in the browser. |
 | 16 | Themes | Five looks: day, summer (golden hour), rain, snow, night. **Auto** by default: local time picks day / golden hour / night, and winter months show snow. Manual override in the top bar, remembered per browser. **Live weather** (Open-Meteo, city set in Settings) is a later phase. |
-| 15 | Name and location | **Agent Café**, at `C:\Users\iShad\agent-cafe`, with git and one commit per phase. |
+| 15 | Name and location | **Agents Café**, at `C:\Users\iShad\agent-cafe`, with git and one commit per phase. |
 
 ## 3. Architecture
 
@@ -137,4 +137,4 @@ access or authentication, deployment, OS keychain storage, agent-to-agent delega
 
 ## 8. Revision after the Phase 1 checkpoint (2026-09-27)
 
-The user reviewed Phase 1 and a mockup page (Design artifact "Agent Café design directions"). Chosen: stacked, set-back building (option B) with more cosy detail; stairs hidden with the stairwell opening at the back-left of the upper floor; café + work board layout with Focus mode; automatic time-of-day and season themes now, live weather later. Decisions 6, 7, 8, 9, 13 and 16 above record the changes.
+The user reviewed Phase 1 and a mockup page (Design artifact "Agents Café design directions"). Chosen: stacked, set-back building (option B) with more cosy detail; stairs hidden with the stairwell opening at the back-left of the upper floor; café + work board layout with Focus mode; automatic time-of-day and season themes now, live weather later. Decisions 6, 7, 8, 9, 13 and 16 above record the changes.

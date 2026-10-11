@@ -69,7 +69,7 @@ export function ThreadMenu({ thread, onRename, className = '' }: { thread: Threa
             <p className="text-[13px] font-medium text-chalk">Delete this thread?</p>
             <p className="text-[12px] leading-snug text-chalk-dim">
               {thread.messages} {thread.messages === 1 ? 'message' : 'messages'}
-              {delegated > 0 && <> and {delegated} delegated {delegated === 1 ? 'thread' : 'threads'}</>} will be removed from Agent Café.
+              {delegated > 0 && <> and {delegated} delegated {delegated === 1 ? 'thread' : 'threads'}</>} will be removed from Agents Café.
               {working && <> This will stop the running work.</>} This can’t be undone.
             </p>
             {error && <p role="alert" className="text-[12px] text-coral">{error}</p>}

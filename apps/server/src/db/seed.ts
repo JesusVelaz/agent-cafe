@@ -13,7 +13,7 @@ interface SeedAgent {
   spriteSeed: number;
 }
 
-const BASE = 'You are a helpful agent working in Agent Café. Use tools when they help. Be concise.';
+const BASE = 'You are a helpful agent working in Agents Café. Use tools when they help. Be concise.';
 
 export const SEED_AGENTS: SeedAgent[] = [
   // Ground floor: OpenAI

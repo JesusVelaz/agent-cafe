@@ -1,5 +1,5 @@
 /**
- * The Agent Café mark: a pixel coffee cup with a face, on a 16×16 grid. Its mood is the
+ * The Agents Café mark: a pixel coffee cup with a face, on a 16×16 grid. Its mood is the
  * café's: dozing when nothing runs, awake and steaming while agents work, wide-eyed
  * with a coral dot when one needs you. One definition drives the top-bar logo, the
  * static favicon (app/icon.svg) and the live favicon.

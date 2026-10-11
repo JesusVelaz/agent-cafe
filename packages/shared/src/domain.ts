@@ -42,7 +42,7 @@ export type FailureKind =
 
 /**
  * The vendor agent that runs a floor's live tasks, signed in with the user's own
- * subscription. Agent Café never sees credentials; see docs/specs/…-subscription-harnesses.md.
+ * subscription. Agents Café never sees credentials; see docs/specs/…-subscription-harnesses.md.
  */
 export type HarnessId = 'claude-code' | 'codex';
 export const HARNESS: Record<ProviderId, {
@@ -52,7 +52,7 @@ export const HARNESS: Record<ProviderId, {
   /** The account you connect it with. */
   account: string;
   login: string;
-  /** Agent Café can run live tasks on it. */
+  /** Agents Café can run live tasks on it. */
   live: boolean;
 }> = {
   anthropic: { id: 'claude-code', name: 'Claude Code', account: 'Claude', login: 'claude auth login', live: true },
@@ -218,7 +218,7 @@ export interface HarnessCommandDTO {
   description: string;
   argumentHint: string;
   aliases?: string[];
-  /** Catalog is Agent Café's `/skills`; the other kinds come from the harness. */
+  /** Catalog is Agents Café's `/skills`; the other kinds come from the harness. */
   kind: 'catalog' | 'command' | 'skill';
 }
 

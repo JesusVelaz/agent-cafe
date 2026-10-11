@@ -4,7 +4,7 @@ Status: approved 2026-09-27. Supersedes the API-key parts of the design spec (§
 
 ## Decision
 
-Agent Café never holds credentials. Each floor is driven by a *harness*: the vendor's own
+Agents Café never holds credentials. Each floor is driven by a *harness*: the vendor's own
 coding agent, installed and signed in by the user with the vendor's own login flow.
 
 | Floor | Provider | Harness | How we drive it | Sign-in |

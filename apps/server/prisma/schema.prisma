@@ -1,4 +1,4 @@
-// Agent Café persistence. SQLite via Prisma 7 driver adapter (better-sqlite3).
+// Agents Café persistence. SQLite via Prisma 7 driver adapter (better-sqlite3).
 
 generator client {
   provider = "prisma-client"

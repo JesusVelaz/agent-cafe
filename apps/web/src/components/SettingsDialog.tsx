@@ -150,7 +150,7 @@ function Locked({ title, children }: { title: string; children: ReactNode }) {
         </span>
         <div className="flex max-w-[52ch] flex-col gap-1.5 text-[13px] leading-relaxed">
           <p className="text-chalk-dim">{children}</p>
-          <p className="text-chalk">Install Agent Café on your computer to use it.</p>
+          <p className="text-chalk">Install Agents Café on your computer to use it.</p>
         </div>
         <DownloadButton />
       </div>
@@ -379,7 +379,7 @@ function Providers({ active }: { active: boolean }) {
   return (
     <>
       <Heading title="Providers">
-        Connect the accounts your agents work with. Signing in happens in the provider’s own app; Agent Café never sees your password or tokens.
+        Connect the accounts your agents work with. Signing in happens in the provider’s own app; Agents Café never sees your password or tokens.
       </Heading>
       <div className="flex flex-col gap-3">
         <ProviderCard id="anthropic" active={active} />
