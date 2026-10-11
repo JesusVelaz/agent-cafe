@@ -3,6 +3,7 @@
 import { HARNESS, offeredModel, type AgentDTO, type ProviderId } from '@agent-cafe/shared';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { api } from '@/lib/api';
+import { DEMO_SITE } from '@/lib/demo/flag';
 import { useModels } from '@/lib/models';
 import type { ThemeChoice } from '@/lib/theme';
 import type { ThemeId } from '@/scene/atmosphere';
@@ -16,13 +17,15 @@ import { Caret, FolderIcon, HarnessIcon, Popover, Toggle } from './ui';
 
 export type Section = 'general' | 'agents' | 'providers' | 'projects' | 'connections';
 
-const SECTIONS: Array<{ id: Section; label: string }> = [
+const ALL_SECTIONS: Array<{ id: Section; label: string }> = [
   { id: 'general', label: 'General' },
   { id: 'agents', label: 'Agents' },
   { id: 'providers', label: 'Providers' },
   { id: 'projects', label: 'Projects' },
   { id: 'connections', label: 'Connections' },
 ];
+/** The demo site has no providers, folders or phones to set up. */
+const SECTIONS = DEMO_SITE ? ALL_SECTIONS.filter((s) => s.id === 'general' || s.id === 'agents') : ALL_SECTIONS;
 
 /** App settings in a modal: general, providers (connect Claude / ChatGPT, floor modes), projects and connections (your phone). */
 export function SettingsDialog({

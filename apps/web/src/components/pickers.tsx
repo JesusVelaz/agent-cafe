@@ -3,6 +3,7 @@
 import { HARNESS, PROVIDER_IDS, offeredModel, type AgentPermission, type ProviderId } from '@agent-cafe/shared';
 import { useId, useState } from 'react';
 import { api } from '@/lib/api';
+import { DEMO_SITE } from '@/lib/demo/flag';
 import { FLOOR_NAME } from '@/lib/format';
 import { modelLabel, useModels, useModelOptions } from '@/lib/models';
 import { useCafe } from '@/store/cafe';
@@ -161,7 +162,7 @@ export function ProjectPicker({ projectId, onPick, required }: { projectId: stri
                     <span className="block truncate font-mono text-[11px] text-chalk-faint">{p.path}</span>
                   </span>
                 </button>
-                <button
+                {!DEMO_SITE && <button
                   type="button"
                   aria-label={`Remove ${p.name} from the list`}
                   title="Remove from the list (the folder is untouched)"
@@ -172,7 +173,7 @@ export function ProjectPicker({ projectId, onPick, required }: { projectId: stri
                   className="mr-1 grid size-7 shrink-0 place-items-center rounded-md text-chalk-faint opacity-0 hover:bg-slate-line hover:text-chalk focus:opacity-100 group-hover:opacity-100"
                 >
                   ×
-                </button>
+                </button>}
               </div>
             ))}
             {!required && projectId && (
@@ -180,7 +181,7 @@ export function ProjectPicker({ projectId, onPick, required }: { projectId: stri
                 No project (demo runs only)
               </button>
             )}
-            <button
+            {!DEMO_SITE && <button
               type="button"
               onClick={() => {
                 close();
@@ -190,7 +191,7 @@ export function ProjectPicker({ projectId, onPick, required }: { projectId: stri
             >
               <span aria-hidden className="grid size-4 place-items-center text-[15px] leading-none">+</span>
               Add project
-            </button>
+            </button>}
           </div>
         )}
       </Popover>

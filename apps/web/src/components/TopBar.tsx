@@ -3,6 +3,7 @@
 import { DEFAULTS } from '@agent-cafe/shared';
 import { useEffect, useState } from 'react';
 import { cupDataUrl, type Mood } from '@/lib/cup';
+import { DEMO_SITE, REPO_URL } from '@/lib/demo/flag';
 import type { ThemeChoice } from '@/lib/theme';
 import { useNow } from '@/lib/useNow';
 import type { ThemeId } from '@/scene/atmosphere';
@@ -55,6 +56,17 @@ export function TopBar({ themeChoice, theme, onTheme }: Props) {
         <h1 className="font-display text-[30px] leading-none">
           Agent <span className="text-crema">Café</span>
         </h1>
+        {DEMO_SITE && (
+          <a
+            href={REPO_URL}
+            target="_blank"
+            rel="noreferrer"
+            title="An online demo: the agents run scripted tasks. Get Agent Café to run real Claude Code and Codex agents."
+            className="rounded-full border border-slate-line px-2 py-0.5 text-[11px] text-chalk-dim hover:bg-slate hover:text-chalk"
+          >
+            Demo<span className="hidden sm:inline"> · Get Agent Café</span>
+          </a>
+        )}
         {conn !== 'open' && (
           <span className={`text-[11px] ${conn === 'connecting' ? 'text-amber' : 'text-coral'}`}>{conn === 'connecting' ? 'Connecting…' : 'Server offline'}</span>
         )}
@@ -85,7 +97,7 @@ export function TopBar({ themeChoice, theme, onTheme }: Props) {
         theme={theme}
         onTheme={onTheme}
       />
-      <ConnectPrompt onConnect={() => setSettings('providers')} />
+      {!DEMO_SITE && <ConnectPrompt onConnect={() => setSettings('providers')} />}
     </header>
   );
 }
