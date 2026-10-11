@@ -1,6 +1,6 @@
 {
   "name": "agent-cafe",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A pixel-art café where you watch your Claude Code and Codex agents work, in your browser.",
   "type": "module",
   "bin": { "agent-cafe": "dist/cli.mjs" },

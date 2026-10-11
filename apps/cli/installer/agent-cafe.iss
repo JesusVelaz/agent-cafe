@@ -1,5 +1,5 @@
 ﻿; Windows installer for Agents Café, built with Inno Setup 6 by the release workflow:
-;   iscc /DAppVersion=0.1.0 /DSourceDir=..\release\agent-cafe /O..\release agent-cafe.iss
+;   iscc /DAppVersion=0.2.0 /DSourceDir=..\release\agent-cafe /O..\release agent-cafe.iss
 ; SourceDir is the folder `pnpm --filter ./apps/cli standalone` builds. People get Start menu
 ; (and optionally desktop) shortcuts, no Node or pnpm needed. Installing asks for admin once so it
 ; can also let phones on the home network reach the café (Private networks, local subnet only).
