@@ -3,7 +3,7 @@
 import { DEFAULTS } from '@agent-cafe/shared';
 import { useEffect, useState } from 'react';
 import { cupDataUrl, type Mood } from '@/lib/cup';
-import { DEMO_SITE, REPO_URL } from '@/lib/demo/flag';
+import { DEMO_SITE } from '@/lib/demo/flag';
 import type { ThemeChoice } from '@/lib/theme';
 import { useNow } from '@/lib/useNow';
 import type { ThemeId } from '@/scene/atmosphere';
@@ -12,6 +12,7 @@ import { needsAttention } from '@/store/reduce';
 import { BrewingPill } from './BrewingPill';
 import { ConnectPrompt } from './ConnectPrompt';
 import { CupIcon } from './CupIcon';
+import { InstallDialog } from './InstallDialog';
 import { SettingsDialog, type Section } from './SettingsDialog';
 
 interface Props {
@@ -31,6 +32,7 @@ export function TopBar({ themeChoice, theme, onTheme }: Props) {
   const mood: Mood = needYou ? 'alert' : working ? 'working' : 'quiet';
   const conn = state.connection;
   const [settings, setSettings] = useState<Section | null>(null);
+  const [installing, setInstalling] = useState(false);
   // A live floor that can't run (signed out, not installed) is worth a dot on the gear.
   const providerAttention = Object.values(state.providers).some((p) => p && p.mode === 'live' && !p.liveAvailable && p.connection.state !== 'checking');
 
@@ -53,19 +55,16 @@ export function TopBar({ themeChoice, theme, onTheme }: Props) {
         <span data-cafe-logo className="flex">
           <CupIcon size={28} mood={mood} />
         </span>
-        <h1 className="font-display text-[30px] leading-none">
+        <h1 className="whitespace-nowrap font-display text-[30px] leading-none">
           Agent <span className="text-crema">Café</span>
         </h1>
         {DEMO_SITE && (
-          <a
-            href={REPO_URL}
-            target="_blank"
-            rel="noreferrer"
-            title="An online demo: the agents run scripted tasks. Get Agent Café to run real Claude Code and Codex agents."
-            className="rounded-full border border-slate-line px-2 py-0.5 text-[11px] text-chalk-dim hover:bg-slate hover:text-chalk"
+          <span
+            title="An online demo: the agents run scripted tasks, and nothing is saved."
+            className="rounded-full border border-crema/50 px-2 py-0.5 font-display text-[13px] uppercase leading-none tracking-wider text-crema"
           >
-            Demo<span className="hidden sm:inline"> · Get Agent Café</span>
-          </a>
+            Demo
+          </span>
         )}
         {conn !== 'open' && (
           <span className={`text-[11px] ${conn === 'connecting' ? 'text-amber' : 'text-coral'}`}>{conn === 'connecting' ? 'Connecting…' : 'Server offline'}</span>
@@ -74,6 +73,15 @@ export function TopBar({ themeChoice, theme, onTheme }: Props) {
 
       <div className="ml-auto flex items-center gap-3">
         <BrewingPill working={working} queued={queued} needYou={needYou} onNeeds={showNeeds} />
+        {DEMO_SITE && (
+          <button
+            type="button"
+            onClick={() => setInstalling(true)}
+            className="flex h-9 items-center rounded-lg bg-accent px-3 text-[13px] font-medium text-white hover:bg-[#7f9bff]"
+          >
+            Get<span className="hidden sm:inline">&nbsp;Agent Café</span>
+          </button>
+        )}
         <button
           type="button"
           onClick={() => setSettings('general')}
@@ -85,7 +93,8 @@ export function TopBar({ themeChoice, theme, onTheme }: Props) {
             <circle cx="8" cy="8" r="2.2" />
             <path d="M8 1.5v1.7M8 12.8v1.7M1.5 8h1.7M12.8 8h1.7M3.4 3.4l1.2 1.2M11.4 11.4l1.2 1.2M3.4 12.6l1.2-1.2M11.4 4.6l1.2-1.2" />
           </svg>
-          Settings
+          {/* The demo's install button needs the room on phones. */}
+          <span className={DEMO_SITE ? 'hidden sm:inline' : undefined}>Settings</span>
           {providerAttention && <span aria-hidden className="absolute -right-1 -top-1 size-2.5 rounded-full bg-coral shadow-[0_0_0_2px_var(--color-night-2)]" />}
         </button>
       </div>
@@ -97,6 +106,7 @@ export function TopBar({ themeChoice, theme, onTheme }: Props) {
         theme={theme}
         onTheme={onTheme}
       />
+      {DEMO_SITE && <InstallDialog open={installing} onClose={() => setInstalling(false)} />}
       {!DEMO_SITE && <ConnectPrompt onConnect={() => setSettings('providers')} />}
     </header>
   );
