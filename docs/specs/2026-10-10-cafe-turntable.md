@@ -6,7 +6,7 @@ Prototyped in a throwaway copy of the renderer first (an artifact with the real 
 
 ## Experience
 
-- **Turning.** Drag sideways on the café to spin it; on release it eases onto the nearest of four angles (a 5 px threshold keeps drags apart from clicks). Q / E turn it a quarter when focus isn't in a text field. There are no on-screen turn buttons: the stage stays clear. The angle is remembered across reloads. Reduced motion snaps instead of easing.
+- **Turning.** Drag sideways on the café to spin it (the grab cursor and the drag start only on the café itself, not the sky around it); on release it eases onto the nearest of four angles (a 5 px threshold keeps drags apart from clicks). Q / E turn it a quarter when focus isn't in a text field. There are no on-screen turn buttons: the stage stays clear. The angle is remembered across reloads. Reduced motion snaps instead of easing.
 - **What turns.** Everything in the world: building, both floors, furniture, street, cars, walkers, the barista, agents, cats. Sky, clouds, weather, lighting grade, name tags, bubbles and the floor signs stay screen-fixed.
 - **Walls follow the camera.** The two far sides of the building are drawn; the two near sides are cut away (exactly today's open diorama). The two sides nobody could see before get their own decor: the street side is a shop front (big windows and a door), the patio side has windows, a print, a sconce and a clock. Walls fade in and out during a turn.
 - **The loft fades** when it is on your side of the building: solid from today's angle, about 77 % from the side views, 50 % when it is the nearest corner. Agents and cats upstairs are drawn solid on top.

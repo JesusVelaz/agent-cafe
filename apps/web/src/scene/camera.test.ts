@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { cats, crew } from './fixtures';
-import { renderScene, SCENE_H, SCENE_W, loftAlpha, wallAlpha } from './building';
+import { inside, renderScene, SCENE_H, SCENE_W, loftAlpha, wallAlpha } from './building';
 import { depth, faceVisible, iso, quarter, setCameraAngle, turn, unturn, viewFace } from './iso';
 import { Raster } from './raster';
 
@@ -103,6 +103,18 @@ describe('renderScene', () => {
       const hits = renderScene(new Raster(SCENE_W, SCENE_H), crew, { theme: 'day', t: 3, cats, angle });
       expect(hits.agents.map((h) => h.id).sort()).toEqual(crew.map((a) => a.id).sort());
       expect(hits.cats.map((h) => h.id).sort()).toEqual(cats.map((c) => c.id).sort());
+    }
+  });
+
+  it("outlines the café on screen from any side, and leaves the sky out", () => {
+    for (const angle of [0, Q, Math.PI, -Q, Q / 2]) {
+      const { outline, agents } = renderScene(new Raster(SCENE_W, SCENE_H), crew, { theme: 'day', t: 3, cats, angle });
+      setCameraAngle(angle);
+      const [cx, cy] = iso(222, 145)(10, 8.5); // the plot's centre
+      expect(inside(outline, cx, cy)).toBe(true);
+      for (const a of agents) expect(inside(outline, a.headX, a.headY)).toBe(true);
+      expect(inside(outline, 2, 2)).toBe(false);
+      expect(inside(outline, SCENE_W - 2, 2)).toBe(false);
     }
   });
 

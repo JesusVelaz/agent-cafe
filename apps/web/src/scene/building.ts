@@ -24,7 +24,7 @@ import { backdrop, frontWeather, grade, type ThemeId } from './atmosphere';
 import { cloudShadows, drawSky, streetLife } from './ambient';
 import { barista } from './barista';
 import { text, textW } from './font';
-import { box, depth, facing, faceVisible, iso, setCameraAngle, viewFace } from './iso';
+import { box, depth, facing, faceVisible, iso, setCameraAngle, viewFace, type Proj } from './iso';
 import { plotOffset, SCENE_H, SCENE_W } from './frame';
 import { drawStreet } from './outdoor';
 import { K } from './palette';
@@ -32,7 +32,7 @@ import {
   chairBackFront, drawDecor, drawProp, floorTiles, railing, roofPlanter,
   SIDES, stringLights, wallCap, wallRun, type DrawCtx,
 } from './props';
-import { Raster } from './raster';
+import { Raster, type Pt2 } from './raster';
 import { outfitFor } from './avatar';
 import { agentLook, agentSprite, CAT, CAT_FURS, ICON_PAL, ICONS, type AgentFrame, type CatFrame, type IconName, type Mood } from './sprites';
 
@@ -75,6 +75,52 @@ export interface SceneOptions {
 export interface SceneHits {
   agents: AgentHit[];
   cats: AgentHit[];
+  /** The café's silhouette on screen (a convex outline in scene px): where it can be grabbed and turned. */
+  outline: Pt2[];
+}
+
+/** Is a point (scene px) inside a convex outline? */
+export function inside(outline: readonly Pt2[], x: number, y: number): boolean {
+  if (outline.length < 3) return false;
+  let sign = 0;
+  for (let i = 0; i < outline.length; i++) {
+    const [ax, ay] = outline[i]!, [bx, by] = outline[(i + 1) % outline.length]!;
+    const cross = (bx - ax) * (y - ay) - (by - ay) * (x - ax);
+    if (cross === 0) continue;
+    if (sign === 0) sign = Math.sign(cross);
+    else if (Math.sign(cross) !== sign) return false;
+  }
+  return true;
+}
+
+/** Convex hull (monotone chain), counter-clockwise on screen. */
+function hull(pts: Pt2[]): Pt2[] {
+  const p = [...pts].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cross = (o: Pt2, a: Pt2, b: Pt2) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const half = (list: Pt2[]) => {
+    const h: Pt2[] = [];
+    for (const q of list) {
+      while (h.length >= 2 && cross(h[h.length - 2]!, h[h.length - 1]!, q) <= 0) h.pop();
+      h.push(q);
+    }
+    h.pop();
+    return h;
+  };
+  return [...half(p), ...half(p.reverse())];
+}
+
+/** The café's outline from the current camera: the plot's slab, the building, and the tall things on the street. */
+function outlineOf(P: Proj): Pt2[] {
+  const { PW, PD, W, D, H1, UW, UD, H2 } = BUILDING;
+  const rect = (x0: number, y0: number, x1: number, y1: number, z: number) => [P(x0, y0, z), P(x1, y0, z), P(x1, y1, z), P(x0, y1, z)];
+  return hull([
+    ...rect(-0.28, -0.28, PW, PD, -12),
+    ...rect(-0.28, -0.28, PW, PD, 0),
+    ...rect(0, 0, W, D, H1),
+    ...rect(0, 0, UW, UD, H1 + H2),
+    // Lampposts and trees stand about this tall.
+    ...OUTDOOR.map((p) => P(p.x + p.w / 2, p.y + p.d / 2, 50)),
+  ]);
 }
 
 /** An agent's (or cat's) sprite on screen. */
@@ -300,7 +346,7 @@ export function renderScene(R: Raster, agents: SceneAgent[], o: SceneOptions): S
     R.rect(q[0] - w / 2, q[1], w, 9, K.coral);
     text(R, sign, q[0] - w / 2 + 4, q[1] + 2, '#ffffff');
   }
-  return { agents: hits, cats: catHits };
+  return { agents: hits, cats: catHits, outline: outlineOf(P) };
 }
 
 const HEART = [[-1, 0], [1, 0], [-2, 1], [-1, 1], [0, 1], [1, 1], [2, 1], [-1, 2], [0, 2], [1, 2], [0, 3]] as const;

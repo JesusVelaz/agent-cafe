@@ -16,7 +16,8 @@ import { Cats } from '@/sim/cats';
 import { World } from '@/sim/world';
 import type { CafeData } from '@/store/reduce';
 import type { ThemeId } from './atmosphere';
-import { renderScene, SCENE_H, SCENE_W, type AgentHit, type SceneAgent } from './building';
+import { inside, renderScene, SCENE_H, SCENE_W, type AgentHit, type SceneAgent } from './building';
+import type { Pt2 } from './raster';
 import { Raster } from './raster';
 
 export { SCENE_H, SCENE_W, type AgentHit };
@@ -66,6 +67,8 @@ export class CafeRenderer {
   private readonly t0 = Date.now();
   private hits: AgentHit[] = [];
   private catHits: AgentHit[] = [];
+  /** The café's outline on screen this frame: only there does the cursor offer a grab. */
+  private outline: Pt2[] = [];
   private hovered: string | null = null;
   private pointer: { x: number; y: number } | null = null;
   /** When each cat was last petted, in scene seconds. */
@@ -91,7 +94,6 @@ export class CafeRenderer {
     canvas.setAttribute('aria-label', 'The café: Anthropic agents upstairs, OpenAI agents in the café below. Drag sideways to turn it.');
     // Sideways drags turn the café; vertical swipes still scroll the page on touch screens.
     canvas.style.touchAction = 'pan-y';
-    canvas.style.cursor = 'grab';
     canvas.addEventListener('pointerdown', this.onDown);
     canvas.addEventListener('pointermove', this.onMove);
     canvas.addEventListener('pointerup', this.onUp);
@@ -208,6 +210,7 @@ export class CafeRenderer {
     });
     this.hits = hits.agents;
     this.catHits = hits.cats;
+    this.outline = hits.outline;
     this.ctx?.putImageData(new ImageData(this.raster.d, this.raster.w, this.raster.h), 0, 0);
     this.hooks.frame?.(this.hits);
     this.updateHover();
@@ -234,7 +237,8 @@ export class CafeRenderer {
 
   private updateHover() {
     const t = this.pointer && !this.drag?.turning ? this.hitAt(this.pointer) : undefined;
-    if (this.canvas) this.canvas.style.cursor = this.drag?.turning ? 'grabbing' : t ? 'pointer' : 'grab';
+    const onCafe = Boolean(this.pointer) && inside(this.outline, this.pointer!.x, this.pointer!.y);
+    if (this.canvas) this.canvas.style.cursor = this.drag?.turning ? 'grabbing' : t ? 'pointer' : onCafe ? 'grab' : 'default';
     const h = t?.kind === 'agent' ? t.hit : undefined;
     if (h) this.hooks.hover({ id: h.id, x: h.headX, y: h.headY });
     else if (this.hovered) this.hooks.hover(null);
@@ -242,9 +246,12 @@ export class CafeRenderer {
   }
 
   private onDown = (e: PointerEvent) => {
-    if (e.button !== 0 || this.angle === null) return;
-    this.drag = { x: e.clientX, angle: this.angle, turning: false };
     this.swallowClick = false;
+    if (e.button !== 0 || this.angle === null) return;
+    // Only the café itself can be grabbed; the sky around it can't.
+    const p = this.toScene(e);
+    if (!inside(this.outline, p.x, p.y)) return;
+    this.drag = { x: e.clientX, angle: this.angle, turning: false };
   };
 
   private onMove = (e: PointerEvent) => {

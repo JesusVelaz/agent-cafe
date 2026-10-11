@@ -106,6 +106,15 @@ describe('turning the café', () => {
     expect(r.cameraAngle).toBeCloseTo(Q, 6);
   });
 
+  it('only turns when the drag starts on the café, not the sky around it', () => {
+    vi.advanceTimersByTime(100);
+    on.pointerdown!({ button: 0, clientX: 4, clientY: 4 }); // the top-left corner: sky
+    on.pointermove!({ clientX: 4 + 200, clientY: 4, pointerId: 1 });
+    expect(r.turning).toBe(false);
+    on.pointerup!({});
+    expect(turned).toEqual([]);
+  });
+
   it('treats a press that barely moves as a click, not a turn', () => {
     on.pointerdown!({ button: 0, clientX: 300, clientY: 200 });
     on.pointermove!({ clientX: 303, clientY: 201, pointerId: 1 });
