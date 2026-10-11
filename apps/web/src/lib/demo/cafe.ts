@@ -196,7 +196,7 @@ export class DemoCafe {
   }
 
   addProject(name: string, path: string): ProjectDTO {
-    const project: ProjectDTO = { id: this.newId('project'), name, path, createdAt: new Date().toISOString() };
+    const project: ProjectDTO = { id: this.newId('project'), name, path, createdAt: new Date().toISOString(), allowed: [] };
     this.projects.set(project.id, project);
     return project;
   }
@@ -312,10 +312,10 @@ export class DemoCafe {
     });
   }
 
-  answerApproval(taskId: string, approvalId: string, decision: 'allow' | 'deny'): TaskDTO {
+  answerApproval(taskId: string, approvalId: string, decision: 'allow' | 'deny' | 'always'): TaskDTO {
     const pending = this.approvals.get(approvalId);
     if (!pending || pending.taskId !== taskId) throw new ApiError('That request was already answered or has expired.', 409);
-    pending.settle(decision);
+    pending.settle(decision === 'deny' ? 'deny' : 'allow');
     return this.tasks.get(taskId)!;
   }
 
@@ -480,8 +480,9 @@ export class DemoCafe {
   }
 
   /** Parks the run on an Allow / Deny card until answered (or the task is stopped). */
-  private ask(taskId: string, ask: Omit<ApprovalDTO, 'id' | 'requestedAt'>, signal: AbortSignal): Promise<'allow' | 'deny'> {
-    const approval: ApprovalDTO = { id: this.newId('approval'), ...ask, requestedAt: new Date().toISOString() };
+  private ask(taskId: string, ask: Omit<ApprovalDTO, 'id' | 'requestedAt' | 'rememberable'>, signal: AbortSignal): Promise<'allow' | 'deny'> {
+    // Nothing is saved in the demo, so there's no "Always allow".
+    const approval: ApprovalDTO = { id: this.newId('approval'), ...ask, rememberable: false, requestedAt: new Date().toISOString() };
     return new Promise((resolve) => {
       const settle = (decision: 'allow' | 'deny') => {
         signal.removeEventListener('abort', onAbort);
@@ -571,7 +572,7 @@ export class DemoCafe {
       this.record(id, { kind: 'status', status: 'tool_wait' }, at(50));
       this.record(id, { kind: 'tool.start', step: n, callId, tool: tool.name, input: tool.input }, at(50));
       if (tool.ask) {
-        const approval: ApprovalDTO = { id: this.newId('approval'), tool: tool.name, summary: tool.ask.summary, reason: tool.ask.reason, requestedAt: iso(t) };
+        const approval: ApprovalDTO = { id: this.newId('approval'), tool: tool.name, summary: tool.ask.summary, reason: tool.ask.reason, rememberable: false, requestedAt: iso(t) };
         this.record(id, { kind: 'approval.request', approval }, at(0));
         this.record(id, { kind: 'approval.resolved', approvalId: approval.id, decision: 'allow' }, at(6000));
       }

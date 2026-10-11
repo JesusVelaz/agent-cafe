@@ -1,4 +1,5 @@
 import type {
+  AllowedActionDTO,
   ProjectDTO,
   AgentDTO,
   AgentPermission,
@@ -67,7 +68,11 @@ export function toTaskDTO(t: Task): TaskDTO {
 }
 
 export function toProjectDTO(p: Project): ProjectDTO {
-  return { id: p.id, name: p.name, path: p.path, createdAt: p.createdAt.toISOString() };
+  return { id: p.id, name: p.name, path: p.path, createdAt: p.createdAt.toISOString(), allowed: allowedActions(p) };
+}
+
+export function allowedActions(p: Pick<Project, 'allowedActions'>): AllowedActionDTO[] {
+  return JSON.parse(p.allowedActions) as AllowedActionDTO[];
 }
 
 export function toTaskEventDTO(e: TaskEvent): TaskEventDTO {

@@ -159,7 +159,7 @@ describe('HTTP API', () => {
   });
 
   it('adds projects only for folders that exist, named after the folder', async () => {
-    const { app } = await setup();
+    const { app, db } = await setup();
     const post = (payload: object) => app.inject({ method: 'POST', url: '/api/projects', payload });
     expect((await post({ path: 'relative/path' })).statusCode).toBe(400);
     expect((await post({ path: join(tmpdir(), 'no-such-folder-cafe') })).statusCode).toBe(400);
@@ -169,7 +169,10 @@ describe('HTTP API', () => {
     expect(created.json()).toMatchObject({ path: dir, name: basename(dir) });
     expect((await post({ path: dir })).json().id).toBe(created.json().id); // same folder, same project
     const renamed = await app.inject({ method: 'PATCH', url: `/api/projects/${created.json().id}`, payload: { name: 'Café' } });
-    expect(renamed.json().name).toBe('Café');
+    expect(renamed.json()).toMatchObject({ name: 'Café', allowed: [] });
+    await db.project.update({ where: { id: created.json().id }, data: { allowedActions: JSON.stringify([{ tool: 'Bash', match: 'npm test' }, { tool: 'Bash', match: 'ls' }]) } });
+    const forgot = await app.inject({ method: 'PATCH', url: `/api/projects/${created.json().id}`, payload: { forget: { tool: 'Bash', match: 'npm test' } } });
+    expect(forgot.json()).toMatchObject({ name: 'Café', allowed: [{ tool: 'Bash', match: 'ls' }] });
     expect((await app.inject({ method: 'DELETE', url: `/api/projects/${created.json().id}` })).statusCode).toBe(204);
     expect((await app.inject('/api/projects')).json()).toEqual([]);
   });

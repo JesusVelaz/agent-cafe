@@ -112,4 +112,6 @@ model Project {
   name      String
   path      String   @unique
   createdAt DateTime @default(now())
+  /// JSON AllowedActionDTO[]: approvals answered "Always allow" here.
+  allowedActions String @default("[]")
 }

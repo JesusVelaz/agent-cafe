@@ -4,7 +4,7 @@ import { basename, join } from 'node:path';
 import { promisify } from 'node:util';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
-import { toProjectDTO } from '../db/mappers.js';
+import { allowedActions, toProjectDTO } from '../db/mappers.js';
 import { OrchestratorError } from '../orchestrator/orchestrator.js';
 import type { Services } from '../services.js';
 import { expandPath } from './folders.js';
@@ -56,7 +56,13 @@ const cloneBody = z
 export const repoName = (url: string) => (url.replace(/[/\\]+$/, '').split(/[/:]/).pop() ?? 'repo').replace(/\.git$/i, '') || 'repo';
 
 const createBody = z.object({ path: folder, name: z.string().trim().max(40).optional() }).strict();
-const patchBody = z.object({ name: z.string().trim().min(1).max(40) }).strict();
+const patchBody = z
+  .object({
+    name: z.string().trim().min(1).max(40).optional(),
+    /** Stop always allowing this: it asks again. */
+    forget: z.object({ tool: z.string(), match: z.string() }).strict().optional(),
+  })
+  .strict();
 
 /** Projects: folders agents work in, added once and then picked by name. */
 export const projectRoutes =
@@ -99,8 +105,15 @@ export const projectRoutes =
 
     app.patch<{ Params: { id: string } }>('/api/projects/:id', async (req) => {
       const b = patchBody.parse(req.body);
-      if (!(await db.project.findUnique({ where: { id: req.params.id } }))) throw new OrchestratorError('Project not found.', 'not_found');
-      const project = toProjectDTO(await db.project.update({ where: { id: req.params.id }, data: { name: b.name } }));
+      const current = await db.project.findUnique({ where: { id: req.params.id } });
+      if (!current) throw new OrchestratorError('Project not found.', 'not_found');
+      const allowed = b.forget && allowedActions(current).filter((a) => a.tool !== b.forget!.tool || a.match !== b.forget!.match);
+      const project = toProjectDTO(
+        await db.project.update({
+          where: { id: req.params.id },
+          data: { ...(b.name ? { name: b.name } : {}), ...(allowed ? { allowedActions: JSON.stringify(allowed) } : {}) },
+        }),
+      );
       bus.publish({ type: 'project.upserted', project });
       return project;
     });

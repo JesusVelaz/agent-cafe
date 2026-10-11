@@ -205,8 +205,8 @@ describe('runCodexTask', () => {
       },
     });
     expect(asks).toEqual([
-      { tool: 'shell', summary: 'npm install', reason: 'needs network' },
-      { tool: 'shell', summary: 'rm -rf build', reason: null },
+      { tool: 'shell', summary: 'npm install', reason: 'needs network', match: 'npm install' },
+      { tool: 'shell', summary: 'rm -rf build', reason: null, match: 'rm -rf build' },
     ]);
     expect(replies).toEqual([{ decision: 'accept' }, { decision: 'decline' }]);
     expect(outcome.status).toBe('completed');

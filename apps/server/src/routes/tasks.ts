@@ -18,7 +18,7 @@ const createBody = z
   })
   .refine((b) => b.agentId || b.providerId, { message: 'Pick an agent or a provider.' });
 
-const approvalBody = z.object({ decision: z.enum(['allow', 'deny']) }).strict();
+const approvalBody = z.object({ decision: z.enum(['allow', 'deny', 'always']) }).strict();
 
 const listQuery = z.object({
   limit: z.coerce.number().int().min(1).max(500).default(50),

@@ -75,7 +75,7 @@ describe('deriveActivity', () => {
     };
     expect(deriveActivity(input)).toEqual({ kind: 'tool', tool: 'Bash' });
     expect(deriveActivity({ ...input, activeTask: { ...live, pendingApproval: {
-      id: 'ap', tool: 'Bash', summary: 'npm test', reason: null, requestedAt: '2026-09-27T10:00:01Z',
+      id: 'ap', tool: 'Bash', summary: 'npm test', reason: null, rememberable: true, requestedAt: '2026-09-27T10:00:01Z',
     } } })).toEqual({ kind: 'approval', tool: 'Bash' });
   });
 

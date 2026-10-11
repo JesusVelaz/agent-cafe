@@ -22,7 +22,7 @@ import {
   type TaskEventDTO,
 } from '@agent-cafe/shared';
 import type { Db } from '../db/client.js';
-import { toAgentDTO, toProjectDTO, toTaskDTO, toTaskEventDTO } from '../db/mappers.js';
+import { allowedActions, toAgentDTO, toProjectDTO, toTaskDTO, toTaskEventDTO } from '../db/mappers.js';
 import { threadRootId, threadTaskIds, threadWithDelegations } from '../db/threads.js';
 import type { EventBus } from '../events/bus.js';
 import type { Task } from '../generated/prisma/client.js';
@@ -83,6 +83,9 @@ export interface OrchestratorDeps {
 
 interface PendingApproval {
   taskId: string;
+  projectId: string;
+  ask: ApprovalAsk;
+  emit: (e: TaskEventData) => void;
   resolve: (d: 'allow' | 'deny') => void;
 }
 
@@ -102,6 +105,8 @@ export class Orchestrator {
   private readonly closedTasks = new Set<string>();
   private readonly seq = new Map<string, number>();
   private readonly approvals = new Map<string, PendingApproval>();
+  /** "Always allow" writes, one at a time, so two at once can't drop each other. */
+  private allowWrites: Promise<unknown> = Promise.resolve();
   private stopped = false;
   private recovering = false;
   private readonly collaboration: Collaboration;
@@ -249,13 +254,24 @@ export class Orchestrator {
     return toTaskDTO(await this.deps.db.task.findUniqueOrThrow({ where: { id: taskId } }));
   }
 
-  /** The user's answer to a harness permission prompt. */
-  async resolveApproval(taskId: string, approvalId: string, decision: 'allow' | 'deny'): Promise<TaskDTO> {
+  /**
+   * The user's answer to a harness permission prompt. "always" allows it and remembers
+   * it for the task's project, so the same action there doesn't ask again.
+   */
+  async resolveApproval(taskId: string, approvalId: string, decision: 'allow' | 'deny' | 'always'): Promise<TaskDTO> {
     const pending = this.approvals.get(approvalId);
     if (!pending || pending.taskId !== taskId) {
       throw new OrchestratorError('That request was already answered or has expired.', 'conflict');
     }
-    pending.resolve(decision);
+    if (decision === 'always') {
+      const { match, tool } = pending.ask;
+      if (match === undefined) throw new OrchestratorError("This request can't be always allowed. Allow it this once instead.", 'invalid');
+      await this.allowAlways(pending.projectId, { tool, match });
+      // Cancelled while saving: the ask is already settled.
+      if (this.approvals.get(approvalId) !== pending) throw new OrchestratorError('That request was already answered or has expired.', 'conflict');
+      pending.emit({ kind: 'log', level: 'info', message: `Always allowed in this project: ${tool} ${pending.ask.summary}` });
+    }
+    pending.resolve(decision === 'deny' ? 'deny' : 'allow');
     return toTaskDTO(await this.deps.db.task.findUniqueOrThrow({ where: { id: taskId } }));
   }
 
@@ -549,7 +565,7 @@ export class Orchestrator {
           },
           signal: ctrl.signal,
           emit,
-          approve: (ask, signal) => this.askUser(task.id, ask, emit, signal),
+          approve: (ask, signal) => this.askUser(task.id, project!.id, ask, emit, signal),
           onUsage: (usage) => {
             if (!providers.harnesses.recordUsage(providerId, usage)) return;
             void providers.status(providerId).then((provider) => this.deps.bus.publish({ type: 'provider.updated', provider }));
@@ -580,9 +596,20 @@ export class Orchestrator {
     return `[${header}]\n${exchangeMessage(dto)}${task.exchangeKind === 'result' ? '\n\nContinue the original request using this result. Other delegated tasks may still be pending.' : ''}`;
   }
 
-  /** Parks a harness permission prompt until the user answers (or the task is cancelled). */
-  private askUser(taskId: string, ask: ApprovalAsk, emit: (e: TaskEventData) => void, signal: AbortSignal): Promise<'allow' | 'deny'> {
-    const approval: ApprovalDTO = { id: randomUUID(), ...ask, requestedAt: new Date().toISOString() };
+  /**
+   * Parks a harness permission prompt until the user answers (or the task is cancelled),
+   * unless the user chose "Always allow" for exactly this in the project.
+   */
+  private async askUser(taskId: string, projectId: string, ask: ApprovalAsk, emit: (e: TaskEventData) => void, signal: AbortSignal): Promise<'allow' | 'deny'> {
+    if (ask.match !== undefined) {
+      const project = await this.deps.db.project.findUnique({ where: { id: projectId } });
+      if (project && allowedActions(project).some((a) => a.tool === ask.tool && a.match === ask.match)) {
+        emit({ kind: 'log', level: 'info', message: `Allowed without asking (always allowed in this project): ${ask.tool} ${ask.summary}` });
+        return 'allow';
+      }
+    }
+    const { match, ...shown } = ask;
+    const approval: ApprovalDTO = { id: randomUUID(), ...shown, rememberable: match !== undefined, requestedAt: new Date().toISOString() };
     return new Promise((resolve) => {
       const settle = (decision: 'allow' | 'deny') => {
         signal.removeEventListener('abort', onAbort);
@@ -593,9 +620,23 @@ export class Orchestrator {
       const onAbort = () => settle('deny');
       if (signal.aborted) return settle('deny');
       signal.addEventListener('abort', onAbort, { once: true });
-      this.approvals.set(approval.id, { taskId, resolve: settle });
+      this.approvals.set(approval.id, { taskId, projectId, ask, emit, resolve: settle });
       emit({ kind: 'approval.request', approval });
     });
+  }
+
+  private allowAlways(projectId: string, action: { tool: string; match: string }): Promise<void> {
+    const write = this.allowWrites.then(async () => {
+      const { db, bus } = this.deps;
+      const project = await db.project.findUnique({ where: { id: projectId } });
+      if (!project) throw new OrchestratorError('That project no longer exists.', 'not_found');
+      const allowed = allowedActions(project);
+      if (allowed.some((a) => a.tool === action.tool && a.match === action.match)) return;
+      const updated = await db.project.update({ where: { id: projectId }, data: { allowedActions: JSON.stringify([...allowed, action]) } });
+      bus.publish({ type: 'project.upserted', project: toProjectDTO(updated) });
+    });
+    this.allowWrites = write.catch(() => {});
+    return write;
   }
 
   private async onRunEvent(taskId: string, agentId: string, e: TaskEventData): Promise<void> {
