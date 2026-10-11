@@ -252,17 +252,18 @@ export class CafeRenderer {
     const p = this.toScene(e);
     if (!inside(this.outline, p.x, p.y)) return;
     this.drag = { x: e.clientX, angle: this.angle, turning: false };
+    // Capture now, not once the drag passes the slop: a release off the canvas still has to end it.
+    this.canvas?.setPointerCapture?.(e.pointerId);
   };
 
   private onMove = (e: PointerEvent) => {
     this.pointer = this.toScene(e);
+    // No button held means the release happened somewhere we never heard about: end that drag.
+    if (this.drag && e.buttons === 0) this.onUp();
     const d = this.drag;
     if (d) {
       const dx = e.clientX - d.x;
-      if (!d.turning && Math.abs(dx) > DRAG_SLOP) {
-        d.turning = true;
-        this.canvas?.setPointerCapture?.(e.pointerId);
-      }
+      if (!d.turning && Math.abs(dx) > DRAG_SLOP) d.turning = true;
       // Dragging right brings the side on the left round to the front.
       if (d.turning) this.angle = d.angle - dx * DRAG_TURN;
     }

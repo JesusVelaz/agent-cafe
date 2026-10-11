@@ -123,6 +123,27 @@ describe('turning the café', () => {
     expect(turned).toEqual([]);
   });
 
+  it('drops a press released outside the café, so hovering back in does not turn it', () => {
+    // Press on the café, slip off the canvas before the drag passes the slop, release out there:
+    // the canvas never sees that pointerup.
+    on.pointerdown!({ button: 0, clientX: 300, clientY: 200, pointerId: 1 });
+    on.pointerleave!({ pointerId: 1 });
+    // Back over the café with no button held.
+    on.pointermove!({ clientX: 260, clientY: 200, pointerId: 1, buttons: 0 });
+    on.pointermove!({ clientX: 120, clientY: 205, pointerId: 1, buttons: 0 });
+    expect(r.turning).toBe(false);
+    expect(turned).toEqual([]);
+    vi.advanceTimersByTime(2000);
+    expect(r.cameraAngle).toBeCloseTo(0, 6);
+  });
+
+  it('captures the pointer on press, so the release reaches the café wherever it lands', () => {
+    const captured: number[] = [];
+    (r as unknown as { canvas: { setPointerCapture(id: number): void } }).canvas.setPointerCapture = (id) => captured.push(id);
+    on.pointerdown!({ button: 0, clientX: 300, clientY: 200, pointerId: 7 });
+    expect(captured).toEqual([7]);
+  });
+
   it('follows the store the short way round', () => {
     vi.advanceTimersByTime(100);
     view = 3; // from 0 to 3 is a quarter to the right, not three to the left
