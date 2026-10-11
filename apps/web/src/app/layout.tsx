@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { IBM_Plex_Mono, IBM_Plex_Sans, Jersey_10, Silkscreen } from 'next/font/google';
 import type { ReactNode } from 'react';
 import './globals.css';
@@ -12,6 +12,16 @@ const plexSans = IBM_Plex_Sans({ weight: 'variable', subsets: ['latin'], variabl
 export const metadata: Metadata = {
   title: 'Agents Café',
   description: 'A pixel-art café where you can watch your AI agents work.',
+};
+
+// maximumScale stops iOS Safari zooming in when the message box takes focus (pinch
+// zoom still works there); the keyboard shrinks the layout instead of covering it.
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  interactiveWidget: 'resizes-content',
+  themeColor: '#17191e',
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

@@ -55,7 +55,7 @@ export function SidePanel() {
             aria-label="Collapse the panel"
             title="Collapse the panel"
             onClick={() => setPanelCollapsed(true)}
-            className="grid size-9 place-items-center rounded-lg text-chalk-dim hover:bg-slate hover:text-chalk"
+            className="hidden size-9 place-items-center lg:grid rounded-lg text-chalk-dim hover:bg-slate hover:text-chalk"
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden><path d="M4 3l5 5-5 5M9 3l5 5-5 5" /></svg>
           </button>

@@ -41,7 +41,7 @@ function OsIcon({ os }: { os: Os }) {
 }
 
 const BUTTON =
-  'flex h-9 items-center gap-2 rounded-lg bg-[#f4f5f7] px-3 sm:px-3.5 text-[13px] font-semibold whitespace-nowrap text-[#15171b] shadow-[0_6px_18px_rgba(0,0,0,.35)] hover:bg-white';
+  'flex h-9 items-center gap-2 rounded-lg bg-[#f4f5f7] px-2.5 sm:px-3.5 text-[13px] font-semibold whitespace-nowrap text-[#15171b] shadow-[0_6px_18px_rgba(0,0,0,.35)] hover:bg-white';
 
 /**
  * The demo site's call to action: "Download for Windows" (or macOS, Linux) for the
