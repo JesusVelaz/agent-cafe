@@ -1,7 +1,7 @@
 'use client';
 
 import { HARNESS, PROVIDER_IDS, offeredModel, type AgentPermission, type ProviderId } from '@agent-cafe/shared';
-import { useId, useState } from 'react';
+import { useCallback, useId, useState } from 'react';
 import { api } from '@/lib/api';
 import { DEMO_SITE } from '@/lib/demo/flag';
 import { FLOOR_NAME } from '@/lib/format';
@@ -61,6 +61,11 @@ export function ModelList({
   const { models, loading, error, refresh } = useModelOptions(tab);
   const demo = useCafe((s) => s.providers[tab]?.mode === 'mock');
   const searchId = useId();
+  // Ready to type with a keyboard; on touch screens it waits for a tap rather than
+  // popping the keyboard up over the list.
+  const focusSearch = useCallback((el: HTMLInputElement | null) => {
+    if (el && window.matchMedia('(pointer: fine)').matches) el.focus({ preventScroll: true });
+  }, []);
   const shown = models.filter((m) => `${m.label} ${m.value}`.toLowerCase().includes(q.trim().toLowerCase()));
   // Upstairs first, like the café.
   const rail = [...PROVIDER_IDS].sort((a) => (a === 'anthropic' ? -1 : 1));
@@ -94,7 +99,7 @@ export function ModelList({
         <label htmlFor={searchId} className="sr-only">Search models</label>
         <input
           id={searchId}
-          autoFocus
+          ref={focusSearch}
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder={`Search ${HARNESS[tab].name} models`}

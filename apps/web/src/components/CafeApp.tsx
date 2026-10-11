@@ -76,7 +76,7 @@ export function CafeApp() {
   const onOpened = useCallback(() => setOpened(true), []);
 
   return (
-    <div data-settling={settled ? undefined : ''} data-loading={opened ? undefined : ''} className="grid h-dvh grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] overflow-x-hidden bg-night text-chalk lg:overflow-hidden">
+    <div data-settling={settled ? undefined : ''} data-loading={opened ? undefined : ''} className="grid h-dvh grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] overflow-clip bg-night text-chalk">
       <TopBar themeChoice={choice} theme={theme} onTheme={setChoice} />
       <div className="relative grid min-h-0">
         <main
