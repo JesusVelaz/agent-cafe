@@ -2,7 +2,6 @@
 import { mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import QRCode from 'qrcode';
 import { startServer } from '@agent-cafe/server/main';
 import { RemoteSetupError } from '@agent-cafe/server/network';
 import { pairingToken } from '@agent-cafe/server/token';
@@ -54,31 +53,11 @@ if (port !== options.port) console.log(`Port ${options.port} is in use by ${inTh
 const url = `http://127.0.0.1:${port}`;
 const open = () => (options.openBrowser ? openBrowser(url) : Promise.resolve());
 
-interface PhoneSharing {
-  via: 'tailscale' | 'lan' | 'address';
-  link: string;
-  firewall: { fixable: boolean } | null;
-}
-
-async function printPairing({ via, link, firewall }: PhoneSharing) {
-  console.log('\n📱 To open it on your phone, scan this with the phone’s camera:\n');
-  console.log(await QRCode.toString(link, { type: 'terminal', small: true }));
-  console.log(`   or open ${link}`);
-  console.log('   Anyone with this code or link can control your café, so keep it to yourself.');
-  console.log('   If it gets out, start with --new-token to sign out every paired device.');
-  if (via === 'tailscale') {
-    console.log('   Works wherever your phone has Tailscale on.');
-  } else {
-    console.log('   ⚠ Your phone has to be on the same network, and the connection isn’t encrypted:');
-    console.log('     use this on a network you trust (your home), never on public Wi-Fi.');
-    console.log('     To use the café from anywhere, encrypted, use --host tailscale.');
-  }
-  if (firewall) {
-    console.log('   ⚠ Windows Firewall will stop your phone from loading the café.');
-    console.log(firewall.fixable ? '     To fix it, open Settings → Connections in the café, then click “Fix it”.' : '     This network is managed by your organization: ask your IT team to allow Agent Café.');
-  }
-  console.log('');
-}
+// The QR code, link and network warnings live in the café (Settings → Connections), not here.
+const phoneHint = (phoneOn: boolean) =>
+  phoneOn
+    ? '   Phone access is on: open Settings → Connections in the café for the QR code and details.'
+    : '   To use it on your phone, open Settings → Connections in the café.';
 
 if (running === 'cafe') {
   // The running café keeps the pairing code it started with, so a new one would change nothing yet.
@@ -87,7 +66,7 @@ if (running === 'cafe') {
   if (options.host) {
     // Ask the running café to open to phones, as Settings → Connections does.
     const res = await call(`${url}/api/phone`, { method: 'POST', json: { via: options.host }, timeoutMs: 10_000 }).catch(() => undefined);
-    let body: { sharing?: PhoneSharing; error?: string } = {};
+    let body: { sharing?: unknown; error?: string } = {};
     try {
       body = JSON.parse(res?.body ?? '{}');
     } catch {
@@ -95,7 +74,7 @@ if (running === 'cafe') {
     }
     if (res?.status === 404) fail('This café is an older version. Close it, then start it again with --host.');
     if (res?.status !== 200 || !body.sharing) fail(body.error ?? 'The café couldn’t open to your phone.');
-    await printPairing(body.sharing);
+    console.log(phoneHint(true));
   }
   await open();
   process.exit(0);
@@ -109,7 +88,7 @@ if (options.newToken) {
   if (!options.host) console.log('Made a new pairing code. Devices paired before will need to scan again.');
 }
 
-let phone: PhoneSharing | undefined;
+let phone: unknown;
 try {
   ({ phone } = await startServer(
     {
@@ -128,9 +107,7 @@ try {
   throw err;
 }
 
-console.log(`☕ Agent Café is open at ${url}`);
-console.log(`   data: ${options.dataDir}`);
-if (phone) await printPairing(phone);
-else console.log('   To use it on your phone, open Settings → Connections in the café, or start it with --host lan.');
+console.log(`☕ Agent Café is running at ${url}`);
+console.log(phoneHint(Boolean(phone)));
 console.log('   Press Ctrl+C to close it.');
 void open();

@@ -83,7 +83,7 @@ The café keeps running on your computer; your phone becomes another screen for 
 | `--host tailscale` | Anywhere your phone has [Tailscale](https://tailscale.com) on (install it on both, same account) | Encrypted |
 | `--host lan` | Only on the same home network (Wi-Fi or router) as your computer | Not encrypted: use it on a network you trust, never public Wi-Fi |
 
-The café shows a QR code (the command prints it too). Scan it with your phone's camera and the café opens; the phone
+The café shows a QR code in **Settings → Connections**. Scan it with your phone's camera and the café opens; the phone
 stays paired (a cookie) from then on. The code holds a long random token, saved in
 `~/.agent-cafe/pairing-token`: anyone with it can control the café, so keep it to yourself.
 `--new-token` (with the café closed) makes a new one and signs out every paired device; turning
