@@ -148,9 +148,10 @@ function Locked({ title, children }: { title: string; children: ReactNode }) {
         <span className="flex items-center gap-2 text-[12px] font-semibold text-coral">
           <LockIcon /> Not available in the demo
         </span>
-        <p className="max-w-[52ch] text-[13px] leading-relaxed text-chalk-dim">
-          {children} Install Agent Café on your computer to use it.
-        </p>
+        <div className="flex max-w-[52ch] flex-col gap-1.5 text-[13px] leading-relaxed">
+          <p className="text-chalk-dim">{children}</p>
+          <p className="text-chalk">Install Agent Café on your computer to use it.</p>
+        </div>
         <DownloadButton />
       </div>
     </>
