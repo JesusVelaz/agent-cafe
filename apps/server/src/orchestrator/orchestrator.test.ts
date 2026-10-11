@@ -191,6 +191,65 @@ describe('Orchestrator', () => {
     expect(kinds).toEqual(expect.arrayContaining(['approval.request', 'approval.resolved']));
   });
 
+  it('remembers "Always allow" for exactly that action, in that project only', async () => {
+    const answers: string[] = [];
+    const runClaude = async (ctx: LiveRunContext): Promise<RunOutcome> => {
+      for (const command of ctx.task.prompt.split(';')) {
+        answers.push(await ctx.approve({ tool: 'Bash', summary: command, reason: null, match: command }, ctx.signal));
+      }
+      return { status: 'completed', output: 'ok', totals: { inputTokens: 1, outputTokens: 1, costUsd: null, steps: 1 } };
+    };
+    const { orch, providers, agent, db, events } = await setup({ runLive: { anthropic: runClaude } });
+    const earl = await agent('Earl');
+    const project = await db.project.create({ data: { name: 'app', path: '/tmp/project' } });
+    const other = await db.project.create({ data: { name: 'site', path: '/tmp/site' } });
+    await providers.update('anthropic', { mode: 'live' });
+    const pendingOf = async (id: string) => {
+      await waitFor(async () => Boolean((await db.task.findUniqueOrThrow({ where: { id } })).pendingApproval));
+      return JSON.parse((await db.task.findUniqueOrThrow({ where: { id } })).pendingApproval!);
+    };
+
+    const first = await orch.enqueue({ prompt: 'npm test', target: { agentId: earl.id }, projectId: project.id });
+    const ask = await pendingOf(first.id);
+    expect(ask).toMatchObject({ summary: 'npm test', rememberable: true });
+    await orch.resolveApproval(first.id, ask.id, 'always');
+    await orch.idle();
+    expect(answers).toEqual(['allow']);
+    expect(JSON.parse((await db.project.findUniqueOrThrow({ where: { id: project.id } })).allowedActions)).toEqual([{ tool: 'Bash', match: 'npm test' }]);
+    expect(events).toContainEqual(expect.objectContaining({ type: 'project.upserted', project: expect.objectContaining({ allowed: [{ tool: 'Bash', match: 'npm test' }] }) }));
+
+    // The same command goes through on its own; a different one still asks.
+    const second = await orch.enqueue({ prompt: 'npm test;npm test -- --update', target: { agentId: earl.id }, projectId: project.id });
+    const next = await pendingOf(second.id);
+    expect(next.summary).toBe('npm test -- --update');
+    await orch.resolveApproval(second.id, next.id, 'deny');
+    await orch.idle();
+    expect(answers).toEqual(['allow', 'allow', 'deny']);
+
+    // Another project still asks.
+    const elsewhere = await orch.enqueue({ prompt: 'npm test', target: { agentId: earl.id }, projectId: other.id });
+    await orch.resolveApproval(elsewhere.id, (await pendingOf(elsewhere.id)).id, 'allow');
+    await orch.idle();
+    expect(answers).toHaveLength(4);
+  });
+
+  it('refuses "Always allow" for an ask the harness could not pin down', async () => {
+    const runClaude = async (ctx: LiveRunContext): Promise<RunOutcome> => {
+      const d = await ctx.approve({ tool: 'shell', summary: 'Send input to a running command', reason: null }, ctx.signal);
+      return { status: 'completed', output: d, totals: { inputTokens: 0, outputTokens: 0, costUsd: null, steps: 0 } };
+    };
+    const { orch, providers, agent, db } = await setup({ runLive: { anthropic: runClaude } });
+    const project = await db.project.create({ data: { name: 'app', path: '/tmp/project' } });
+    await providers.update('anthropic', { mode: 'live' });
+    const t = await orch.enqueue({ prompt: 'x', target: { agentId: (await agent('Earl')).id }, projectId: project.id });
+    await waitFor(async () => Boolean((await db.task.findUniqueOrThrow({ where: { id: t.id } })).pendingApproval));
+    const ask = JSON.parse((await db.task.findUniqueOrThrow({ where: { id: t.id } })).pendingApproval!);
+    expect(ask.rememberable).toBe(false);
+    await expect(orch.resolveApproval(t.id, ask.id, 'always')).rejects.toThrow(/can't be always allowed/);
+    await orch.resolveApproval(t.id, ask.id, 'allow');
+    await orch.idle();
+  });
+
   it('denies a pending approval when the task is cancelled', async () => {
     const runClaude = async (ctx: LiveRunContext): Promise<RunOutcome> => {
       const d = await ctx.approve({ tool: 'Edit', summary: 'a.ts', reason: null }, ctx.signal);

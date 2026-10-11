@@ -11,6 +11,11 @@ export interface ApprovalAsk {
   tool: string;
   summary: string;
   reason: string | null;
+  /**
+   * Exactly what will run (the full command, file or URL, never shortened), so an
+   * "Always allow" answer covers only this. Absent when the ask can't be pinned down.
+   */
+  match?: string;
 }
 
 export interface LiveRunContext {

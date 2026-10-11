@@ -109,6 +109,8 @@ running for the phone to reach it.
 5. Send a task. In the box, pick the model (the choices reported by your signed-in Claude Code harness) and a permission:
    **Ask first** (default) or **Auto-accept edits** (commands still ask). When Claude Code wants to
    run a command or edit a file, the agent raises a hand and an **Allow / Deny** card appears.
+   **Always allow** lets that exact command (or file, or URL) through without asking in that project
+   from then on; see or undo these under Settings > Projects.
 
 Open an agent to see their threads, then open a thread to reply in that conversation (Claude Code
 resumes the session). Use **New thread** in the thread list to start fresh. A reply stays in its

@@ -1,6 +1,6 @@
 'use client';
 
-import { HARNESS, offeredModel, type AgentDTO, type ProviderId } from '@agent-cafe/shared';
+import { HARNESS, offeredModel, type AgentDTO, type AllowedActionDTO, type ProviderId } from '@agent-cafe/shared';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { api } from '@/lib/api';
 import { DEMO_SITE } from '@/lib/demo/flag';
@@ -597,7 +597,10 @@ function Projects() {
       <div className="flex flex-col gap-1.5">
         {list.length === 0 && <p className="rounded-lg border border-dashed border-slate-line px-3 py-4 text-center text-[13px] text-chalk-faint">No projects yet.</p>}
         {list.map((p) => (
-          <ProjectRow key={p.id} id={p.id} name={p.name} path={p.path} />
+          <div key={p.id}>
+            <ProjectRow id={p.id} name={p.name} path={p.path} />
+            {p.allowed.length > 0 && <AllowedActions projectId={p.id} allowed={p.allowed} />}
+          </div>
         ))}
       </div>
       <button type="button" onClick={() => setAdding(true)} className="mt-4 h-9 rounded-lg bg-accent px-4 text-[13px] font-medium text-white hover:bg-[#7f9bff]">
@@ -606,6 +609,30 @@ function Projects() {
       <p className="mt-1.5 text-[12px] text-chalk-faint">Browse to a folder on this computer, or clone a Git or GitHub repository.</p>
       <AddProjectDialog open={adding} onClose={() => setAdding(false)} />
     </>
+  );
+}
+
+/** What you chose "Always allow" for in a project, each with a way to make it ask again. */
+function AllowedActions({ projectId, allowed }: { projectId: string; allowed: AllowedActionDTO[] }) {
+  return (
+    <div className="ml-4 mt-1 flex flex-col gap-1 border-l border-slate-line pl-3">
+      <p className="text-[11px] text-chalk-faint">Always allowed here</p>
+      {allowed.map((a) => (
+        <div key={`${a.tool} ${a.match}`} className="flex items-center gap-2">
+          <code className="min-w-0 flex-1 truncate rounded bg-code px-2 py-1 font-mono text-[11px] text-chalk" title={`${a.tool}: ${a.match}`}>
+            <span className="text-chalk-faint">{a.tool}</span> {a.match}
+          </code>
+          <button
+            type="button"
+            onClick={() => void api.forgetAllowed(projectId, a)}
+            title="Ask before doing this again"
+            className="shrink-0 rounded-md px-2 py-1 text-[12px] text-chalk-dim hover:bg-slate-2 hover:text-coral"
+          >
+            Stop
+          </button>
+        </div>
+      ))}
+    </div>
   );
 }
 

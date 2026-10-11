@@ -1,7 +1,7 @@
 import type { CanUseTool, Options, SDKRateLimitInfo, query } from '@anthropic-ai/claude-agent-sdk';
 import type { TaskEventData } from '@agent-cafe/shared';
 import { describe, expect, it } from 'vitest';
-import { claudePlanUsage, planUsageFromClaude, planUsageFromClaudeUsage, runClaudeTask, summarizeToolInput, type ApprovalAsk, type ClaudeRunContext } from './claude.js';
+import { claudePlanUsage, planUsageFromClaude, planUsageFromClaudeUsage, runClaudeTask, summarizeToolInput, toolInputLine, type ApprovalAsk, type ClaudeRunContext } from './claude.js';
 
 type Msg = Record<string, unknown>;
 
@@ -78,7 +78,7 @@ describe('runClaudeTask', () => {
     expect(Object.keys(options.mcpServers!)).toEqual(['cafe']);
     expect(options).toMatchObject({ strictMcpConfig: true, settings: { disableClaudeAiConnectors: true } });
     expect(options.allowedTools).toEqual(['mcp__cafe__cafe_list_agents', 'mcp__cafe__cafe_send_message', 'mcp__cafe__cafe_delegate_task', 'mcp__cafe__cafe_get_task']);
-    expect(asks).toEqual([{ tool: 'Bash', summary: 'npm test', reason: null }]);
+    expect(asks).toEqual([{ tool: 'Bash', summary: 'npm test', reason: null, match: 'npm test' }]);
   });
   it('runs in the agent folder with its model and no API key', async () => {
     process.env.ANTHROPIC_API_KEY = 'sk-should-not-leak';
@@ -102,7 +102,7 @@ describe('runClaudeTask', () => {
       { type: 'result', subtype: 'success', is_error: false, result: 'Fixed.', num_turns: 2 },
     ]);
     expect(outcome).toMatchObject({ status: 'completed', output: 'Fixed.', totals: { steps: 2, inputTokens: 30, outputTokens: 14, costUsd: null } });
-    expect(asks).toEqual([{ tool: 'Bash', summary: 'npm test', reason: null }]);
+    expect(asks).toEqual([{ tool: 'Bash', summary: 'npm test', reason: null, match: 'npm test' }]);
     expect(limits).toEqual([{ status: 'allowed', window: 'five_hour', utilization: 0.3, resetsAt: null }]);
     const kinds = events.map((e) => e.kind);
     expect(kinds).toEqual([
@@ -148,6 +148,12 @@ describe('runClaudeTask', () => {
     expect(summarizeToolInput('Bash', { command: 'git status' })).toBe('git status');
     expect(summarizeToolInput('Write', { file_path: '/a/b.ts', content: 'x' })).toBe('/a/b.ts');
     expect(summarizeToolInput('Other', { a: 1 })).toBe('{"a":1}');
+  });
+
+  it('keeps the full command for "Always allow" even when the summary is shortened', () => {
+    const long = `npm test -- ${'x'.repeat(400)}`;
+    expect(summarizeToolInput('Bash', { command: long })).toHaveLength(298);
+    expect(toolInputLine({ command: long, description: 'run tests' })).toBe(long);
   });
 });
 

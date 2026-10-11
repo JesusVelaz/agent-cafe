@@ -466,7 +466,11 @@ function ThreadRow({ thread, now }: { thread: ThreadSummary; now: number }) {
   );
 }
 
-/** A harness asking before it acts: the command or file, and Deny / Allow. */
+/**
+ * A harness asking before it acts: the command or file, and Deny / Allow. When the
+ * harness said exactly what it will run, "Always allow" also lets that same action
+ * through without asking in this project from now on (undone in Settings > Projects).
+ */
 export function ApprovalCard({ task, compact }: { task: TaskDTO; compact?: boolean }) {
   const agent = useCafe((s) => s.agents[task.agentId]);
   const project = useCafe((s) => (task.projectId ? s.projects[task.projectId] : undefined));
@@ -474,7 +478,7 @@ export function ApprovalCard({ task, compact }: { task: TaskDTO; compact?: boole
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const ask = task.pendingApproval!;
-  const answer = (decision: 'allow' | 'deny') => {
+  const answer = (decision: 'allow' | 'deny' | 'always') => {
     setBusy(true);
     setError(null);
     api
@@ -499,11 +503,22 @@ export function ApprovalCard({ task, compact }: { task: TaskDTO; compact?: boole
       )}
       <code className="scroll-chalk block max-h-28 overflow-y-auto whitespace-pre-wrap break-all rounded-md bg-code px-2.5 py-2 font-mono text-[12px] text-chalk">{ask.summary}</code>
       {ask.reason && <p className="text-[12px] text-chalk-dim">{ask.reason}</p>}
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-end gap-2">
         <span className="min-w-0 flex-1 truncate text-[12px] text-chalk-faint">{project ? `in ${project.name}` : ''}</span>
         <button type="button" disabled={busy} onClick={() => answer('deny')} className="h-9 rounded-lg border border-slate-line px-3.5 text-[13px] text-chalk hover:bg-slate-2 disabled:opacity-50">
           Deny
         </button>
+        {ask.rememberable && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => answer('always')}
+            title={`Allow exactly this from now on${project ? ` in ${project.name}` : ''}, without asking`}
+            className="h-9 whitespace-nowrap rounded-lg border border-accent/60 px-3 text-[13px] text-accent hover:bg-accent/10 disabled:opacity-50"
+          >
+            Always allow
+          </button>
+        )}
         <button type="button" disabled={busy} onClick={() => answer('allow')} className="h-9 rounded-lg bg-accent px-4 text-[13px] font-semibold text-white hover:bg-[#7f9bff] disabled:opacity-50">
           Allow
         </button>

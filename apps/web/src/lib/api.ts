@@ -3,6 +3,7 @@ import type {
   AgentPermission,
   HarnessCommandDTO,
   HarnessModelDTO,
+  AllowedActionDTO,
   ProjectDTO,
   ModelInfo,
   ProviderId,
@@ -102,7 +103,7 @@ const serverApi = {
     id: string,
     a: { name?: string; model?: string; systemPrompt?: string; projectId?: string | null; permission?: AgentPermission; spriteSeed?: number },
   ) => patch<AgentDTO>(`/api/agents/${id}`, a),
-  answerApproval: (taskId: string, approvalId: string, decision: 'allow' | 'deny') =>
+  answerApproval: (taskId: string, approvalId: string, decision: 'allow' | 'deny' | 'always') =>
     post<TaskDTO>(`/api/tasks/${taskId}/approvals/${approvalId}`, { decision }),
   updateProvider: (id: ProviderId, p: { mode?: ProviderMode }) => patch<ProviderStatusDTO>(`/api/providers/${id}`, p),
   checkProvider: (id: ProviderId) => post<ProviderStatusDTO>(`/api/providers/${id}/check`),
@@ -117,6 +118,8 @@ const serverApi = {
   },
   addProject: (p: { path: string; name?: string }) => post<ProjectDTO>('/api/projects', p),
   renameProject: (id: string, name: string) => patch<ProjectDTO>(`/api/projects/${id}`, { name }),
+  /** Stop always allowing an action in a project: it asks again. */
+  forgetAllowed: (id: string, forget: AllowedActionDTO) => patch<ProjectDTO>(`/api/projects/${id}`, { forget }),
   removeProject: (id: string) => request<void>(`/api/projects/${id}`, { method: 'DELETE' }),
   cloneProject: (b: { url: string; parent: string; name?: string }) => post<ProjectDTO>('/api/projects/clone', b),
   folders: (path: string) => request<FolderListing>(`/api/folders?path=${encodeURIComponent(path)}`),

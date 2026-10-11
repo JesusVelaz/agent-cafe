@@ -492,6 +492,7 @@ export async function runCodexTask(ctx: CodexRunContext): Promise<RunOutcome> {
           tool: 'shell',
           summary: command ?? (p?.kind === 'writeStdin' ? 'Send input to a running command' : 'Run a command'),
           reason: str(p?.reason),
+          ...(command && p?.kind !== 'writeStdin' ? { match: command } : {}),
         });
         return { decision: d === 'allow' ? 'accept' : d === 'deny' ? 'decline' : 'cancel' };
       }

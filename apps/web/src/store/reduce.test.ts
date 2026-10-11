@@ -82,7 +82,7 @@ describe('needsAttention', () => {
   });
 
   it('puts approvals first, and a quiet task waiting on you is not stuck', () => {
-    const approval = { id: 'ap', tool: 'Bash', summary: 'npm test', reason: null, requestedAt: '2026-09-27T11:51:00Z' };
+    const approval = { id: 'ap', tool: 'Bash', summary: 'npm test', reason: null, rememberable: true, requestedAt: '2026-09-27T11:51:00Z' };
     const waiting = { ...tasks, quiet: { ...tasks.quiet, status: 'tool_wait' as const, pendingApproval: approval } };
     const got = needsAttention({ tasks: waiting, lastActivityAt }, now);
     expect(got.map((a) => `${a.kind}:${a.task.id}`)).toEqual(['approval:quiet', 'failed:fail']);
@@ -99,7 +99,7 @@ describe('needsAttention', () => {
 
   it('still surfaces explicit approvals and failures from live harnesses', () => {
     const live = task({ id: 'live', isMock: false, status: 'tool_wait', pendingApproval: {
-      id: 'ap', tool: 'Bash', summary: 'npm test', reason: null, requestedAt: '2026-09-27T11:51:00Z',
+      id: 'ap', tool: 'Bash', summary: 'npm test', reason: null, rememberable: true, requestedAt: '2026-09-27T11:51:00Z',
     } });
     const failed = task({ id: 'failed', agentId: 'a2', isMock: false, status: 'failed', finishedAt: '2026-09-27T11:59:00Z' });
     expect(needsAttention({ tasks: { live, failed }, lastActivityAt: { live: now - 600_000 } }, now)

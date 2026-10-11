@@ -80,6 +80,14 @@ export interface ProjectDTO {
   /** Absolute folder path. */
   path: string;
   createdAt: string;
+  /** Actions the user chose "Always allow" for: they no longer ask in this project. */
+  allowed: AllowedActionDTO[];
+}
+
+/** One remembered approval: this tool doing exactly this (the full command, file or URL). */
+export interface AllowedActionDTO {
+  tool: string;
+  match: string;
 }
 
 export interface AgentDTO {
@@ -108,6 +116,8 @@ export interface ApprovalDTO {
   summary: string;
   /** Why the harness asked, when it says. */
   reason: string | null;
+  /** It can be answered "Always allow" (the harness said exactly what it will run). */
+  rememberable: boolean;
   requestedAt: string;
 }
 

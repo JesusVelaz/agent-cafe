@@ -151,11 +151,15 @@ const MAX_TOOL_OUTPUT_CHARS = 16_000;
 const NO_QUESTIONS =
   'You are running unattended in Agents Café and cannot ask questions. Make a sensible choice, say what you assumed, and continue.';
 
+/** What a tool call will do, in full: the command, file or URL, else its whole input. */
+export function toolInputLine(input: Record<string, unknown>): string {
+  const s = (k: string) => (typeof input[k] === 'string' ? (input[k] as string) : null);
+  return s('command') ?? s('file_path') ?? s('notebook_path') ?? s('url') ?? s('pattern') ?? s('path') ?? s('query') ?? JSON.stringify(input);
+}
+
 /** One line describing what a tool call will do. */
 export function summarizeToolInput(tool: string, input: Record<string, unknown>): string {
-  const s = (k: string) => (typeof input[k] === 'string' ? (input[k] as string) : null);
-  const line = s('command') ?? s('file_path') ?? s('notebook_path') ?? s('url') ?? s('pattern') ?? s('path') ?? s('query');
-  const text = line ?? JSON.stringify(input);
+  const text = toolInputLine(input);
   return text.length > 300 ? `${text.slice(0, 297)}…` : text;
 }
 
@@ -191,7 +195,7 @@ export async function runClaudeTask(ctx: ClaudeRunContext): Promise<RunOutcome> 
   const canUseTool: CanUseTool = async (toolName, input, opts) => {
     if (toolName === 'AskUserQuestion') return { behavior: 'deny', message: NO_QUESTIONS };
     const decision = await ctx.approve(
-      { tool: toolName, summary: summarizeToolInput(toolName, input), reason: opts.title ?? opts.decisionReason ?? null },
+      { tool: toolName, summary: summarizeToolInput(toolName, input), reason: opts.title ?? opts.decisionReason ?? null, match: toolInputLine(input) },
       opts.signal,
     );
     return decision === 'allow'

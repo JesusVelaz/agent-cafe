@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join, sep } from 'node:path';
@@ -8,6 +8,9 @@ import { describe, expect, it } from 'vitest';
 import { SERVER_ROOT } from '../paths.js';
 import { migrate, MIGRATIONS_DIR } from './migrate.js';
 
+/** The repo's migrations, oldest first, and the ones after the first. */
+const ALL = readdirSync(MIGRATIONS_DIR, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort();
+const LATER = ALL.slice(1);
 const tempDb = () => join(mkdtempSync(join(tmpdir(), 'agent-cafe-migrate-')), 'cafe.db');
 const tables = (file: string) => {
   const sqlite = new Database(file);
@@ -35,11 +38,10 @@ function withExtra(extra: Record<string, string>) {
 describe('migrate', () => {
   it('creates the schema on a new database, then has nothing left to do', () => {
     const file = tempDb();
-    const first = migrate(file);
-    expect(first).toHaveLength(1);
+    expect(migrate(file)).toEqual(ALL);
     expect(tables(file)).toEqual(expect.arrayContaining(['Agent', 'Task', '_prisma_migrations']));
     expect(migrate(file)).toEqual([]);
-    expect(history(file)).toEqual([expect.objectContaining({ migration_name: first[0], applied_steps_count: 1, logs: null })]);
+    expect(history(file)).toEqual(ALL.map((name) => expect.objectContaining({ migration_name: name, applied_steps_count: 1, logs: null })));
   });
 
   it('adopts a database made with `prisma db push` without re-creating its tables', () => {
@@ -49,8 +51,11 @@ describe('migrate', () => {
     sqlite.exec(readFileSync(join(MIGRATIONS_DIR, init!, 'migration.sql'), 'utf8'));
     sqlite.close();
 
-    expect(migrate(file)).toEqual([]);
-    expect(history(file)).toEqual([expect.objectContaining({ migration_name: init, applied_steps_count: 0 })]);
+    expect(migrate(file)).toEqual(LATER);
+    expect(history(file)).toEqual([
+      expect.objectContaining({ migration_name: init, applied_steps_count: 0 }),
+      ...LATER.map((name) => expect.objectContaining({ migration_name: name, applied_steps_count: 1 })),
+    ]);
   });
 
   it('upgrades a `prisma db push` database from an older schema, keeping its rows', () => {
@@ -64,8 +69,11 @@ describe('migrate', () => {
     sqlite.exec(`INSERT INTO "Task" ("id", "agentId", "providerId", "model", "prompt", "maxCostUsd") VALUES ('t', 'a', 'p', 'm', 'hi', 1)`);
     sqlite.close();
 
-    expect(migrate(file)).toEqual([]);
-    expect(history(file)).toEqual([expect.objectContaining({ migration_name: init, applied_steps_count: 0 })]);
+    expect(migrate(file)).toEqual(LATER);
+    expect(history(file)).toEqual([
+      expect.objectContaining({ migration_name: init, applied_steps_count: 0 }),
+      ...LATER.map((name) => expect.objectContaining({ migration_name: name, applied_steps_count: 1 })),
+    ]);
     const upgraded = new Database(file);
     expect(upgraded.prepare('SELECT "id", "prompt", "threadTitle" FROM "Task"').all()).toEqual([{ id: 't', prompt: 'hi', threadTitle: null }]);
     expect(upgraded.prepare(`SELECT 1 FROM sqlite_master WHERE name IN ('Project', 'Task_status_idx')`).all()).toHaveLength(2);

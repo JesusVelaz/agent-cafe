@@ -70,6 +70,7 @@ export const demoApi: Api = {
   commands: () => reply(() => ({ source: 'unavailable' as const, commands: [], message: 'Slash commands are available in Live mode.' })),
   addProject: unavailable,
   renameProject: unavailable,
+  forgetAllowed: unavailable,
   removeProject: unavailable,
   cloneProject: unavailable,
   folders: unavailable,
