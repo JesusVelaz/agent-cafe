@@ -273,12 +273,17 @@ export class DemoCafe {
     return task;
   }
 
-  /** "Any idle": a free agent first, else the shortest queue; ties go to the oldest. */
+  /**
+   * "Any idle": a free agent first, else the shortest queue; ties go to the oldest.
+   * Agents already on the chosen model go first, but any agent on the floor can take it:
+   * a visitor's first message shouldn't fail because nobody happens to use that model.
+   */
   private route(providerId: ProviderId, model?: string): AgentDTO | undefined {
-    const routed = model && model !== 'default' ? model : undefined;
-    const candidates = [...this.agents.values()].filter((a) => a.providerId === providerId && !a.archivedAt && (!routed || a.model === routed));
+    const floor = [...this.agents.values()].filter((a) => a.providerId === providerId && !a.archivedAt);
+    const onModel = floor.filter((a) => a.model === model);
+    const candidates = onModel.length ? onModel : floor;
     const load = (a: AgentDTO) => [...this.tasks.values()].filter((t) => t.agentId === a.id && t.status === 'queued').length + (this.slots.has(a.id) ? 1 : 0);
-    if (!candidates.length) throw new ApiError(`No ${providerId} agent${routed ? ` using ${routed}` : ''} in the café.`, 404);
+    if (!candidates.length) throw new ApiError(`No ${providerId} agent in the café.`, 404);
     return candidates.reduce((best, a) => (load(a) < load(best) ? a : best));
   }
 

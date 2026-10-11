@@ -66,6 +66,14 @@ describe('demo café', () => {
     expect(kinds).toContain('tool.start');
   });
 
+  it('routes "anyone" to an agent on the chosen model, or any agent on that floor', () => {
+    const { c, agent } = cafe();
+    expect(c.createTask({ providerId: 'anthropic', model: 'claude-sonnet-5', prompt: 'Draft a welcome sign.' }).agentId).toBe(agent('Matcha').id);
+    const routed = c.createTask({ providerId: 'anthropic', model: 'claude-fable-5-1', prompt: 'Draft a welcome sign.' });
+    expect(c.agents.get(routed.agentId)!.providerId).toBe('anthropic');
+    expect(routed.model).toBe('claude-fable-5-1');
+  });
+
   it('stops for Allow / Deny before running a command, and carries on after either', async () => {
     const { c, agent } = cafe();
     const allowed = c.createTask({ agentId: agent('Earl').id, prompt: 'Add tests for the order queue.' });
