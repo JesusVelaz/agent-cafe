@@ -1,6 +1,6 @@
 {
   "name": "@agent-cafe/server",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "exports": { "./main": "./src/main.ts", "./network": "./src/network.ts", "./token": "./src/token.ts" },
