@@ -6,6 +6,7 @@ import { api } from '@/lib/api';
 import { connectStream } from '@/lib/stream';
 import { useTheme } from '@/lib/theme';
 import { readFlag, readViewAngle, useCafe } from '@/store/cafe';
+import { CafeStatusPill } from './BrewingPill';
 import { CafeLoader } from './CafeLoader';
 import { Composer } from './Composer';
 import { PanelRail, SidePanel } from './SidePanel';
@@ -86,6 +87,12 @@ export function CafeApp() {
           }`}
         >
           <CafeStage theme={theme} collapsed={collapsed} onReady={onSceneReady} />
+          {/* On phones the top bar has no room for who's working; it sits over the café's sky. */}
+          {collapsed && (
+            <div className="absolute right-3 top-3 z-10 sm:hidden">
+              <CafeStatusPill />
+            </div>
+          )}
           {/* Both panel faces stay mounted; the column slides and they cross-fade.
               Clip, not hidden: a hidden box can still be scrolled, and the thread's
               scrollIntoView would slide the folded rail sideways. */}
