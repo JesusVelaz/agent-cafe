@@ -1,3 +1,32 @@
+import { DEFAULTS } from '@agent-cafe/shared';
+import { useNow } from '@/lib/useNow';
+import { useCafe } from '@/store/cafe';
+import { needsAttention } from '@/store/reduce';
+
+/** How many agents are working, waiting in line, and need you. */
+export function useCafeCounts() {
+  const state = useCafe();
+  const now = useNow(1000);
+  const all = Object.values(state.tasks);
+  return {
+    working: all.filter((t) => t.status === 'running' || t.status === 'tool_wait').length,
+    queued: all.filter((t) => t.status === 'queued').length,
+    needYou: needsAttention(state, now, state.dismissed, DEFAULTS.stuckAfterSec).length,
+  };
+}
+
+/** The pill, wired up: its "needs you" half opens the board at what needs you. */
+export function CafeStatusPill() {
+  const { working, queued, needYou } = useCafeCounts();
+  const showNeeds = () => {
+    const { setPanelCollapsed, selectAgent } = useCafe.getState();
+    setPanelCollapsed(false);
+    selectAgent(null);
+    requestAnimationFrame(() => document.getElementById('b-need')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  };
+  return <BrewingPill working={working} queued={queued} needYou={needYou} onNeeds={showNeeds} />;
+}
+
 /**
  * The café's status, only while there is any: a mint half with bubbling dots and the
  * working count, and a coral half (a button to what needs you) when someone does.

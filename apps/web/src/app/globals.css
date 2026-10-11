@@ -46,6 +46,15 @@ body {
 
 
 
+/* Phones zoom into any field under 16px when it takes focus, so fields stay at 16px there. */
+@media (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    font-size: max(16px, 1em);
+  }
+}
+
 /*
  * Until the app has applied what this browser remembers (is the panel folded?),
  * nothing animates; the first-load cover hides it jumping into place.

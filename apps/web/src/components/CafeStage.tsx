@@ -44,30 +44,42 @@ export function CafeStage({ theme, collapsed, onReady }: { theme: ThemeId; colla
   const overlay = (
     <div inert={!collapsed} className={`pointer-events-none absolute inset-0 transition-opacity duration-300 ${collapsed ? 'opacity-100' : 'opacity-0'}`}>
       {[...byAgent.values()].map((a) => (
-        <button
+        <div
           key={a.agentId}
           ref={(el) => {
             if (el) refs.current.set(a.agentId, el);
             else refs.current.delete(a.agentId);
           }}
-          type="button"
-          onClick={() => open(a.agentId, a.task.id)}
-          className={`absolute left-0 top-0 flex w-52 flex-col gap-0.5 rounded-lg border bg-night-2/95 px-2.5 py-1.5 text-left shadow-lg ${collapsed ? 'pointer-events-auto' : ''} ${
+          className={`absolute left-0 top-0 w-52 rounded-lg border bg-night-2/95 shadow-lg ${collapsed ? 'pointer-events-auto' : ''} ${
             a.kind === 'approval' ? 'border-amber' : 'border-coral'
           }`}
         >
-          <span className="font-display text-xl leading-none text-chalk">{state.agents[a.agentId]?.name}</span>
-          <span className={`text-[12px] ${a.kind === 'approval' ? 'text-amber' : 'text-coral'}`}>
-            {a.kind === 'approval'
-              ? `Wants to use ${a.task.pendingApproval?.tool ?? 'a tool'}`
-              : a.kind === 'stuck'
-                ? `No activity for ${duration(a.quietSec * 1000)}`
-                : a.task.status === 'interrupted'
-                  ? 'Interrupted'
-                  : 'Failed'}
-          </span>
-          <span className="truncate text-[12px] text-chalk-dim">{a.task.prompt}</span>
-        </button>
+          <button type="button" onClick={() => open(a.agentId, a.task.id)} className="flex w-full flex-col gap-0.5 rounded-lg px-2.5 py-1.5 pr-7 text-left">
+            <span className="font-display text-xl leading-none text-chalk">{state.agents[a.agentId]?.name}</span>
+            <span className={`text-[12px] ${a.kind === 'approval' ? 'text-amber' : 'text-coral'}`}>
+              {a.kind === 'approval'
+                ? `Wants to use ${a.task.pendingApproval?.tool ?? 'a tool'}`
+                : a.kind === 'stuck'
+                  ? `No activity for ${duration(a.quietSec * 1000)}`
+                  : a.task.status === 'interrupted'
+                    ? 'Interrupted'
+                    : 'Failed'}
+            </span>
+            <span className="truncate text-[12px] text-chalk-dim">{a.task.prompt}</span>
+          </button>
+          {/* A failure can be put away; an approval or a stuck run still needs you. */}
+          {a.kind === 'failed' && (
+            <button
+              type="button"
+              aria-label={`Dismiss ${state.agents[a.agentId]?.name ?? 'this'} failure`}
+              title="Dismiss"
+              onClick={() => state.dismiss(a.task.id)}
+              className="absolute right-0.5 top-0.5 grid size-7 place-items-center rounded-md text-chalk-faint hover:bg-slate hover:text-chalk"
+            >
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden><path d="M2 2l6 6M8 2L2 8" /></svg>
+            </button>
+          )}
+        </div>
       ))}
     </div>
   );

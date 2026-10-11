@@ -6,6 +6,7 @@ import { api } from '@/lib/api';
 import { connectStream } from '@/lib/stream';
 import { useTheme } from '@/lib/theme';
 import { readFlag, readViewAngle, useCafe } from '@/store/cafe';
+import { CafeStatusPill } from './BrewingPill';
 import { CafeLoader } from './CafeLoader';
 import { Composer } from './Composer';
 import { PanelRail, SidePanel } from './SidePanel';
@@ -19,7 +20,8 @@ const CafeStage = dynamic(() => import('./CafeStage').then((m) => m.CafeStage), 
 });
 
 /**
- * The café on the left, the side panel (board and agent threads) on the right.
+ * The café on the left, the side panel (board and agent threads) on the right; on
+ * phones the panel opens over the café instead.
  * Folding the panel into its rail gives the café view: the café fills the screen,
  * with callouts for agents that need you, and the composer lifts out of the panel to
  * float by the rail. The switch animates.
@@ -75,20 +77,28 @@ export function CafeApp() {
   const onOpened = useCallback(() => setOpened(true), []);
 
   return (
-    <div data-settling={settled ? undefined : ''} data-loading={opened ? undefined : ''} className="grid h-dvh grid-rows-[auto_minmax(0,1fr)] overflow-x-hidden bg-night text-chalk lg:overflow-hidden">
+    <div data-settling={settled ? undefined : ''} data-loading={opened ? undefined : ''} className="grid h-dvh grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] overflow-clip bg-night text-chalk">
       <TopBar themeChoice={choice} theme={theme} onTheme={setChoice} />
       <div className="relative grid min-h-0">
         <main
           ref={mainRef}
           className={`relative grid min-h-0 lg:grid-rows-1 lg:transition-[grid-template-columns] lg:duration-300 lg:ease-[cubic-bezier(.2,.8,.2,1)] ${
-            collapsed ? 'grid-rows-1 lg:grid-cols-[minmax(0,1fr)_56px]' : 'grid-rows-[minmax(180px,1fr)_minmax(0,2fr)] lg:grid-cols-[minmax(0,1fr)_520px]'
+            collapsed ? 'grid-rows-1 lg:grid-cols-[minmax(0,1fr)_56px]' : 'grid-rows-1 lg:grid-cols-[minmax(0,1fr)_520px]'
           }`}
         >
           <CafeStage theme={theme} collapsed={collapsed} onReady={onSceneReady} />
+          {/* On phones the top bar has no room for who's working; it sits over the café's sky. */}
+          {collapsed && (
+            <div className="absolute right-3 top-3 z-10 sm:hidden">
+              <CafeStatusPill />
+            </div>
+          )}
           {/* Both panel faces stay mounted; the column slides and they cross-fade.
               Clip, not hidden: a hidden box can still be scrolled, and the thread's
               scrollIntoView would slide the folded rail sideways. */}
-          <div className={`relative min-h-0 overflow-clip border-slate-line lg:border-l ${collapsed ? 'hidden lg:block' : ''}`}>
+          {/* On phones the open panel covers the café (which keeps its size underneath),
+              so the board and threads get the whole screen. */}
+          <div className={`absolute inset-0 z-20 min-h-0 overflow-clip border-slate-line lg:relative lg:inset-auto lg:z-auto lg:border-l ${collapsed ? 'hidden lg:block' : ''}`}>
             <div
               inert={collapsed}
               className={`h-full transition-[opacity,visibility] duration-200 lg:absolute lg:inset-y-0 lg:left-0 lg:h-auto lg:w-[520px] ${collapsed ? 'lg:invisible lg:opacity-0' : 'visible opacity-100'}`}

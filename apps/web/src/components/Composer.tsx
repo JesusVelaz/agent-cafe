@@ -32,7 +32,6 @@ export function Composer({ onDockedHeight }: { onDockedHeight?: (px: number) => 
   const selectedAgentId = useCafe((s) => s.selectedAgentId);
   const selectAgent = useCafe((s) => s.selectAgent);
   const floating = useCafe((s) => s.panelCollapsed);
-  const setPanelCollapsed = useCafe((s) => s.setPanelCollapsed);
 
   const [boardTarget, setBoardTarget] = useState<Target>({ kind: 'any', provider: 'anthropic' });
   const selected = selectedAgentId ? agents[selectedAgentId] : undefined;
@@ -301,18 +300,6 @@ export function Composer({ onDockedHeight }: { onDockedHeight?: (px: number) => 
           {/* The choices stay on one line (labels truncate if they run out of room); send stays right. */}
           <div className="mt-1 flex min-w-0 items-center gap-1">
             <div className="flex min-w-0 flex-1 items-center gap-0.5">
-              {/* On small screens there's no rail, so the floating box is the way back to the panel. */}
-              {floating && (
-                <button
-                  type="button"
-                  aria-label="Expand the panel"
-                  title="Expand the panel"
-                  onClick={() => setPanelCollapsed(false)}
-                  className="grid size-7 shrink-0 place-items-center rounded-full text-chalk-dim hover:bg-slate-2 hover:text-chalk lg:hidden"
-                >
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden><path d="M2 3.5h10M2 7h10M2 10.5h10" /></svg>
-                </button>
-              )}
               {selected ? agentChip : <TargetPicker target={boardTarget} onPick={setBoardTarget} />}
               <ModelPicker
                 provider={provider}

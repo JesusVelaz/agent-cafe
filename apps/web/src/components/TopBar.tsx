@@ -1,15 +1,12 @@
 'use client';
 
-import { DEFAULTS } from '@agent-cafe/shared';
 import { useEffect, useState } from 'react';
 import { cupDataUrl, type Mood } from '@/lib/cup';
 import { DEMO_SITE } from '@/lib/demo/flag';
 import type { ThemeChoice } from '@/lib/theme';
-import { useNow } from '@/lib/useNow';
 import type { ThemeId } from '@/scene/atmosphere';
 import { useCafe } from '@/store/cafe';
-import { needsAttention } from '@/store/reduce';
-import { BrewingPill } from './BrewingPill';
+import { CafeStatusPill, useCafeCounts } from './BrewingPill';
 import { ConnectPrompt } from './ConnectPrompt';
 import { CupIcon } from './CupIcon';
 import { DownloadButton } from './DownloadButton';
@@ -23,11 +20,7 @@ interface Props {
 
 export function TopBar({ themeChoice, theme, onTheme }: Props) {
   const state = useCafe();
-  const now = useNow(1000);
-  const all = Object.values(state.tasks);
-  const working = all.filter((t) => t.status === 'running' || t.status === 'tool_wait').length;
-  const queued = all.filter((t) => t.status === 'queued').length;
-  const needYou = needsAttention(state, now, state.dismissed, DEFAULTS.stuckAfterSec).length;
+  const { working, needYou } = useCafeCounts();
   // The logo's face is the café's mood.
   const mood: Mood = needYou ? 'alert' : working ? 'working' : 'quiet';
   const conn = state.connection;
@@ -42,54 +35,66 @@ export function TopBar({ themeChoice, theme, onTheme }: Props) {
     for (const link of document.querySelectorAll<HTMLLinkElement>('link[rel~="icon"]')) link.href = href;
   }, [working, needYou, mood]);
 
-  const showNeeds = () => {
-    state.setPanelCollapsed(false);
-    state.selectAgent(null);
-    requestAnimationFrame(() => document.getElementById('b-need')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-  };
-
   return (
-    <header className="flex h-14 items-center gap-3 sm:gap-6 border-b border-slate-line bg-night-2 px-4">
-      <div className="flex items-center gap-2 sm:gap-2.5">
+    <header className="flex h-14 min-w-0 items-center gap-2 sm:gap-6 border-b border-slate-line bg-night-2 px-3 sm:px-4">
+      <div className="flex min-w-0 items-center gap-2.5">
         <span data-cafe-logo className="flex">
           <CupIcon size={28} mood={mood} />
         </span>
-        <h1 className="whitespace-nowrap font-display text-[23px] leading-none sm:text-[30px]">
+        {/* The smallest phones keep just the cup and give the room to the buttons. */}
+        <h1 className="sr-only whitespace-nowrap font-display text-[23px] leading-none min-[380px]:not-sr-only sm:text-[30px]">
           Agents <span className="text-crema">Café</span>
         </h1>
         {DEMO_SITE && (
           <span
             title="An online demo: the agents run scripted tasks on sample data, and nothing is saved."
-            className="flex h-[26px] items-center gap-2 rounded-full border border-coral/45 bg-coral/10 px-2 sm:px-2.5 text-[12px] font-semibold text-coral"
+            className="flex h-[26px] shrink-0 items-center gap-2 rounded-full border border-coral/45 bg-coral/10 px-2 sm:px-2.5 text-[12px] font-semibold text-coral"
           >
             <span aria-hidden className="relative flex size-[7px]">
               <span className="absolute inline-flex size-full animate-ping rounded-full bg-coral opacity-60 [animation-duration:1.8s] motion-reduce:hidden" />
               <span className="relative inline-flex size-[7px] rounded-full bg-coral" />
             </span>
-            Demo
+            <span className="hidden min-[400px]:inline">Demo</span>
           </span>
         )}
         {conn !== 'open' && (
-          <span className={`text-[11px] ${conn === 'connecting' ? 'text-amber' : 'text-coral'}`}>{conn === 'connecting' ? 'Connecting…' : 'Server offline'}</span>
+          <span className={`truncate text-[11px] ${conn === 'connecting' ? 'text-amber' : 'text-coral'}`}>{conn === 'connecting' ? 'Connecting…' : 'Server offline'}</span>
         )}
       </div>
 
-      <div className="ml-auto flex items-center gap-2 sm:gap-3">
-        <BrewingPill working={working} queued={queued} needYou={needYou} onNeeds={showNeeds} />
+      <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-3">
+        {/* Phones show it over the café instead, where there's room. */}
+        <div className="hidden sm:block">
+          <CafeStatusPill />
+        </div>
         {DEMO_SITE && <DownloadButton />}
+        {/* Phones have no rail: this switches between the café and the threads. */}
+        <button
+          type="button"
+          onClick={() => state.setPanelCollapsed(!state.panelCollapsed)}
+          aria-label={state.panelCollapsed ? 'Show threads' : 'Show the café'}
+          title={state.panelCollapsed ? 'Show threads' : 'Show the café'}
+          className="grid size-9 shrink-0 place-items-center rounded-lg border border-slate-line text-chalk-dim hover:bg-slate hover:text-chalk lg:hidden"
+        >
+          {state.panelCollapsed ? (
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden><path d="M2.5 4h11M2.5 8h11M2.5 12h11" /></svg>
+          ) : (
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden><path d="M3.5 3.5l9 9M12.5 3.5l-9 9" /></svg>
+          )}
+        </button>
         <button
           type="button"
           onClick={() => setSettings('general')}
           aria-label={providerAttention ? 'Settings (a provider needs attention)' : 'Settings'}
           title="Settings"
-          className="relative flex h-9 items-center gap-2 rounded-lg border border-slate-line px-3 text-[13px] text-chalk-dim hover:bg-slate hover:text-chalk"
+          className="relative flex h-9 shrink-0 items-center gap-2 rounded-lg border border-slate-line px-2.5 sm:px-3 text-[13px] text-chalk-dim hover:bg-slate hover:text-chalk"
         >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
-            <circle cx="8" cy="8" r="2.2" />
-            <path d="M8 1.5v1.7M8 12.8v1.7M1.5 8h1.7M12.8 8h1.7M3.4 3.4l1.2 1.2M11.4 11.4l1.2 1.2M3.4 12.6l1.2-1.2M11.4 4.6l1.2-1.2" />
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+            <circle cx="12" cy="12" r="3" />
           </svg>
-          {/* The demo's install button needs the room on phones. */}
-          <span className={DEMO_SITE ? 'hidden sm:inline' : undefined}>Settings</span>
+          {/* Phones need the room for the other buttons. */}
+          <span className="hidden sm:inline">Settings</span>
           {providerAttention && <span aria-hidden className="absolute -right-1 -top-1 size-2.5 rounded-full bg-coral shadow-[0_0_0_2px_var(--color-night-2)]" />}
         </button>
       </div>
