@@ -76,13 +76,17 @@ export function SettingsDialog({
       <div className="flex max-h-[min(640px,calc(100dvh-4rem))] flex-col sm:grid sm:max-h-none sm:h-[min(560px,calc(100dvh-4rem))] sm:grid-cols-[180px_minmax(0,1fr)]">
         <nav aria-label="Settings sections" className="shrink-0 border-b border-slate-line sm:border-b-0 sm:border-r sm:p-3">
           <h2 className="px-4 pb-2 pr-14 pt-4 font-display text-[26px] font-normal leading-none sm:px-2.5 sm:pb-3 sm:pt-1">Settings</h2>
-          <div className="scroll-chalk flex gap-1 overflow-x-auto px-3 pb-2 sm:flex-col sm:gap-0.5 sm:overflow-visible sm:p-0">
+          {/* The spacer keeps room after the last tab: browsers drop a scroller's right padding once it overflows. */}
+          <div className="scroll-chalk flex gap-1 overflow-x-auto scroll-px-3 px-3 pb-2 after:w-2 after:shrink-0 after:content-[''] sm:flex-col sm:gap-0.5 sm:overflow-visible sm:p-0 sm:after:hidden">
             {SECTIONS.map((s) => (
               <button
                 key={s.id}
                 type="button"
                 aria-current={section === s.id ? 'page' : undefined}
-                onClick={() => setSection(s.id)}
+                onClick={(e) => {
+                  setSection(s.id);
+                  e.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest' }); // a half-hidden tab slides fully into view
+                }}
                 // The outline goes inside: the tab row scrolls sideways on phones, which clips anything outside.
                 className={`shrink-0 rounded-lg px-3 py-2 text-left text-[13px] outline-offset-[-2px] sm:px-2.5 ${section === s.id ? 'bg-slate text-chalk' : 'text-chalk-dim hover:bg-slate hover:text-chalk'}`}
               >
