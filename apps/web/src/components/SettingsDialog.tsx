@@ -70,10 +70,10 @@ export function SettingsDialog({
         if (e.target === e.currentTarget) onClose(); // click on the backdrop
       }}
       aria-label="Settings"
-      className="m-0 h-dvh max-h-none w-full max-w-none overflow-hidden bg-night-2 p-0 text-chalk shadow-[0_30px_80px_rgba(0,0,0,.55)] transition-[opacity,scale] duration-200 backdrop:bg-black/50 backdrop:backdrop-blur-[2px] starting:scale-95 starting:opacity-0 sm:m-auto sm:h-fit sm:max-h-[calc(100%-2rem)] sm:w-[min(760px,calc(100vw-2rem))] sm:rounded-2xl sm:border sm:border-slate-line"
+      className="m-auto h-fit max-h-none w-[calc(100vw-2rem)] max-w-none overflow-hidden rounded-2xl border border-slate-line bg-night-2 p-0 text-chalk shadow-[0_30px_80px_rgba(0,0,0,.55)] transition-[opacity,scale] duration-200 backdrop:bg-black/50 backdrop:backdrop-blur-[2px] starting:scale-95 starting:opacity-0 sm:max-h-[calc(100%-2rem)] sm:w-[min(760px,calc(100vw-2rem))]"
     >
-      {/* Phones get the whole screen: a header with the sections as tabs, then the section below. */}
-      <div className="flex h-full flex-col sm:grid sm:h-[min(560px,calc(100dvh-4rem))] sm:grid-cols-[180px_minmax(0,1fr)]">
+      {/* Phones get a card with margins: a header with the sections as tabs, then the section scrolling below. */}
+      <div className="flex max-h-[min(640px,calc(100dvh-4rem))] flex-col sm:grid sm:max-h-none sm:h-[min(560px,calc(100dvh-4rem))] sm:grid-cols-[180px_minmax(0,1fr)]">
         <nav aria-label="Settings sections" className="shrink-0 border-b border-slate-line sm:border-b-0 sm:border-r sm:p-3">
           <h2 className="px-4 pb-2 pr-14 pt-4 font-display text-[26px] font-normal leading-none sm:px-2.5 sm:pb-3 sm:pt-1">Settings</h2>
           <div className="scroll-chalk flex gap-1 overflow-x-auto px-3 pb-2 sm:flex-col sm:gap-0.5 sm:overflow-visible sm:p-0">
@@ -94,7 +94,7 @@ export function SettingsDialog({
             ))}
           </div>
         </nav>
-        <div className="scroll-chalk min-h-0 flex-1 overflow-y-auto p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-6">
+        <div className="scroll-chalk min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
           {section === 'general' && <General themeChoice={themeChoice} theme={theme} onTheme={onTheme} />}
           {LOCKED[section] ? (
             <Locked title={SECTIONS.find((s) => s.id === section)!.label}>{LOCKED[section]}</Locked>
