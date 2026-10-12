@@ -257,7 +257,6 @@
   background: var(--color-night-2);
 }
 .up {
-  margin-inline: 28px;
   border-bottom: 0;
   border-radius: 12px 12px 0 0;
   box-shadow: inset 0 2px 0 color-mix(in srgb, var(--color-claude) 45%, transparent);
@@ -741,16 +740,12 @@
   }
   .floor {
     grid-template-columns: minmax(0, 1fr);
-    padding: 18px;
-  }
-  .up {
-    margin-inline: 14px;
+    justify-items: center;
+    padding: 22px 18px;
+    text-align: center;
   }
   .floor p {
     grid-column: auto;
-  }
-  .command {
-    justify-self: start;
   }
   .legend {
     grid-template-columns: repeat(3, minmax(0, 1fr));
