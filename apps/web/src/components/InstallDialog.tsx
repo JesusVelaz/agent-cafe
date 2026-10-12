@@ -3,10 +3,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { CupIcon } from './CupIcon';
 
-const RELEASE = 'https://github.com/JesusVelaz/agent-cafe/releases/latest/download';
+export const RELEASE = 'https://github.com/JesusVelaz/agent-cafe/releases/latest/download';
 /** The Windows installer: a direct download. */
 export const WINDOWS_INSTALLER = `${RELEASE}/AgentCafeSetup.exe`;
-const UNIX_INSTALL = `curl -fsSL ${RELEASE}/install.sh | sh`;
+export const UNIX_INSTALL = `curl -fsSL ${RELEASE}/install.sh | sh`;
 
 type Os = 'windows' | 'unix';
 

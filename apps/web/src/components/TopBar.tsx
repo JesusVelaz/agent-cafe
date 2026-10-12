@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { type ReactNode, useEffect, useState } from 'react';
 import { cupDataUrl, type Mood } from '@/lib/cup';
 import { DEMO_SITE } from '@/lib/demo/flag';
 import type { ThemeChoice } from '@/lib/theme';
@@ -38,13 +39,16 @@ export function TopBar({ themeChoice, theme, onTheme }: Props) {
   return (
     <header className="flex h-14 min-w-0 items-center gap-2 sm:gap-6 border-b border-slate-line bg-night-2 px-3 sm:px-4">
       <div className="flex min-w-0 items-center gap-2.5">
-        <span data-cafe-logo className="flex">
-          <CupIcon size={28} mood={mood} />
-        </span>
-        {/* The smallest phones keep just the cup and give the room to the buttons. */}
-        <h1 className="sr-only whitespace-nowrap font-display text-[23px] leading-none min-[380px]:not-sr-only sm:text-[30px]">
-          Agents <span className="text-crema">Café</span>
-        </h1>
+        {/* On the demo site the logo leads back to the home page. */}
+        <LogoLink>
+          <span data-cafe-logo className="flex">
+            <CupIcon size={28} mood={mood} />
+          </span>
+          {/* The smallest phones keep just the cup and give the room to the buttons. */}
+          <h1 className="sr-only whitespace-nowrap font-display text-[23px] leading-none min-[380px]:not-sr-only sm:text-[30px]">
+            Agents <span className="text-crema">Café</span>
+          </h1>
+        </LogoLink>
         {DEMO_SITE && (
           <span
             title="An online demo: the agents run scripted tasks on sample data, and nothing is saved."
@@ -108,5 +112,14 @@ export function TopBar({ themeChoice, theme, onTheme }: Props) {
       />
       {!DEMO_SITE && <ConnectPrompt onConnect={() => setSettings('providers')} />}
     </header>
+  );
+}
+
+function LogoLink({ children }: { children: ReactNode }) {
+  if (!DEMO_SITE) return <>{children}</>;
+  return (
+    <Link href="/" className="flex min-w-0 items-center gap-2.5 rounded-md">
+      {children}
+    </Link>
   );
 }
