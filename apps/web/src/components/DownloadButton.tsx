@@ -3,12 +3,12 @@
 import { useEffect, useState } from 'react';
 import { InstallDialog, WINDOWS_INSTALLER } from './InstallDialog';
 
-type Os = 'windows' | 'mac' | 'linux';
+export type Os = 'windows' | 'mac' | 'linux';
 
-const NAMES: Record<Os, string> = { windows: 'Windows', mac: 'macOS', linux: 'Linux' };
+export const OS_NAMES: Record<Os, string> = { windows: 'Windows', mac: 'macOS', linux: 'Linux' };
 
 /** The visitor's desktop system, or null on a phone or anything unrecognised. */
-function detectOs(): Os | null {
+export function detectOs(): Os | null {
   const ua = navigator.userAgent;
   if (/Android|iPhone|iPad|iPod|Mobile/i.test(ua)) return null;
   if (/Windows/i.test(ua)) return 'windows';
@@ -58,7 +58,7 @@ export function DownloadButton() {
     <>
       {os && <OsIcon os={os} />}
       <span>
-        Download{os && <span className="hidden sm:inline"> for {NAMES[os]}</span>}
+        Download{os && <span className="hidden sm:inline"> for {OS_NAMES[os]}</span>}
       </span>
     </>
   );

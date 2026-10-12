@@ -1,7 +1,7 @@
 # Agents Café ☕
 
 A local-first control room for AI agents, drawn as a cosy two-story pixel-art café on a street corner.
-Try the online demo at [agentscafe.dev](https://agentscafe.dev).
+See what it is at [agentscafe.dev](https://agentscafe.dev), or try the online demo at [agentscafe.dev/demo](https://agentscafe.dev/demo).
 
 The point is to see what your agents are doing and hand them work. Each agent is a worker in
 the café, and where they stand is what they're doing: a tool call walks them to that tool's
@@ -263,10 +263,14 @@ Visitors can open threads, send tasks, answer Allow / Deny cards, stop, retry, r
 nothing is saved, and a reload starts fresh. Live mode, providers, projects and phone access are
 hidden. Try it locally with `NEXT_PUBLIC_DEMO_SITE=1 pnpm --filter @agent-cafe/web dev`.
 
+The site's home page says what Agents Café is (`apps/web/src/components/landing`); the café is at
+`/demo` and every build is listed at `/download`. Those two pages exist only in the demo site build;
+the app itself keeps the café at `/`.
+
 To host it on Vercel: import the repository, set **Root Directory** to `apps/web` (the Next.js preset
 and pnpm are picked up), and add the environment variable `NEXT_PUBLIC_DEMO_SITE` = `1`. The build is a
-static export (`apps/web/out`), so any static host works the same way. The live demo is at
-[agentscafe.dev](https://agentscafe.dev): add the domain under the project's **Settings → Domains**.
+static export (`apps/web/out`), so any static host that serves `demo.html` for `/demo` works the same
+way. The site is at [agentscafe.dev](https://agentscafe.dev): add the domain under the project's **Settings → Domains**.
 
 The server brings the database up to date when it starts, from `apps/server/prisma/migrations`.
 After changing `schema.prisma`, run `pnpm db:migrate` to add a migration (a test fails until you do).
